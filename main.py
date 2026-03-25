@@ -123,7 +123,25 @@ def main():
     console.print("\n[bold red]--- Level 3: Scenes ---[/bold red]")
     console.print(plot_result.scenes)
 
-    console.print("\n[bold magenta]Story generation complete![/bold magenta]")
+    # Save the output to a markdown file
+    output_filename = "story_output.md"
+    console.print(f"\n[italic]Saving story output to {output_filename}...[/italic]")
+    with open(output_filename, "w", encoding="utf-8") as f:
+        f.write("# Story Output\n\n")
+        f.write("## Core Premise\n")
+        f.write(f"{core_premise}\n\n")
+        f.write("## Spine Template\n")
+        f.write(f"{spine_template}\n\n")
+        f.write("## World Bible\n")
+        f.write(f"{world_bible}\n\n")
+        f.write("## Plot: Level 1 - Arc Outline\n")
+        f.write(f"{plot_result.arc_outline}\n\n")
+        f.write("## Plot: Level 2 - Chapter Plan\n")
+        f.write(f"{plot_result.chapter_plan}\n\n")
+        f.write("## Plot: Level 3 - Scenes\n")
+        f.write(f"{plot_result.scenes}\n")
+
+    console.print(f"\n[bold magenta]Story generation complete! Results saved to {output_filename}[/bold magenta]")
 
 if __name__ == "__main__":
     main()

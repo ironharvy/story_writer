@@ -1,2 +1,3 @@
 dspy-ai
-richpython-dotenv
+rich
+python-dotenv
