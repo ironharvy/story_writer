@@ -21,7 +21,9 @@ def configure_dspy(model_name: str, api_base: str = None, api_key: str = None):
     kwargs = {"max_tokens": 2000}
     if api_base:
         kwargs["api_base"] = api_base
-    if api_key is not None:
+
+    # Only set api_key if it's explicitly provided, otherwise let LiteLLM handle it
+    if api_key:
         kwargs["api_key"] = api_key
     elif "openai" in model_name.lower():
         env_key = os.environ.get("OPENAI_API_KEY")
@@ -29,8 +31,6 @@ def configure_dspy(model_name: str, api_base: str = None, api_key: str = None):
             console.print("[yellow]Warning: OPENAI_API_KEY not found in environment variables. Assuming mock or alternative setup.[/yellow]")
         else:
             kwargs["api_key"] = env_key
-    elif "ollama" in model_name.lower():
-        kwargs["api_key"] = "" # Ollama typically doesn't need an API key
 
     console.print(f"[italic]Configuring DSPy to use model '{model_name}'...[/italic]")
     lm = dspy.LM(model_name, **kwargs)

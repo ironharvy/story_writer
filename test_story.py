@@ -22,14 +22,13 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
     if api_base:
         kwargs["api_base"] = api_base
 
-    if api_key is not None:
+    # Only set api_key if it's explicitly provided, otherwise let LiteLLM handle it
+    if api_key:
         kwargs["api_key"] = api_key
     elif "openai" in model_name.lower():
         env_key = os.environ.get("OPENAI_API_KEY")
         if env_key:
             kwargs["api_key"] = env_key
-    elif "ollama" in model_name.lower():
-        kwargs["api_key"] = ""
 
     print(f"Testing pipeline with model: {model_name}...")
 
