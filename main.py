@@ -10,21 +10,31 @@ from story_modules import (
     PlotGenerator
 )
 import os
+import argparse
 from dotenv import load_dotenv
 
 load_dotenv()
 
 console = Console()
 
-def configure_dspy():
-    # Attempt to load OpenAI key
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        console.print("[yellow]Warning: OPENAI_API_KEY not found in environment variables. Assuming mock or alternative setup.[/yellow]")
+def configure_dspy(model_name: str, api_base: str = None, api_key: str = None):
+    kwargs = {"max_tokens": 2000}
+    if api_base:
+        kwargs["api_base"] = api_base
+    if api_key is not None:
+        kwargs["api_key"] = api_key
+    elif "openai" in model_name.lower():
+        env_key = os.environ.get("OPENAI_API_KEY")
+        if not env_key:
+            console.print("[yellow]Warning: OPENAI_API_KEY not found in environment variables. Assuming mock or alternative setup.[/yellow]")
+        else:
+            kwargs["api_key"] = env_key
+    elif "ollama" in model_name.lower():
+        kwargs["api_key"] = "" # Ollama typically doesn't need an API key
 
-    # Configure DSPy to use a language model (e.g., GPT-3.5 or GPT-4)
-    # For testing, we might want to allow this to be overridden
-    lm = dspy.LM('openai/gpt-4o-mini', max_tokens=2000)
+    console.print(f"[italic]Configuring DSPy to use model '{model_name}'...[/italic]")
+    lm = dspy.LM(model_name, **kwargs)
+
     dspy.configure(lm=lm)
 
 def get_answers_for_questions(questions_with_answers) -> str:
@@ -44,7 +54,15 @@ def get_answers_for_questions(questions_with_answers) -> str:
     return "\n\n".join(qa_pairs)
 
 def main():
-    configure_dspy()
+    parser = argparse.ArgumentParser(description="AI DSPy Story Writer")
+    parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "openai/gpt-4o-mini"), help="The language model to use (e.g., openai/gpt-4o-mini, ollama_chat/llama3). Defaults to MODEL env var.")
+    parser.add_argument("--llm-url", type=str, default=os.environ.get("LLM_URL"), help="The custom API base URL (e.g., http://localhost:11434 for Ollama). Defaults to LLM_URL env var.")
+    parser.add_argument("--api-key", type=str, default=os.environ.get("API_KEY"), help="The API key for the model. Defaults to API_KEY env var.")
+
+    args = parser.parse_args()
+
+    configure_dspy(model_name=args.model, api_base=args.llm_url, api_key=args.api_key)
+
     console.print("[bold magenta]Welcome to the AI DSPy Story Writer![/bold magenta]")
 
     # 1. Prompt for initial idea
