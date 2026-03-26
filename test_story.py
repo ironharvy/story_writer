@@ -1,5 +1,6 @@
 import dspy
 import os
+import argparse
 from story_modules import (
     QuestionGenerator,
     CorePremiseGenerator,
@@ -16,24 +17,28 @@ class MockLM(dspy.LM):
     def __call__(self, prompt, **kwargs):
         return ["Mock response"]
 
-def test_pipeline():
-    # Attempt to load OpenAI key, or use Mock
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if api_key:
-        lm = dspy.LM('openai/gpt-4o-mini', max_tokens=1000)
+def test_pipeline(use_ollama=False, ollama_model="llama3", ollama_base_url="http://localhost:11434"):
+    if use_ollama:
+        print(f"Testing pipeline with Ollama local model: {ollama_model} at {ollama_base_url}...")
+        lm = dspy.LM(f'ollama_chat/{ollama_model}', api_base=ollama_base_url, api_key='')
     else:
-        # Note: TypedPredictor doesn't easily work with mock strings, so we require an API key to test fully,
-        # or we just rely on the API key being set in the environment.
-        # For this test script, if we are in an environment without a key, we'll try to use LiteLLM mock
-        pass
+        # Attempt to load OpenAI key
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if api_key:
+            lm = dspy.LM('openai/gpt-4o-mini', max_tokens=1000)
+            print("Testing pipeline with OpenAI API...")
+        else:
+            # Note: TypedPredictor doesn't easily work with mock strings, so we require an API key to test fully,
+            # or we just rely on the API key being set in the environment.
+            # For this test script, if we are in an environment without a key, we'll try to use LiteLLM mock
+            pass
 
-    # We assume OPENAI_API_KEY is available in the run_in_bash_session, if not, we skip the actual test
-    if not api_key:
-        print("OPENAI_API_KEY not found. Skipping full integration test to avoid errors.")
-        return
+        # We assume OPENAI_API_KEY is available in the run_in_bash_session, if not, we skip the actual test
+        if not api_key:
+            print("OPENAI_API_KEY not found and USE_OLLAMA not set. Skipping full integration test to avoid errors.")
+            return
 
     dspy.configure(lm=lm)
-    print("Testing pipeline with OpenAI API...")
 
     idea = "A story about a space pirate who finds a map to the center of the universe."
 
@@ -69,4 +74,13 @@ def test_pipeline():
     print("Test passed successfully!")
 
 if __name__ == "__main__":
-    test_pipeline()
+    parser = argparse.ArgumentParser(description="Test AI DSPy Story Writer")
+    parser.add_argument("--use-ollama", action="store_true", help="Use a local Ollama model instead of OpenAI. Overrides USE_OLLAMA env var.")
+    parser.add_argument("--ollama-model", type=str, default=os.environ.get("OLLAMA_MODEL", "llama3"), help="The Ollama model to use. Defaults to OLLAMA_MODEL env var or 'llama3'.")
+    parser.add_argument("--ollama-base-url", type=str, default=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"), help="The Ollama base URL. Defaults to OLLAMA_BASE_URL env var or 'http://localhost:11434'.")
+
+    args = parser.parse_args()
+
+    use_ollama = args.use_ollama or os.environ.get("USE_OLLAMA", "").lower() in ("1", "true", "yes")
+
+    test_pipeline(use_ollama=use_ollama, ollama_model=args.ollama_model, ollama_base_url=args.ollama_base_url)

@@ -14,7 +14,7 @@ class GenerateQuestionsSignature(dspy.Signature):
 class QuestionGenerator(dspy.Module):
     def __init__(self):
         super().__init__()
-        self.generate = dspy.TypedPredictor(GenerateQuestionsSignature)
+        self.generate = dspy.Predict(GenerateQuestionsSignature)
 
     def forward(self, idea: str):
         return self.generate(idea=idea)
@@ -73,7 +73,7 @@ class GenerateWorldBibleQuestionsSignature(dspy.Signature):
 class WorldBibleQuestionGenerator(dspy.Module):
     def __init__(self):
         super().__init__()
-        self.generate = dspy.TypedPredictor(GenerateWorldBibleQuestionsSignature)
+        self.generate = dspy.Predict(GenerateWorldBibleQuestionsSignature)
 
     def forward(self, core_premise: str, spine_template: str):
         return self.generate(core_premise=core_premise, spine_template=spine_template)
