@@ -17,27 +17,28 @@ class MockLM(dspy.LM):
     def __call__(self, prompt, **kwargs):
         return ["Mock response"]
 
-def test_pipeline(use_ollama=False, ollama_model="llama3", ollama_base_url="http://localhost:11434"):
-    if use_ollama:
-        print(f"Testing pipeline with Ollama local model: {ollama_model} at {ollama_base_url}...")
-        lm = dspy.LM(f'ollama_chat/{ollama_model}', api_base=ollama_base_url, api_key='')
-    else:
-        # Attempt to load OpenAI key
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if api_key:
-            lm = dspy.LM('openai/gpt-4o-mini', max_tokens=1000)
-            print("Testing pipeline with OpenAI API...")
-        else:
-            # Note: TypedPredictor doesn't easily work with mock strings, so we require an API key to test fully,
-            # or we just rely on the API key being set in the environment.
-            # For this test script, if we are in an environment without a key, we'll try to use LiteLLM mock
-            pass
+def test_pipeline(model_name="openai/gpt-4o-mini", api_base=None, api_key=None):
+    kwargs = {"max_tokens": 1000}
+    if api_base:
+        kwargs["api_base"] = api_base
 
-        # We assume OPENAI_API_KEY is available in the run_in_bash_session, if not, we skip the actual test
-        if not api_key:
-            print("OPENAI_API_KEY not found and USE_OLLAMA not set. Skipping full integration test to avoid errors.")
-            return
+    if api_key is not None:
+        kwargs["api_key"] = api_key
+    elif "openai" in model_name.lower():
+        env_key = os.environ.get("OPENAI_API_KEY")
+        if env_key:
+            kwargs["api_key"] = env_key
+    elif "ollama" in model_name.lower():
+        kwargs["api_key"] = ""
 
+    print(f"Testing pipeline with model: {model_name}...")
+
+    # We assume OPENAI_API_KEY is available in the run_in_bash_session, if not, we skip the actual test
+    if "openai" in model_name.lower() and not kwargs.get("api_key"):
+        print("OPENAI_API_KEY not found. Skipping full integration test to avoid errors.")
+        return
+
+    lm = dspy.LM(model_name, **kwargs)
     dspy.configure(lm=lm)
 
     idea = "A story about a space pirate who finds a map to the center of the universe."
@@ -75,12 +76,10 @@ def test_pipeline(use_ollama=False, ollama_model="llama3", ollama_base_url="http
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test AI DSPy Story Writer")
-    parser.add_argument("--use-ollama", action="store_true", help="Use a local Ollama model instead of OpenAI. Overrides USE_OLLAMA env var.")
-    parser.add_argument("--ollama-model", type=str, default=os.environ.get("OLLAMA_MODEL", "llama3"), help="The Ollama model to use. Defaults to OLLAMA_MODEL env var or 'llama3'.")
-    parser.add_argument("--ollama-base-url", type=str, default=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"), help="The Ollama base URL. Defaults to OLLAMA_BASE_URL env var or 'http://localhost:11434'.")
+    parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "openai/gpt-4o-mini"), help="The language model to use (e.g., openai/gpt-4o-mini, ollama_chat/llama3). Defaults to MODEL env var.")
+    parser.add_argument("--llm-url", type=str, default=os.environ.get("LLM_URL"), help="The custom API base URL (e.g., http://localhost:11434 for Ollama). Defaults to LLM_URL env var.")
+    parser.add_argument("--api-key", type=str, default=os.environ.get("API_KEY"), help="The API key for the model. Defaults to API_KEY env var.")
 
     args = parser.parse_args()
 
-    use_ollama = args.use_ollama or os.environ.get("USE_OLLAMA", "").lower() in ("1", "true", "yes")
-
-    test_pipeline(use_ollama=use_ollama, ollama_model=args.ollama_model, ollama_base_url=args.ollama_base_url)
+    test_pipeline(model_name=args.model, api_base=args.llm_url, api_key=args.api_key)
