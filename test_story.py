@@ -17,7 +17,7 @@ class MockLM(dspy.LM):
     def __call__(self, prompt, **kwargs):
         return ["Mock response"]
 
-def test_pipeline(model_name="openai/gpt-4o-mini", api_base=None, api_key=None):
+def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11434", api_key=None):
     kwargs = {"max_tokens": 1000}
     if api_base:
         kwargs["api_base"] = api_base
@@ -76,8 +76,8 @@ def test_pipeline(model_name="openai/gpt-4o-mini", api_base=None, api_key=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test AI DSPy Story Writer")
-    parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "openai/gpt-4o-mini"), help="The language model to use (e.g., openai/gpt-4o-mini, ollama_chat/llama3). Defaults to MODEL env var.")
-    parser.add_argument("--llm-url", type=str, default=os.environ.get("LLM_URL"), help="The custom API base URL (e.g., http://localhost:11434 for Ollama). Defaults to LLM_URL env var.")
+    parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "ollama_chat/llama3"), help="The language model to use (e.g., openai/gpt-4o-mini, ollama_chat/llama3). Defaults to MODEL env var or ollama_chat/llama3.")
+    parser.add_argument("--llm-url", type=str, default=os.environ.get("LLM_URL", "http://localhost:11434"), help="The custom API base URL (e.g., http://localhost:11434 for Ollama). Defaults to LLM_URL env var or http://localhost:11434.")
     parser.add_argument("--api-key", type=str, default=os.environ.get("API_KEY"), help="The API key for the model. Defaults to API_KEY env var.")
 
     args = parser.parse_args()
