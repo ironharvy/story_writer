@@ -100,12 +100,13 @@ class GenerateEnhancersSignature(dspy.Signature):
     chapter_plan: str = dspy.InputField(desc="Level 2: Chapter Plan (Each arc broken into chapters).")
     enhancers_guide: str = dspy.OutputField(desc="A guide evaluating which story enhancers (e.g., Tension, Mystery, Twists) are needed for specific scenes or chapters and how to apply them.")
 
-class GenerateStorySignature(dspy.Signature):
-    """Generates the final Story."""
-    world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
-    chapter_plan: str = dspy.InputField(desc="Level 2: Chapter Plan (Each arc broken into chapters).")
-    enhancers_guide: str = dspy.InputField(desc="Guide on how to apply story enhancers to specific scenes.")
-    story: str = dspy.OutputField(desc="The final generated story.")
+class GenerateSingleChapterSignature(dspy.Signature):
+    """Writes a full, detailed chapter based on the world bible and the specific chapter goal."""
+    world_bible: str = dspy.InputField()
+    chapter_plan: str = dspy.InputField(desc="The full plan for context.")
+    current_chapter_description: str = dspy.InputField(desc="The specific event to write now.")
+    previous_chapters_summary: str = dspy.InputField(desc="Brief summary of what happened so far.")
+    chapter_text: str = dspy.OutputField(desc="A long, immersive chapter with dialogue and description.")
 
 class StoryGenerator(dspy.Module):
     def __init__(self):
@@ -113,7 +114,7 @@ class StoryGenerator(dspy.Module):
         self.generate_arc_outline = dspy.Predict(GenerateArcOutlineSignature)
         self.generate_chapter_plan = dspy.Predict(GenerateChapterPlanSignature)
         self.generate_enhancers = dspy.Predict(GenerateEnhancersSignature)
-        self.generate_story = dspy.Predict(GenerateStorySignature)
+        self.write_chapter = dspy.ChainOfThought(GenerateSingleChapterSignature)
 
     def forward(self, core_premise: str, spine_template: str, world_bible: str):
         arc_outline_result = self.generate_arc_outline(
@@ -130,15 +131,27 @@ class StoryGenerator(dspy.Module):
             world_bible=world_bible,
             chapter_plan=chapter_plan_result.chapter_plan
         )
-        story_result = self.generate_story(
-            world_bible=world_bible,
-            chapter_plan=chapter_plan_result.chapter_plan,
-            enhancers_guide=enhancers_result.enhancers_guide
-        )
+
+        chapters_to_write = [line.strip() for line in chapter_plan_result.chapter_plan.split('\n') if line.strip()]
+
+        full_story = ""
+        previous_chapters_summary = ""
+
+        for i, chapter_desc in enumerate(chapters_to_write):
+            result = self.write_chapter(
+                world_bible=world_bible,
+                chapter_plan=chapter_plan_result.chapter_plan,
+                current_chapter_description=chapter_desc,
+                previous_chapters_summary=previous_chapters_summary
+            )
+
+            chapter_text = result.chapter_text
+            full_story += f"\n\n### Chapter {i+1}\n\n" + chapter_text
+            previous_chapters_summary += f"Chapter {i+1}: {chapter_desc}\n"
 
         return dspy.Prediction(
             arc_outline=arc_outline_result.arc_outline,
             chapter_plan=chapter_plan_result.chapter_plan,
             enhancers_guide=enhancers_result.enhancers_guide,
-            story=story_result.story
+            story=full_story.strip()
         )
