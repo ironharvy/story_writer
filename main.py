@@ -30,7 +30,7 @@ def configure_dspy(model_name: str, api_base: str = None, api_key: str = None):
         else:
             kwargs["api_key"] = env_key
     elif "ollama" in model_name.lower():
-        kwargs["api_key"] = "" # Ollama typically doesn't need an API key
+        pass # Ollama typically doesn't need an API key
 
     console.print(f"[italic]Configuring DSPy to use model '{model_name}'...[/italic]")
     lm = dspy.LM(model_name, **kwargs)

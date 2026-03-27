@@ -14,8 +14,19 @@ class MockLM(dspy.LM):
     def __init__(self):
         super().__init__(model="mock")
 
-    def __call__(self, prompt, **kwargs):
-        return ["Mock response"]
+    def __call__(self, prompt=None, messages=None, **kwargs):
+        # We need to return JSON since dspy expects it
+        return ["""```json
+{
+  "questions_with_answers": [{"question": "q", "proposed_answer": "a"}],
+  "core_premise": "core",
+  "spine_template": "spine",
+  "world_bible": "world",
+  "arc_outline": "arc",
+  "chapter_plan": "chapter",
+  "scenes": "scenes"
+}
+```"""]
 
 def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11434", api_key=None):
     kwargs = {"max_tokens": 1000}
@@ -29,7 +40,8 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
         if env_key:
             kwargs["api_key"] = env_key
     elif "ollama" in model_name.lower():
-        kwargs["api_key"] = ""
+        # litellm requires api_key to not be empty string or None for some providers, but actually for ollama we can just pass none but without api_key=""
+        pass
 
     print(f"Testing pipeline with model: {model_name}...")
 
@@ -38,7 +50,10 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
         print("OPENAI_API_KEY not found. Skipping full integration test to avoid errors.")
         return
 
-    lm = dspy.LM(model_name, **kwargs)
+    if model_name == "mock":
+        lm = MockLM()
+    else:
+        lm = dspy.LM(model_name, **kwargs)
     dspy.configure(lm=lm)
 
     idea = "A story about a space pirate who finds a map to the center of the universe."
