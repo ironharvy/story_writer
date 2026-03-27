@@ -79,19 +79,51 @@ class WorldBibleQuestionGenerator(dspy.Module):
         return self.generate(core_premise=core_premise, spine_template=spine_template)
 
 
-class GeneratePlotSignature(dspy.Signature):
-    """Generates the plot including Level 1 (Arc Outline), Level 2 (Chapter Plan), and Level 3 (Scenes)."""
+class GenerateArcOutlineSignature(dspy.Signature):
+    """Generates Level 1: Arc Outline (5-10 major events)."""
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     spine_template: str = dspy.InputField(desc="The narrative spine template.")
     world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
     arc_outline: str = dspy.OutputField(desc="Level 1: Arc Outline (5-10 major events).")
-    chapter_plan: str = dspy.OutputField(desc="Level 2: Chapter Plan (Each arc broken into chapters).")
-    scenes: str = dspy.OutputField(desc="Level 3: Scenes (Actual writing/detailed scene plans).")
 
-class PlotGenerator(dspy.Module):
+class GenerateChapterPlanSignature(dspy.Signature):
+    """Generates Level 2: Chapter Plan (Each arc broken into chapters)."""
+    core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
+    world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
+    arc_outline: str = dspy.InputField(desc="Level 1: Arc Outline (5-10 major events).")
+    chapter_plan: str = dspy.OutputField(desc="Level 2: Chapter Plan (Each arc broken into chapters).")
+
+class GenerateStorySignature(dspy.Signature):
+    """Generates the final Story."""
+    world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
+    chapter_plan: str = dspy.InputField(desc="Level 2: Chapter Plan (Each arc broken into chapters).")
+    story: str = dspy.OutputField(desc="The final generated story.")
+
+class StoryGenerator(dspy.Module):
     def __init__(self):
         super().__init__()
-        self.generate = dspy.Predict(GeneratePlotSignature)
+        self.generate_arc_outline = dspy.Predict(GenerateArcOutlineSignature)
+        self.generate_chapter_plan = dspy.Predict(GenerateChapterPlanSignature)
+        self.generate_story = dspy.Predict(GenerateStorySignature)
 
     def forward(self, core_premise: str, spine_template: str, world_bible: str):
-        return self.generate(core_premise=core_premise, spine_template=spine_template, world_bible=world_bible)
+        arc_outline_result = self.generate_arc_outline(
+            core_premise=core_premise,
+            spine_template=spine_template,
+            world_bible=world_bible
+        )
+        chapter_plan_result = self.generate_chapter_plan(
+            core_premise=core_premise,
+            world_bible=world_bible,
+            arc_outline=arc_outline_result.arc_outline
+        )
+        story_result = self.generate_story(
+            world_bible=world_bible,
+            chapter_plan=chapter_plan_result.chapter_plan
+        )
+
+        return dspy.Prediction(
+            arc_outline=arc_outline_result.arc_outline,
+            chapter_plan=chapter_plan_result.chapter_plan,
+            story=story_result.story
+        )
