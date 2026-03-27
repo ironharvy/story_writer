@@ -29,7 +29,7 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
         if env_key:
             kwargs["api_key"] = env_key
     elif "ollama" in model_name.lower():
-        kwargs["api_key"] = ""
+        pass
 
     print(f"Testing pipeline with model: {model_name}...")
 
