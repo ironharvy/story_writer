@@ -33,6 +33,8 @@ class MockLM(dspy.LM):
         # We can also just look at the last fields being asked for
         if "[[ ## story ## ]]" in content or ('"story"' in content and "The final generated story" in content):
             return ['```json\n{"story": "Mock final story"}\n```']
+        if "[[ ## enhancers_guide ## ]]" in content or ('"enhancers_guide"' in content and "evaluating which story enhancers" in content):
+            return ['```json\n{"enhancers_guide": "Mock enhancers guide"}\n```']
         if "[[ ## chapter_plan ## ]]" in content or ('"chapter_plan"' in content and "Each arc broken into chapters" in content):
             return ['```json\n{"chapter_plan": "Mock chapter plan"}\n```']
         if "[[ ## arc_outline ## ]]" in content or ('"arc_outline"' in content and "5-10 major events" in content):
@@ -55,8 +57,10 @@ class MockLM(dspy.LM):
             return ['```json\n{"world_bible": "Mock world bible"}\n```']
         elif "arc_outline" in content and "chapter_plan" not in content:
             return ['```json\n{"arc_outline": "Mock arc outline"}\n```']
-        elif "chapter_plan" in content and "story" not in content:
+        elif "chapter_plan" in content and "enhancers_guide" not in content and "story" not in content:
             return ['```json\n{"chapter_plan": "Mock chapter plan"}\n```']
+        elif "enhancers_guide" in content and "story" not in content:
+            return ['```json\n{"enhancers_guide": "Mock enhancers guide"}\n```']
         elif "story" in content:
             return ['```json\n{"story": "Mock final story"}\n```']
         return ["Mock response"]

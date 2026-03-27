@@ -139,6 +139,9 @@ def main():
     console.print("\n[bold red]--- Level 2: Chapter Plan ---[/bold red]")
     console.print(story_result.chapter_plan)
 
+    console.print("\n[bold red]--- Enhancers Guide ---[/bold red]")
+    console.print(story_result.enhancers_guide)
+
     console.print("\n[bold red]--- Final Story ---[/bold red]")
     console.print(story_result.story)
 
@@ -157,6 +160,8 @@ def main():
         f.write(f"{story_result.arc_outline}\n\n")
         f.write("## Chapter Plan\n")
         f.write(f"{story_result.chapter_plan}\n\n")
+        f.write("## Enhancers Guide\n")
+        f.write(f"{story_result.enhancers_guide}\n\n")
         f.write("## Final Story\n")
         f.write(f"{story_result.story}\n")
 
