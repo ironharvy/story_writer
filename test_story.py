@@ -31,6 +31,8 @@ class MockLM(dspy.LM):
         # e.g., "This JSON object must only contain the following keys: chapter_plan."
 
         # We can also just look at the last fields being asked for
+        if "[[ ## chapter_text ## ]]" in content or ('"chapter_text"' in content and "immersive chapter" in content):
+            return ['```json\n{"reasoning": "Mock reasoning", "chapter_text": "Mock chapter text"}\n```']
         if "[[ ## story ## ]]" in content or ('"story"' in content and "The final generated story" in content):
             return ['```json\n{"story": "Mock final story"}\n```']
         if "[[ ## enhancers_guide ## ]]" in content or ('"enhancers_guide"' in content and "evaluating which story enhancers" in content):
@@ -59,8 +61,10 @@ class MockLM(dspy.LM):
             return ['```json\n{"arc_outline": "Mock arc outline"}\n```']
         elif "chapter_plan" in content and "enhancers_guide" not in content and "story" not in content:
             return ['```json\n{"chapter_plan": "Mock chapter plan"}\n```']
-        elif "enhancers_guide" in content and "story" not in content:
+        elif "enhancers_guide" in content and "story" not in content and "chapter_text" not in content:
             return ['```json\n{"enhancers_guide": "Mock enhancers guide"}\n```']
+        elif "chapter_text" in content:
+            return ['```json\n{"reasoning": "Mock reasoning", "chapter_text": "Mock chapter text"}\n```']
         elif "story" in content:
             return ['```json\n{"story": "Mock final story"}\n```']
         return ["Mock response"]
