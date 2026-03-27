@@ -93,10 +93,18 @@ class GenerateChapterPlanSignature(dspy.Signature):
     arc_outline: str = dspy.InputField(desc="Level 1: Arc Outline (5-10 major events).")
     chapter_plan: str = dspy.OutputField(desc="Level 2: Chapter Plan (Each arc broken into chapters).")
 
+class GenerateEnhancersSignature(dspy.Signature):
+    """Evaluates the chapter plan and determines which story enhancers are needed for specific scenes/chapters.
+    Story Enhancers include: Tension Module, Mystery Module, Theme Alignment, Setup/Payoff Tracker, Emotional Curve, Twist Generator, Easter Egg Injector."""
+    world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
+    chapter_plan: str = dspy.InputField(desc="Level 2: Chapter Plan (Each arc broken into chapters).")
+    enhancers_guide: str = dspy.OutputField(desc="A guide evaluating which story enhancers (e.g., Tension, Mystery, Twists) are needed for specific scenes or chapters and how to apply them.")
+
 class GenerateStorySignature(dspy.Signature):
     """Generates the final Story."""
     world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
     chapter_plan: str = dspy.InputField(desc="Level 2: Chapter Plan (Each arc broken into chapters).")
+    enhancers_guide: str = dspy.InputField(desc="Guide on how to apply story enhancers to specific scenes.")
     story: str = dspy.OutputField(desc="The final generated story.")
 
 class StoryGenerator(dspy.Module):
@@ -104,6 +112,7 @@ class StoryGenerator(dspy.Module):
         super().__init__()
         self.generate_arc_outline = dspy.Predict(GenerateArcOutlineSignature)
         self.generate_chapter_plan = dspy.Predict(GenerateChapterPlanSignature)
+        self.generate_enhancers = dspy.Predict(GenerateEnhancersSignature)
         self.generate_story = dspy.Predict(GenerateStorySignature)
 
     def forward(self, core_premise: str, spine_template: str, world_bible: str):
@@ -117,13 +126,19 @@ class StoryGenerator(dspy.Module):
             world_bible=world_bible,
             arc_outline=arc_outline_result.arc_outline
         )
-        story_result = self.generate_story(
+        enhancers_result = self.generate_enhancers(
             world_bible=world_bible,
             chapter_plan=chapter_plan_result.chapter_plan
+        )
+        story_result = self.generate_story(
+            world_bible=world_bible,
+            chapter_plan=chapter_plan_result.chapter_plan,
+            enhancers_guide=enhancers_result.enhancers_guide
         )
 
         return dspy.Prediction(
             arc_outline=arc_outline_result.arc_outline,
             chapter_plan=chapter_plan_result.chapter_plan,
+            enhancers_guide=enhancers_result.enhancers_guide,
             story=story_result.story
         )
