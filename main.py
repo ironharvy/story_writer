@@ -7,7 +7,7 @@ from story_modules import (
     SpineTemplateGenerator,
     WorldBibleGenerator,
     WorldBibleQuestionGenerator,
-    PlotGenerator
+    StoryGenerator
 )
 import os
 import argparse
@@ -73,7 +73,7 @@ def main():
     cp_gen = CorePremiseGenerator()
     st_gen = SpineTemplateGenerator()
     wb_gen = WorldBibleGenerator()
-    plot_gen = PlotGenerator()
+    story_gen = StoryGenerator()
 
     core_premise = ""
     while True:
@@ -126,20 +126,20 @@ def main():
     console.print(world_bible)
     console.print("[bold green]-------------------[/bold green]")
 
-    Confirm.ask("Press Enter to continue to Plot generation...", default=True, show_default=False)
+    Confirm.ask("Press Enter to continue to Story generation...", default=True, show_default=False)
 
-    # 6. Generate Plot
-    console.print("\n[italic]Generating Plot (Arc Outline, Chapter Plan, Scenes)...[/italic]")
-    plot_result = plot_gen(core_premise=core_premise, spine_template=spine_template, world_bible=world_bible)
+    # 6. Generate Story
+    console.print("\n[italic]Generating Story (Arc Outline, Chapter Plan, Final Story)...[/italic]")
+    story_result = story_gen(core_premise=core_premise, spine_template=spine_template, world_bible=world_bible)
 
     console.print("\n[bold red]--- Level 1: Arc Outline ---[/bold red]")
-    console.print(plot_result.arc_outline)
+    console.print(story_result.arc_outline)
 
     console.print("\n[bold red]--- Level 2: Chapter Plan ---[/bold red]")
-    console.print(plot_result.chapter_plan)
+    console.print(story_result.chapter_plan)
 
-    console.print("\n[bold red]--- Level 3: Scenes ---[/bold red]")
-    console.print(plot_result.scenes)
+    console.print("\n[bold red]--- Final Story ---[/bold red]")
+    console.print(story_result.story)
 
     # Save the output to a markdown file
     output_filename = "story_output.md"
@@ -152,12 +152,12 @@ def main():
         f.write(f"{spine_template}\n\n")
         f.write("## World Bible\n")
         f.write(f"{world_bible}\n\n")
-        f.write("## Plot: Level 1 - Arc Outline\n")
-        f.write(f"{plot_result.arc_outline}\n\n")
-        f.write("## Plot: Level 2 - Chapter Plan\n")
-        f.write(f"{plot_result.chapter_plan}\n\n")
-        f.write("## Plot: Level 3 - Scenes\n")
-        f.write(f"{plot_result.scenes}\n")
+        f.write("## Arc Outline\n")
+        f.write(f"{story_result.arc_outline}\n\n")
+        f.write("## Chapter Plan\n")
+        f.write(f"{story_result.chapter_plan}\n\n")
+        f.write("## Final Story\n")
+        f.write(f"{story_result.story}\n")
 
     console.print(f"\n[bold magenta]Story generation complete! Results saved to {output_filename}[/bold magenta]")
 
