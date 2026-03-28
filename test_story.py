@@ -5,9 +5,9 @@ from story_modules import (
     QuestionGenerator,
     CorePremiseGenerator,
     SpineTemplateGenerator,
-    WorldBibleGenerator,
     StoryGenerator
 )
+from world_bible_modules import WorldBibleGenerator
 
 # A mock LM to avoid needing an API key for automated testing
 class MockLM(dspy.LM):
@@ -32,17 +32,25 @@ class MockLM(dspy.LM):
 
         # We can also just look at the last fields being asked for
         if "[[ ## chapter_text ## ]]" in content or ('"chapter_text"' in content and "immersive chapter" in content):
-            return ['```json\n{"reasoning": "Mock reasoning", "chapter_text": "Mock chapter text"}\n```']
+            return ['```json\n{"reasoning": "Mock reasoning", "title": "Mock Title", "chapter_text": "Mock chapter text"}\n```']
         if "[[ ## story ## ]]" in content or ('"story"' in content and "The final generated story" in content):
             return ['```json\n{"story": "Mock final story"}\n```']
         if "[[ ## enhancers_guide ## ]]" in content or ('"enhancers_guide"' in content and "evaluating which story enhancers" in content):
-            return ['```json\n{"enhancers_guide": "Mock enhancers guide"}\n```']
+            return ['```json\n{"reasoning": "Mock reasoning", "enhancers_guide": "Mock enhancers guide"}\n```']
         if "[[ ## chapter_plan ## ]]" in content or ('"chapter_plan"' in content and "Each arc broken into chapters" in content):
-            return ['```json\n{"chapter_plan": "Mock chapter plan"}\n```']
+            return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": "Mock chapter plan"}\n```']
         if "[[ ## arc_outline ## ]]" in content or ('"arc_outline"' in content and "5-10 major events" in content):
-            return ['```json\n{"arc_outline": "Mock arc outline"}\n```']
+            return ['```json\n{"reasoning": "Mock reasoning", "arc_outline": "Mock arc outline"}\n```']
         if "[[ ## world_bible ## ]]" in content or ('"world_bible"' in content and "setting, lore, and characters" in content):
             return ['```json\n{"world_bible": "Mock world bible"}\n```']
+        if "[[ ## plot_timeline ## ]]" in content or ('"plot_timeline"' in content and "A plot timeline." in content):
+            return ['```json\n{"reasoning": "Mock reasoning", "plot_timeline": "Mock timeline"}\n```']
+        if "[[ ## locations ## ]]" in content or ('"locations"' in content and "Places and locations" in content):
+            return ['```json\n{"reasoning": "Mock reasoning", "locations": "Mock locations"}\n```']
+        if "[[ ## characters ## ]]" in content or ('"characters"' in content and "Character descriptions" in content):
+            return ['```json\n{"reasoning": "Mock reasoning", "characters": "Mock characters"}\n```']
+        if "[[ ## world_rules ## ]]" in content or ('"world_rules"' in content and "Rules of the world" in content):
+            return ['```json\n{"reasoning": "Mock reasoning", "world_rules": "Mock rules"}\n```']
         if "[[ ## spine_template ## ]]" in content or ('"spine_template"' in content and "Once upon a time" in content):
             return ['```json\n{"spine_template": "Mock spine"}\n```']
         if "[[ ## core_premise ## ]]" in content or ('"core_premise"' in content and "summarizing the foundation" in content):
@@ -64,7 +72,7 @@ class MockLM(dspy.LM):
         elif "enhancers_guide" in content and "story" not in content and "chapter_text" not in content:
             return ['```json\n{"enhancers_guide": "Mock enhancers guide"}\n```']
         elif "chapter_text" in content:
-            return ['```json\n{"reasoning": "Mock reasoning", "chapter_text": "Mock chapter text"}\n```']
+            return ['```json\n{"reasoning": "Mock reasoning", "title": "Mock Title", "chapter_text": "Mock chapter text"}\n```']
         elif "story" in content:
             return ['```json\n{"story": "Mock final story"}\n```']
         return ["Mock response"]
