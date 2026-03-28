@@ -5,9 +5,11 @@ from story_modules import (
     QuestionGenerator,
     CorePremiseGenerator,
     SpineTemplateGenerator,
-    WorldBibleGenerator,
-    WorldBibleQuestionGenerator,
     StoryGenerator
+)
+from world_bible_modules import (
+    WorldBibleGenerator,
+    WorldBibleQuestionGenerator
 )
 import os
 import argparse
