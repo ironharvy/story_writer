@@ -1,10 +1,34 @@
 import dspy
 from typing import List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from typing import Any
 
 class QuestionWithAnswer(BaseModel):
     question: str = Field(description="The interrogative question.")
     proposed_answer: str = Field(description="A proposed answer for the user to potentially accept.")
+
+    @model_validator(mode='before')
+    @classmethod
+    def fix_keys(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # If the model gives something like {'': 'Question text'}
+            if 'question' not in data:
+                # First try to find a key that is likely the question
+                if '' in data:
+                    data['question'] = data.pop('')
+                else:
+                    # just take the first key that isn't proposed_answer
+                    for k in list(data.keys()):
+                        if k != 'proposed_answer' and k != 'question':
+                            data['question'] = data.pop(k)
+                            break
+
+            if 'proposed_answer' not in data:
+                for k in list(data.keys()):
+                    if k != 'question' and k != 'proposed_answer':
+                        data['proposed_answer'] = data.pop(k)
+                        break
+        return data
 
 class GenerateQuestionsSignature(dspy.Signature):
     """Generates 5 interrogative questions to interrogate the user's idea to generate a 'Core Premise'. Each question must include a proposed answer."""
