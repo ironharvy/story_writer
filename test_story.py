@@ -1,6 +1,8 @@
 import dspy
 import os
 import argparse
+import logging
+import coloredlogs
 from story_modules import (
     QuestionGenerator,
     CorePremiseGenerator,
@@ -77,6 +79,9 @@ class MockLM(dspy.LM):
             return ['```json\n{"story": "Mock final story"}\n```']
         return ["Mock response"]
 
+logger = logging.getLogger(__name__)
+coloredlogs.install(level='INFO')
+
 def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11434", api_key=None):
     kwargs = {"max_tokens": 2000}
     if api_base:
@@ -91,7 +96,7 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
     elif "ollama" in model_name.lower():
         pass
 
-    print(f"Testing pipeline with model: {model_name}...")
+    logger.info(f"Testing pipeline with model: {model_name}...")
 
     # For testing in an environment where no actual LLM API is reachable, use the MockLM.
     # To run actual integration tests, you'd provide an active OPENAI_API_KEY or local Ollama running.
@@ -102,7 +107,7 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
     else:
         # We assume OPENAI_API_KEY is available in the run_in_bash_session, if not, we skip the actual test
         if "openai" in model_name.lower() and not kwargs.get("api_key"):
-            print("OPENAI_API_KEY not found. Skipping full integration test to avoid errors.")
+            logger.warning("OPENAI_API_KEY not found. Skipping full integration test to avoid errors.")
             return
 
         lm = dspy.LM(model_name, **kwargs)
@@ -113,7 +118,7 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
     # 1. Questions
     q_gen = QuestionGenerator()
     q_result = q_gen(idea=idea)
-    print(f"Generated {len(q_result.questions_with_answers)} questions.")
+    logger.info(f"Generated {len(q_result.questions_with_answers)} questions.")
 
     # Fake answers
     qa_text = ""
@@ -123,26 +128,26 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
     # 2. Core Premise
     cp_gen = CorePremiseGenerator()
     cp_result = cp_gen(idea=idea, qa_pairs=qa_text)
-    print("Core Premise generated.")
+    logger.info("Core Premise generated.")
 
     # 3. Spine Template
     st_gen = SpineTemplateGenerator()
     st_result = st_gen(core_premise=cp_result.core_premise)
-    print("Spine Template generated.")
+    logger.info("Spine Template generated.")
 
     # 4. World Bible
     wb_gen = WorldBibleGenerator()
     wb_result = wb_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template)
-    print("World Bible generated.")
+    logger.info("World Bible generated.")
 
     # 5. Story
     story_gen = StoryGenerator()
     story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
-    print("Story generated.")
-    print("Test passed successfully!")
+    logger.info("Story generated.")
+    logger.info("Test passed successfully!")
 
     output_filename = "story_output.md"
-    print(f"Saving story output to {output_filename}...")
+    logger.info(f"Saving story output to {output_filename}...")
     with open(output_filename, "w", encoding="utf-8") as f:
         f.write("# Story Output\n\n")
         f.write("## Core Premise\n")

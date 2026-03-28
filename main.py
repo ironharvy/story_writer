@@ -13,9 +13,14 @@ from world_bible_modules import (
 )
 import os
 import argparse
+import logging
+import coloredlogs
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+coloredlogs.install(level='INFO')
 
 console = Console()
 
@@ -28,14 +33,14 @@ def configure_dspy(model_name: str, api_base: str = None, api_key: str = None, m
     elif "openai" in model_name.lower():
         env_key = os.environ.get("OPENAI_API_KEY")
         if not env_key:
-            console.print("[yellow]Warning: OPENAI_API_KEY not found in environment variables. Assuming mock or alternative setup.[/yellow]")
+            logger.warning("OPENAI_API_KEY not found in environment variables. Assuming mock or alternative setup.")
         else:
             kwargs["api_key"] = env_key
     elif "ollama" in model_name.lower():
         pass
         #kwargs["api_key"] = "" # Ollama typically doesn't need an API key
 
-    console.print(f"[italic]Configuring DSPy to use model '{model_name}'...[/italic]")
+    logger.info(f"Configuring DSPy to use model '{model_name}'...")
     lm = dspy.LM(model_name, max_tokens=max_tokens, **kwargs)
 
     dspy.configure(lm=lm)
@@ -150,7 +155,7 @@ def main():
 
     # Save the output to a markdown file
     output_filename = "story_output.md"
-    console.print(f"\n[italic]Saving story output to {output_filename}...[/italic]")
+    logger.info(f"Saving story output to {output_filename}...")
     with open(output_filename, "w", encoding="utf-8") as f:
         f.write("# Story Output\n\n")
         f.write("## Core Premise\n")

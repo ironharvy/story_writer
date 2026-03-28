@@ -1,6 +1,9 @@
 import dspy
+import logging
 from typing import List
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 class QuestionWithAnswer(BaseModel):
     question: str = Field(description="The interrogative question.")
@@ -125,7 +128,7 @@ class StoryGenerator(dspy.Module):
                 full_story += f"\n\n### Chapter {i+1}: {result.title}\n\n" + chapter_text
                 previous_chapters_summary += f"Chapter {i+1}: {chapter_desc}\n"
             except Exception as e:
-                print(f"Error writing chapter {i+1}: {e}")
+                logger.error(f"Error writing chapter {i+1}: {e}")
                 break
 
         return dspy.Prediction(
