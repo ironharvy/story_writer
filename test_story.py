@@ -70,7 +70,7 @@ class MockLM(dspy.LM):
         return ["Mock response"]
 
 def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11434", api_key=None):
-    kwargs = {"max_tokens": 1000}
+    kwargs = {"max_tokens": 2000}
     if api_base:
         kwargs["api_base"] = api_base
 
@@ -100,7 +100,7 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
         lm = dspy.LM(model_name, **kwargs)
         dspy.configure(lm=lm)
 
-    idea = "A story about a space pirate who finds a map to the center of the universe."
+    idea = "An unnamed child is raised by the Church as the ultimate weapon against demons. As child grows he learns that the church itself is corrupt and breeds demons for controlled chaos. The church recieves funding for protection and as such decides who should recieve help. The child eventually becomes overpowered and turns back on the Church"
 
     # 1. Questions
     q_gen = QuestionGenerator()
@@ -132,6 +132,25 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
     story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
     print("Story generated.")
     print("Test passed successfully!")
+
+    output_filename = "story_output.md"
+    print(f"Saving story output to {output_filename}...")
+    with open(output_filename, "w", encoding="utf-8") as f:
+        f.write("# Story Output\n\n")
+        f.write("## Core Premise\n")
+        f.write(f"{cp_result.core_premise}\n\n")
+        f.write("## Spine Template\n")
+        f.write(f"{st_result.spine_template}\n\n")
+        f.write("## World Bible\n")
+        f.write(f"{wb_result.world_bible}\n\n")
+        f.write("## Arc Outline\n")
+        f.write(f"{story_result.arc_outline}\n\n")
+        f.write("## Chapter Plan\n")
+        f.write(f"{story_result.chapter_plan}\n\n")
+        f.write("## Enhancers Guide\n")
+        f.write(f"{story_result.enhancers_guide}\n\n")
+        f.write("## Final Story\n")
+        f.write(f"{story_result.story}\n")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test AI DSPy Story Writer")

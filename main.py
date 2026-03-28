@@ -17,8 +17,8 @@ load_dotenv()
 
 console = Console()
 
-def configure_dspy(model_name: str, api_base: str = None, api_key: str = None):
-    kwargs = {"max_tokens": 2000}
+def configure_dspy(model_name: str, api_base: str = None, api_key: str = None, max_tokens: int = 2000):
+    kwargs = {}
     if api_base:
         kwargs["api_base"] = api_base
     if api_key is not None:
@@ -34,7 +34,7 @@ def configure_dspy(model_name: str, api_base: str = None, api_key: str = None):
         #kwargs["api_key"] = "" # Ollama typically doesn't need an API key
 
     console.print(f"[italic]Configuring DSPy to use model '{model_name}'...[/italic]")
-    lm = dspy.LM(model_name, **kwargs)
+    lm = dspy.LM(model_name, max_tokens=max_tokens, **kwargs)
 
     dspy.configure(lm=lm)
 
@@ -59,10 +59,11 @@ def main():
     parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "openai/gpt-4o-mini"), help="The language model to use (e.g., openai/gpt-4o-mini, ollama_chat/llama3). Defaults to MODEL env var.")
     parser.add_argument("--llm-url", type=str, default=os.environ.get("LLM_URL"), help="The custom API base URL (e.g., http://localhost:11434 for Ollama). Defaults to LLM_URL env var.")
     parser.add_argument("--api-key", type=str, default=os.environ.get("API_KEY"), help="The API key for the model. Defaults to API_KEY env var.")
+    parser.add_argument("--max-tokens", type=int, default=8000, help="The maximum number of tokens to use for the model. Defaults to 8000.")
 
     args = parser.parse_args()
 
-    configure_dspy(model_name=args.model, api_base=args.llm_url, api_key=args.api_key)
+    configure_dspy(model_name=args.model, api_base=args.llm_url, api_key=args.api_key, max_tokens=args.max_tokens)
 
     console.print("[bold magenta]Welcome to the AI DSPy Story Writer![/bold magenta]")
 
