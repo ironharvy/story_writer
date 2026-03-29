@@ -1,16 +1,18 @@
 import dspy
 import os
 import argparse
+import logging
+import coloredlogs
 from unittest.mock import patch, MagicMock
 from story_modules import (
     QuestionGenerator,
     CorePremiseGenerator,
     SpineTemplateGenerator,
-    WorldBibleGenerator,
     StoryGenerator,
     CharacterVisualDescriber,
     SceneImagePromptGenerator,
 )
+from world_bible_modules import WorldBibleGenerator
 from image_gen import ImageGenerator
 
 # A mock LM to avoid needing an API key for automated testing
@@ -51,6 +53,14 @@ class MockLM(dspy.LM):
             return ['```json\n{"reasoning": "Mock reasoning", "arc_outline": "Mock arc outline"}\n```']
         if "[[ ## world_bible ## ]]" in content or ('"world_bible"' in content and "setting, lore, and characters" in content):
             return ['```json\n{"world_bible": "Mock world bible"}\n```']
+        if "[[ ## plot_timeline ## ]]" in content or ('"plot_timeline"' in content and "A plot timeline." in content):
+            return ['```json\n{"reasoning": "Mock reasoning", "plot_timeline": "Mock timeline"}\n```']
+        if "[[ ## locations ## ]]" in content or ('"locations"' in content and "Places and locations" in content):
+            return ['```json\n{"reasoning": "Mock reasoning", "locations": "Mock locations"}\n```']
+        if "[[ ## characters ## ]]" in content or ('"characters"' in content and "Character descriptions" in content):
+            return ['```json\n{"reasoning": "Mock reasoning", "characters": "Mock characters"}\n```']
+        if "[[ ## world_rules ## ]]" in content or ('"world_rules"' in content and "Rules of the world" in content):
+            return ['```json\n{"reasoning": "Mock reasoning", "world_rules": "Mock rules"}\n```']
         if "[[ ## spine_template ## ]]" in content or ('"spine_template"' in content and "Once upon a time" in content):
             return ['```json\n{"spine_template": "Mock spine"}\n```']
         if "[[ ## core_premise ## ]]" in content or ('"core_premise"' in content and "summarizing the foundation" in content):
@@ -82,6 +92,9 @@ class MockLM(dspy.LM):
             return ['```json\n{"story": "Mock final story"}\n```']
         return ["Mock response"]
 
+logger = logging.getLogger(__name__)
+coloredlogs.install(level='INFO')
+
 def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11434", api_key=None):
     kwargs = {"max_tokens": 2000}
     if api_base:
@@ -96,7 +109,7 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
     elif "ollama" in model_name.lower():
         pass
 
-    print(f"Testing pipeline with model: {model_name}...")
+    logger.info(f"Testing pipeline with model: {model_name}...")
 
     # For testing in an environment where no actual LLM API is reachable, use the MockLM.
     # To run actual integration tests, you'd provide an active OPENAI_API_KEY or local Ollama running.
@@ -107,7 +120,7 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
     else:
         # We assume OPENAI_API_KEY is available in the run_in_bash_session, if not, we skip the actual test
         if "openai" in model_name.lower() and not kwargs.get("api_key"):
-            print("OPENAI_API_KEY not found. Skipping full integration test to avoid errors.")
+            logger.warning("OPENAI_API_KEY not found. Skipping full integration test to avoid errors.")
             return
 
         lm = dspy.LM(model_name, **kwargs)
@@ -118,7 +131,7 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
     # 1. Questions
     q_gen = QuestionGenerator()
     q_result = q_gen(idea=idea)
-    print(f"Generated {len(q_result.questions_with_answers)} questions.")
+    logger.info(f"Generated {len(q_result.questions_with_answers)} questions.")
 
     # Fake answers
     qa_text = ""
@@ -128,17 +141,17 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
     # 2. Core Premise
     cp_gen = CorePremiseGenerator()
     cp_result = cp_gen(idea=idea, qa_pairs=qa_text)
-    print("Core Premise generated.")
+    logger.info("Core Premise generated.")
 
     # 3. Spine Template
     st_gen = SpineTemplateGenerator()
     st_result = st_gen(core_premise=cp_result.core_premise)
-    print("Spine Template generated.")
+    logger.info("Spine Template generated.")
 
     # 4. World Bible
     wb_gen = WorldBibleGenerator()
     wb_result = wb_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template)
-    print("World Bible generated.")
+    logger.info("World Bible generated.")
 
     # 5. Character Visual Descriptions
     cv_describer = CharacterVisualDescriber()
@@ -166,7 +179,7 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
     # 7. Story
     story_gen = StoryGenerator()
     story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
-    print("Story generated.")
+    logger.info("Story generated.")
 
     # 8. Scene image prompts
     scene_prompt_gen = SceneImagePromptGenerator()
@@ -174,12 +187,12 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
         chapter_text="Mock chapter text for testing",
         character_visuals_summary=character_visuals_summary,
     )
-    print(f"Scene image prompt: {prompt_result.image_prompt[:80]}...")
+    logger.info(f"Scene image prompt: {prompt_result.image_prompt[:80]}...")
 
-    print("Test passed successfully!")
+    logger.info("Test passed successfully!")
 
     output_filename = "story_output.md"
-    print(f"Saving story output to {output_filename}...")
+    logger.info(f"Saving story output to {output_filename}...")
     with open(output_filename, "w", encoding="utf-8") as f:
         f.write("# Story Output\n\n")
         f.write("## Core Premise\n")

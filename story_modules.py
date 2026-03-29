@@ -1,6 +1,9 @@
 import dspy
+import logging
 from typing import List
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 class QuestionWithAnswer(BaseModel):
     question: str = Field(description="The interrogative question.")
@@ -49,34 +52,6 @@ class SpineTemplateGenerator(dspy.Module):
         return self.generate(core_premise=core_premise)
 
 
-class GenerateWorldBibleSignature(dspy.Signature):
-    """Generates a World Bible, fleshing out details like setting, lore, characters, etc. Uses the existing context and optionally asks the user questions."""
-    core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
-    spine_template: str = dspy.InputField(desc="The narrative spine template.")
-    user_additions: str = dspy.InputField(desc="Additional answers or details provided by the user.")
-    world_bible: str = dspy.OutputField(desc="A comprehensive World Bible containing setting, lore, and characters.")
-
-class WorldBibleGenerator(dspy.Module):
-    def __init__(self):
-        super().__init__()
-        self.generate = dspy.Predict(GenerateWorldBibleSignature)
-
-    def forward(self, core_premise: str, spine_template: str, user_additions: str = ""):
-        return self.generate(core_premise=core_premise, spine_template=spine_template, user_additions=user_additions)
-
-class GenerateWorldBibleQuestionsSignature(dspy.Signature):
-    """Generates a few follow-up questions to ask the user to help flesh out the world bible before generating the final version."""
-    core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
-    spine_template: str = dspy.InputField(desc="The narrative spine template.")
-    questions_with_answers: List[QuestionWithAnswer] = dspy.OutputField(desc="Up to 3 follow-up interrogative questions with proposed answers to help flesh out the World Bible.")
-
-class WorldBibleQuestionGenerator(dspy.Module):
-    def __init__(self):
-        super().__init__()
-        self.generate = dspy.Predict(GenerateWorldBibleQuestionsSignature)
-
-    def forward(self, core_premise: str, spine_template: str):
-        return self.generate(core_premise=core_premise, spine_template=spine_template)
 
 
 class CharacterVisual(BaseModel):
@@ -220,7 +195,7 @@ class StoryGenerator(dspy.Module):
                 full_story += f"\n\n### Chapter {i+1}: {result.title}\n\n" + chapter_text
                 previous_chapters_summary += f"Chapter {i+1}: {chapter_desc}\n"
             except Exception as e:
-                print(f"Error writing chapter {i+1}: {e}")
+                logger.error(f"Error writing chapter {i+1}: {e}")
                 break
 
         return dspy.Prediction(
