@@ -5,12 +5,15 @@ from story_modules import (
     QuestionGenerator,
     CorePremiseGenerator,
     SpineTemplateGenerator,
-    StoryGenerator
+    StoryGenerator,
+    CharacterVisualDescriber,
+    SceneImagePromptGenerator,
 )
 from world_bible_modules import (
     WorldBibleGenerator,
-    WorldBibleQuestionGenerator
+    WorldBibleQuestionGenerator,
 )
+from image_gen import ImageGenerator
 import os
 import argparse
 import logging
@@ -67,6 +70,8 @@ def main():
     parser.add_argument("--llm-url", type=str, default=os.environ.get("LLM_URL"), help="The custom API base URL (e.g., http://localhost:11434 for Ollama). Defaults to LLM_URL env var.")
     parser.add_argument("--api-key", type=str, default=os.environ.get("API_KEY"), help="The API key for the model. Defaults to API_KEY env var.")
     parser.add_argument("--max-tokens", type=int, default=8000, help="The maximum number of tokens to use for the model. Defaults to 8000.")
+    parser.add_argument("--enable-images", action="store_true", default=False, help="Enable image generation (requires Replicate API token).")
+    parser.add_argument("--replicate-api-token", type=str, default=os.environ.get("REPLICATE_API_TOKEN"), help="Replicate API token. Defaults to REPLICATE_API_TOKEN env var.")
 
     args = parser.parse_args()
 
@@ -135,9 +140,48 @@ def main():
     console.print(world_bible)
     console.print("[bold green]-------------------[/bold green]")
 
+    # 7. Character visuals & portrait generation (if images enabled)
+    character_visuals = []
+    character_portrait_paths = {}
+    character_visuals_summary = ""
+    image_gen = None
+
+    if args.enable_images:
+        if not args.replicate_api_token:
+            console.print("[bold red]Error: --enable-images requires a Replicate API token. "
+                          "Set REPLICATE_API_TOKEN env var or pass --replicate-api-token.[/bold red]")
+            return
+
+        image_gen = ImageGenerator(api_token=args.replicate_api_token)
+
+        console.print("\n[italic]Generating character visual descriptions...[/italic]")
+        cv_describer = CharacterVisualDescriber()
+        cv_result = cv_describer(world_bible=world_bible)
+        character_visuals = cv_result.character_visuals
+
+        lines = []
+        for cv in character_visuals:
+            console.print(f"\n[bold cyan]{cv.name}:[/bold cyan] {cv.reference_mix}")
+            console.print(f"  [dim]{cv.distinguishing_features}[/dim]")
+            lines.append(
+                f"- {cv.name}: {cv.reference_mix}. {cv.distinguishing_features}"
+            )
+        character_visuals_summary = "\n".join(lines)
+
+        console.print("\n[italic]Generating character portraits...[/italic]")
+        for cv in character_visuals:
+            try:
+                path = image_gen.generate_character_portrait(
+                    prompt=cv.full_prompt, character_name=cv.name
+                )
+                character_portrait_paths[cv.name] = path
+                console.print(f"  [green]Saved portrait:[/green] {path}")
+            except Exception as e:
+                console.print(f"  [red]Failed to generate portrait for {cv.name}: {e}[/red]")
+
     Confirm.ask("Press Enter to continue to Story generation...", default=True, show_default=False)
 
-    # 6. Generate Story
+    # 8. Generate Story
     console.print("\n[italic]Generating Story (Arc Outline, Chapter Plan, Final Story)...[/italic]")
     story_result = story_gen(core_premise=core_premise, spine_template=spine_template, world_bible=world_bible)
 
@@ -153,7 +197,34 @@ def main():
     console.print("\n[bold red]--- Final Story ---[/bold red]")
     console.print(story_result.story)
 
-    # Save the output to a markdown file
+    # 9. Generate scene illustrations for each chapter (if images enabled)
+    scene_image_paths = {}
+    if args.enable_images and image_gen:
+        console.print("\n[italic]Generating scene illustrations for each chapter...[/italic]")
+        scene_prompt_gen = SceneImagePromptGenerator()
+
+        chapters = story_result.story.split("### Chapter ")
+        chapters = [c for c in chapters if c.strip()]
+
+        reference_paths = list(character_portrait_paths.values())
+
+        for i, chapter_text in enumerate(chapters, start=1):
+            try:
+                prompt_result = scene_prompt_gen(
+                    chapter_text=chapter_text,
+                    character_visuals_summary=character_visuals_summary,
+                )
+                path = image_gen.generate_scene_illustration(
+                    prompt=prompt_result.image_prompt,
+                    reference_image_paths=reference_paths,
+                    chapter_index=i,
+                )
+                scene_image_paths[i] = path
+                console.print(f"  [green]Chapter {i} scene:[/green] {path}")
+            except Exception as e:
+                console.print(f"  [red]Failed to generate scene for chapter {i}: {e}[/red]")
+
+    # 10. Save output to markdown
     output_filename = "story_output.md"
     logger.info(f"Saving story output to {output_filename}...")
     with open(output_filename, "w", encoding="utf-8") as f:
@@ -164,6 +235,17 @@ def main():
         f.write(f"{spine_template}\n\n")
         f.write("## World Bible\n")
         f.write(f"{world_bible}\n\n")
+
+        if character_visuals:
+            f.write("## Character Visuals\n\n")
+            for cv in character_visuals:
+                f.write(f"### {cv.name}\n")
+                f.write(f"**Reference:** {cv.reference_mix}\n\n")
+                f.write(f"**Features:** {cv.distinguishing_features}\n\n")
+                portrait = character_portrait_paths.get(cv.name)
+                if portrait:
+                    f.write(f"![{cv.name} portrait]({portrait})\n\n")
+
         f.write("## Arc Outline\n")
         f.write(f"{story_result.arc_outline}\n\n")
         f.write("## Chapter Plan\n")
@@ -171,7 +253,17 @@ def main():
         f.write("## Enhancers Guide\n")
         f.write(f"{story_result.enhancers_guide}\n\n")
         f.write("## Final Story\n")
-        f.write(f"{story_result.story}\n")
+
+        if scene_image_paths:
+            chapters = story_result.story.split("### Chapter ")
+            chapters = [c for c in chapters if c.strip()]
+            for i, chapter_text in enumerate(chapters, start=1):
+                f.write(f"\n\n### Chapter {chapter_text}")
+                scene = scene_image_paths.get(i)
+                if scene:
+                    f.write(f"\n\n![Chapter {i} scene]({scene})\n")
+        else:
+            f.write(f"{story_result.story}\n")
 
     console.print(f"\n[bold magenta]Story generation complete! Results saved to {output_filename}[/bold magenta]")
 
