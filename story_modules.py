@@ -79,6 +79,73 @@ class WorldBibleQuestionGenerator(dspy.Module):
         return self.generate(core_premise=core_premise, spine_template=spine_template)
 
 
+class CharacterVisual(BaseModel):
+    name: str = Field(description="The character's name.")
+    reference_mix: str = Field(
+        description="A visual anchor describing who the character looks like, "
+        "e.g. 'a mix of Cinderella and Princess Pingyang'. "
+        "Use well-known fictional or historical figures."
+    )
+    distinguishing_features: str = Field(
+        description="Specific distinguishing visual traits: hair color/style, "
+        "eye color, clothing, accessories, scars, etc."
+    )
+    full_prompt: str = Field(
+        description="A complete, self-contained anime image-generation prompt "
+        "for this character's portrait, combining the reference mix and "
+        "distinguishing features into a single descriptive paragraph."
+    )
+
+
+class GenerateCharacterVisualsSignature(dspy.Signature):
+    """Extracts the main characters from the world bible and generates a
+    structured visual description for each one.  Each character's appearance
+    must be anchored to a mix of 2-3 well-known fictional or historical
+    figures so that an anime image generator can produce consistent results.
+    """
+    world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
+    character_visuals: List[CharacterVisual] = dspy.OutputField(
+        desc="A list of visual descriptions, one per main character."
+    )
+
+
+class CharacterVisualDescriber(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.generate = dspy.Predict(GenerateCharacterVisualsSignature)
+
+    def forward(self, world_bible: str):
+        return self.generate(world_bible=world_bible)
+
+
+class GenerateSceneImagePromptSignature(dspy.Signature):
+    """Generates a single anime image-generation prompt that depicts the most
+    important scene from the given chapter.  The prompt must reference the
+    characters by their visual descriptors (the reference_mix and
+    distinguishing_features) so the image stays visually consistent with
+    their portraits.  Output ONLY the image prompt, nothing else.
+    """
+    chapter_text: str = dspy.InputField(desc="The full text of the chapter.")
+    character_visuals_summary: str = dspy.InputField(
+        desc="A summary of all character visual descriptors to reference."
+    )
+    image_prompt: str = dspy.OutputField(
+        desc="A detailed anime scene image-generation prompt."
+    )
+
+
+class SceneImagePromptGenerator(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.generate = dspy.Predict(GenerateSceneImagePromptSignature)
+
+    def forward(self, chapter_text: str, character_visuals_summary: str):
+        return self.generate(
+            chapter_text=chapter_text,
+            character_visuals_summary=character_visuals_summary,
+        )
+
+
 class GenerateArcOutlineSignature(dspy.Signature):
     """Generates Level 1: Arc Outline (5-10 major events)."""
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
