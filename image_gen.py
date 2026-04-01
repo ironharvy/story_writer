@@ -1,7 +1,6 @@
 import os
 import re
 import base64
-import replicate
 import urllib.request
 from pathlib import Path
 
@@ -54,6 +53,8 @@ class ImageGenerator:
 
         Returns the path to the saved image file.
         """
+        import replicate
+
         full_prompt = f"1girl/1boy, portrait, upper body, {prompt}, {ANIME_STYLE_SUFFIX}"
 
         output = replicate.run(
@@ -85,6 +86,8 @@ class ImageGenerator:
 
         Returns the path to the saved image file.
         """
+        import replicate
+
         input_params: dict = {
             "prompt": f"{prompt}, {ANIME_STYLE_SUFFIX}",
             "aspect_ratio": "16:9",

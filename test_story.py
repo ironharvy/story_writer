@@ -97,7 +97,6 @@ logger = logging.getLogger(__name__)
 coloredlogs.install(level='INFO')
 
 def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=None):
-    pytest.importorskip("replicate")
     from image_gen import ImageGenerator
 
     kwargs = {"max_tokens": 2000}
