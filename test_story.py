@@ -96,11 +96,10 @@ class MockLM(dspy.LM):
 logger = logging.getLogger(__name__)
 coloredlogs.install(level='INFO')
 
-def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=None):
-    pytest.importorskip("replicate")
+def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=None, max_tokens=2000):
     from image_gen import ImageGenerator
 
-    kwargs = {"max_tokens": 2000}
+    kwargs = {"max_tokens": max_tokens}
     if api_base:
         kwargs["api_base"] = api_base
 
@@ -245,7 +244,8 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "mock"), help="The language model to use (e.g., openai/gpt-4o-mini, ollama_chat/llama3). Defaults to MODEL env var or mock.")
     parser.add_argument("--llm-url", type=str, default=os.environ.get("LLM_URL", "http://localhost:11434"), help="The custom API base URL (e.g., http://localhost:11434 for Ollama). Defaults to LLM_URL env var or http://localhost:11434.")
     parser.add_argument("--api-key", type=str, default=os.environ.get("API_KEY"), help="The API key for the model. Defaults to API_KEY env var.")
+    parser.add_argument("--max-tokens", type=int, default=2000, help="The maximum number of tokens to use for the model. Defaults to 2000.")
 
     args = parser.parse_args()
 
-    test_pipeline(model_name=args.model, api_base=args.llm_url, api_key=args.api_key)
+    test_pipeline(model_name=args.model, api_base=args.llm_url, api_key=args.api_key, max_tokens=args.max_tokens)
