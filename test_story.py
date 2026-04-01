@@ -164,8 +164,9 @@ def test_pipeline(
     api_key=None,
     enable_images=False,
     output_dir=".tmp",
+    max_tokens=2048
 ):
-    kwargs = {"max_tokens": 2000}
+    kwargs = {"max_tokens": max_tokens}
     if api_base:
         kwargs["api_base"] = api_base
 
@@ -299,6 +300,7 @@ if __name__ == "__main__":
     parser.add_argument("--api-key", type=str, default=os.environ.get("API_KEY"), help="The API key for the model. Defaults to API_KEY env var.")
     parser.add_argument("--enable-images", action="store_true", default=False, help="Enable the mocked image-generation path during test runs.")
     parser.add_argument("--output-dir", type=str, default=".tmp", help="Directory to save output files. Defaults to .tmp.")
+    parser.add_argument("--max_tokens", type=int, default=1024, help="max number of tokens to pass to an LLM call")
 
     args = parser.parse_args()
 
@@ -308,4 +310,5 @@ if __name__ == "__main__":
         api_key=args.api_key,
         enable_images=args.enable_images,
         output_dir=args.output_dir,
+	max_tokens=args.max_tokens
     )
