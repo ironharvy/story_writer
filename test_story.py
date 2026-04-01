@@ -3,11 +3,13 @@ import os
 import argparse
 from story_modules import (
     QuestionGenerator,
+    QuestionWithAnswer,
     CorePremiseGenerator,
     SpineTemplateGenerator,
     WorldBibleGenerator,
     StoryGenerator
 )
+import pytest
 
 # A mock LM to avoid needing an API key for automated testing
 class MockLM(dspy.LM):
@@ -69,7 +71,7 @@ class MockLM(dspy.LM):
             return ['```json\n{"story": "Mock final story"}\n```']
         return ["Mock response"]
 
-def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11434", api_key=None):
+def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=None):
     kwargs = {"max_tokens": 1000}
     if api_base:
         kwargs["api_base"] = api_base
@@ -132,6 +134,24 @@ def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11
     story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
     print("Story generated.")
     print("Test passed successfully!")
+
+
+@pytest.mark.parametrize(
+    "payload,expected",
+    [
+        ({"": "Who is the hero?", "proposed_answer": "Kai"}, {"question": "Who is the hero?", "proposed_answer": "Kai"}),
+        ({"question": "Where?", "answer": "Mars"}, {"question": "Where?", "proposed_answer": "Mars"}),
+        ({"query": "When?", "response": "At dawn"}, {"question": "When?", "proposed_answer": "At dawn"}),
+    ],
+)
+def test_question_with_answer_key_normalization(payload, expected):
+    result = QuestionWithAnswer.model_validate(payload)
+    assert result.model_dump() == expected
+
+
+def test_question_with_answer_does_not_promote_unrelated_fields():
+    with pytest.raises(Exception):
+        QuestionWithAnswer.model_validate({"question": "Why?", "confidence": 0.92})
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test AI DSPy Story Writer")
