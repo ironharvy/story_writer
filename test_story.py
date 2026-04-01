@@ -3,6 +3,7 @@ import os
 import argparse
 import logging
 import coloredlogs
+import pytest
 from unittest.mock import patch, MagicMock
 from story_modules import (
     QuestionGenerator,
@@ -13,7 +14,6 @@ from story_modules import (
     SceneImagePromptGenerator,
 )
 from world_bible_modules import WorldBibleGenerator
-from image_gen import ImageGenerator
 
 # A mock LM to avoid needing an API key for automated testing
 class MockLM(dspy.LM):
@@ -95,7 +95,10 @@ class MockLM(dspy.LM):
 logger = logging.getLogger(__name__)
 coloredlogs.install(level='INFO')
 
-def test_pipeline(model_name="ollama_chat/llama3", api_base="http://localhost:11434", api_key=None):
+def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=None):
+    pytest.importorskip("replicate")
+    from image_gen import ImageGenerator
+
     kwargs = {"max_tokens": 2000}
     if api_base:
         kwargs["api_base"] = api_base
