@@ -213,7 +213,20 @@ class StoryGenerator(dspy.Module):
             chapter_plan=chapter_plan_result.chapter_plan
         )
 
-        chapters_to_write = [line.strip() for line in chapter_plan_result.chapter_plan.split('\n') if line.strip()]
+        # Filter out arc-level headers (e.g. "Arc 1: ...", "**Arc 2: ...**") so
+        # we only write actual chapter entries.  Arc headers are structural
+        # groupings in the chapter plan and should not be expanded into their
+        # own chapters—doing so produces semi-duplicate content.
+        import re
+        _arc_header_re = re.compile(
+            r'^[\s\*\#]*(arc)\s*\d*\s*[:\-\.]',
+            re.IGNORECASE,
+        )
+        chapters_to_write = [
+            line.strip()
+            for line in chapter_plan_result.chapter_plan.split('\n')
+            if line.strip() and not _arc_header_re.match(line.strip())
+        ]
 
         full_story = ""
         previous_chapters_summary = ""

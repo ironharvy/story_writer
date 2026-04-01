@@ -49,7 +49,7 @@ class MockLM(dspy.LM):
         if "[[ ## enhancers_guide ## ]]" in content or ('"enhancers_guide"' in content and "evaluating which story enhancers" in content):
             return ['```json\n{"reasoning": "Mock reasoning", "enhancers_guide": "Mock enhancers guide"}\n```']
         if "[[ ## chapter_plan ## ]]" in content or ('"chapter_plan"' in content and "Each arc broken into chapters" in content):
-            return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": "Mock chapter plan"}\n```']
+            return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": "Arc 1: The Awakening\\nChapter 1: Discovery\\nChapter 2: Training\\nArc 2: The Betrayal\\nChapter 3: Revelation\\nChapter 4: Escape"}\n```']
         if "[[ ## arc_outline ## ]]" in content or ('"arc_outline"' in content and "5-10 major events" in content):
             return ['```json\n{"reasoning": "Mock reasoning", "arc_outline": "Mock arc outline"}\n```']
         if "[[ ## world_bible ## ]]" in content or ('"world_bible"' in content and "setting, lore, and characters" in content):
@@ -84,7 +84,7 @@ class MockLM(dspy.LM):
         elif "arc_outline" in content and "chapter_plan" not in content:
             return ['```json\n{"reasoning": "Mock reasoning", "arc_outline": "Mock arc outline"}\n```']
         elif "chapter_plan" in content and "enhancers_guide" not in content and "story" not in content:
-            return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": "Mock chapter plan"}\n```']
+            return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": "Arc 1: The Awakening\\nChapter 1: Discovery\\nChapter 2: Training\\nArc 2: The Betrayal\\nChapter 3: Revelation\\nChapter 4: Escape"}\n```']
         elif "enhancers_guide" in content and "story" not in content and "chapter_text" not in content:
             return ['```json\n{"reasoning": "Mock reasoning", "enhancers_guide": "Mock enhancers guide"}\n```']
         elif "chapter_text" in content:
