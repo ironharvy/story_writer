@@ -30,12 +30,29 @@ Mock timeline
 Mock arc outline
 
 ## Chapter Plan
-Mock chapter plan
+Arc 1: The Awakening
+Chapter 1: Discovery
+Chapter 2: Training
+Arc 2: The Betrayal
+Chapter 3: Revelation
+Chapter 4: Escape
 
 ## Enhancers Guide
 Mock enhancers guide
 
 ## Final Story
 ### Chapter 1: Mock Title
+
+Mock chapter text
+
+### Chapter 2: Mock Title
+
+Mock chapter text
+
+### Chapter 3: Mock Title
+
+Mock chapter text
+
+### Chapter 4: Mock Title
 
 Mock chapter text
