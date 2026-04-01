@@ -13,7 +13,6 @@ from world_bible_modules import (
     WorldBibleGenerator,
     WorldBibleQuestionGenerator,
 )
-from image_gen import ImageGenerator
 import os
 import argparse
 import logging
@@ -152,6 +151,7 @@ def main():
                           "Set REPLICATE_API_TOKEN env var or pass --replicate-api-token.[/bold red]")
             return
 
+        from image_gen import ImageGenerator
         image_gen = ImageGenerator(api_token=args.replicate_api_token)
 
         console.print("\n[italic]Generating character visual descriptions...[/italic]")
