@@ -1,9 +1,13 @@
 import dspy
 import logging
+import re
 from typing import List
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+
+CHAPTER_PLAN_LINE_RE = re.compile(r"^- \*\*Chapter \d+\*\*:\s*(.+)$")
 
 class QuestionWithAnswer(BaseModel):
     question: str = Field(description="The interrogative question.")
@@ -176,7 +180,9 @@ class StoryGenerator(dspy.Module):
             chapter_plan=chapter_plan_result.chapter_plan
         )
 
-        chapters_to_write = [line.strip() for line in chapter_plan_result.chapter_plan.split('\n') if line.strip()]
+        chapters_to_write = extract_chapter_descriptions(
+            chapter_plan_result.chapter_plan
+        )
 
         full_story = ""
         previous_chapters_summary = ""
@@ -204,3 +210,13 @@ class StoryGenerator(dspy.Module):
             enhancers_guide=enhancers_result.enhancers_guide,
             story=full_story.strip()
         )
+
+
+def extract_chapter_descriptions(chapter_plan: str) -> List[str]:
+    chapters = []
+    for raw_line in chapter_plan.splitlines():
+        line = raw_line.strip()
+        match = CHAPTER_PLAN_LINE_RE.match(line)
+        if match:
+            chapters.append(match.group(1).strip())
+    return chapters

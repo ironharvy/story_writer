@@ -2,3 +2,6 @@ dspy-ai
 rich
 python-dotenv
 coloredlogs
+replicate
+pytest
+ruff

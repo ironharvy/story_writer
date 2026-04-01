@@ -13,7 +13,6 @@ from world_bible_modules import (
     WorldBibleGenerator,
     WorldBibleQuestionGenerator,
 )
-from image_gen import ImageGenerator
 import os
 import argparse
 import logging
@@ -152,6 +151,16 @@ def main():
                           "Set REPLICATE_API_TOKEN env var or pass --replicate-api-token.[/bold red]")
             return
 
+        try:
+            from image_gen import ImageGenerator
+        except ImportError as exc:
+            console.print(
+                "[bold red]Error: image generation dependencies are not installed. "
+                "Install the optional image requirements and try again.[/bold red]"
+            )
+            logger.exception("Unable to import image generation dependencies.")
+            raise SystemExit(1) from exc
+
         image_gen = ImageGenerator(api_token=args.replicate_api_token)
 
         console.print("\n[italic]Generating character visual descriptions...[/italic]")
@@ -206,7 +215,7 @@ def main():
         chapters = story_result.story.split("### Chapter ")
         chapters = [c for c in chapters if c.strip()]
 
-        reference_paths = list(character_portrait_paths.values())
+        primary_reference_path = next(iter(character_portrait_paths.values()), None)
 
         for i, chapter_text in enumerate(chapters, start=1):
             try:
@@ -216,7 +225,7 @@ def main():
                 )
                 path = image_gen.generate_scene_illustration(
                     prompt=prompt_result.image_prompt,
-                    reference_image_paths=reference_paths,
+                    reference_image_path=primary_reference_path,
                     chapter_index=i,
                 )
                 scene_image_paths[i] = path
@@ -225,7 +234,9 @@ def main():
                 console.print(f"  [red]Failed to generate scene for chapter {i}: {e}[/red]")
 
     # 10. Save output to markdown
-    output_filename = "story_output.md"
+    output_dir = ".tmp"
+    os.makedirs(output_dir, exist_ok=True)
+    output_filename = os.path.join(output_dir, "story_output.md")
     logger.info(f"Saving story output to {output_filename}...")
     with open(output_filename, "w", encoding="utf-8") as f:
         f.write("# Story Output\n\n")
