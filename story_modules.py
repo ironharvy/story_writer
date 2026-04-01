@@ -1,13 +1,50 @@
 import dspy
 import logging
 from typing import List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 class QuestionWithAnswer(BaseModel):
     question: str = Field(description="The interrogative question.")
     proposed_answer: str = Field(description="A proposed answer for the user to potentially accept.")
+
+    @model_validator(mode='before')
+    @classmethod
+    def fix_keys(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        normalized = dict(data)
+
+        def normalize_key(key: str) -> str:
+            return ''.join(ch for ch in key.lower() if ch.isalnum())
+
+        question_aliases = {"question", "q", "prompt", "query"}
+        answer_aliases = {"proposedanswer", "answer", "response", "a"}
+
+        # Preserve already-correct keys first.
+        if "question" not in normalized:
+            if "" in normalized and isinstance(normalized[""], str):
+                normalized["question"] = normalized.pop("")
+            else:
+                for key in list(normalized.keys()):
+                    if key in {"question", "proposed_answer"}:
+                        continue
+                    if normalize_key(key) in question_aliases and isinstance(normalized[key], str):
+                        normalized["question"] = normalized.pop(key)
+                        break
+
+        if "proposed_answer" not in normalized:
+            for key in list(normalized.keys()):
+                if key in {"question", "proposed_answer"}:
+                    continue
+                if normalize_key(key) in answer_aliases and isinstance(normalized[key], str):
+                    normalized["proposed_answer"] = normalized.pop(key)
+                    break
+
+        return normalized
 
 class GenerateQuestionsSignature(dspy.Signature):
     """Generates 5 interrogative questions to interrogate the user's idea to generate a 'Core Premise'. Each question must include a proposed answer."""

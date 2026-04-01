@@ -7,6 +7,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from story_modules import (
     QuestionGenerator,
+    QuestionWithAnswer,
     CorePremiseGenerator,
     SpineTemplateGenerator,
     StoryGenerator,
@@ -220,6 +221,24 @@ def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=
         f.write(f"{story_result.enhancers_guide}\n\n")
         f.write("## Final Story\n")
         f.write(f"{story_result.story}\n")
+
+
+@pytest.mark.parametrize(
+    "payload,expected",
+    [
+        ({"": "Who is the hero?", "proposed_answer": "Kai"}, {"question": "Who is the hero?", "proposed_answer": "Kai"}),
+        ({"question": "Where?", "answer": "Mars"}, {"question": "Where?", "proposed_answer": "Mars"}),
+        ({"query": "When?", "response": "At dawn"}, {"question": "When?", "proposed_answer": "At dawn"}),
+    ],
+)
+def test_question_with_answer_key_normalization(payload, expected):
+    result = QuestionWithAnswer.model_validate(payload)
+    assert result.model_dump() == expected
+
+
+def test_question_with_answer_does_not_promote_unrelated_fields():
+    with pytest.raises(Exception):
+        QuestionWithAnswer.model_validate({"question": "Why?", "confidence": 0.92})
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test AI DSPy Story Writer")
