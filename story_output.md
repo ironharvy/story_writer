@@ -19,6 +19,13 @@ Mock locations
 ### Plot Timeline
 Mock timeline
 
+## Character Visuals
+
+### Mock Hero
+**Reference:** a mix of Guts from Berserk and Zuko from Avatar
+
+**Features:** short black hair, amber eyes, burn scar on left cheek, dark leather armor
+
 ## Arc Outline
 Mock arc outline
 
