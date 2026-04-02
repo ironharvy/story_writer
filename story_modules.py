@@ -222,6 +222,10 @@ class GenerateSingleChapterSignature(dspy.Signature):
 
 class StoryGenerator(dspy.Module):
     def __init__(self, random_detail_probability: float = RANDOM_DETAIL_PROBABILITY):
+        if not (0.0 <= random_detail_probability <= 1.0):
+            raise ValueError(
+                f"random_detail_probability must be in [0.0, 1.0], got {random_detail_probability}"
+            )
         super().__init__()
         self.random_detail_probability = random_detail_probability
         self.generate_arc_outline = dspy.ChainOfThought(GenerateArcOutlineSignature)
