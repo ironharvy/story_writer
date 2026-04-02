@@ -1,10 +1,17 @@
 import dspy
 import logging
+import re
 from typing import List
 from pydantic import BaseModel, Field, model_validator
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Regex to strip leading "Chapter <number>:" / "Chapter <number> -" from LLM-generated titles
+_chapter_prefix_re = re.compile(
+    r'^(chapter\s+\d+\s*[:\-\.]\s*)',
+    re.IGNORECASE,
+)
 
 class QuestionWithAnswer(BaseModel):
     question: str = Field(description="The interrogative question.")
@@ -217,7 +224,6 @@ class StoryGenerator(dspy.Module):
         # we only write actual chapter entries.  Arc headers are structural
         # groupings in the chapter plan and should not be expanded into their
         # own chapters—doing so produces semi-duplicate content.
-        import re
         _arc_header_re = re.compile(
             r'^[\s\*\#]*(arc)\s*\d*\s*[:\-\.]',
             re.IGNORECASE,
@@ -242,11 +248,21 @@ class StoryGenerator(dspy.Module):
                 )
 
                 chapter_text = result.chapter_text
-                full_story += f"\n\n### Chapter {i+1}: {result.title}\n\n" + chapter_text
+                # Strip redundant "Chapter N:" prefix the LLM sometimes adds
+                clean_title = _chapter_prefix_re.sub('', result.title).strip()
+                full_story += f"\n\n### Chapter {i+1}: {clean_title}\n\n" + chapter_text
                 previous_chapters_summary += f"Chapter {i+1}: {chapter_desc}\n"
             except Exception as e:
-                logger.error(f"Error writing chapter {i+1}: {e}")
-                break
+                logger.error(f"Error writing chapter {i+1}: {e}", exc_info=True)
+                continue
+
+        if not full_story.strip():
+            logger.warning(
+                "Story generation produced no chapter content. "
+                "chapters_to_write=%d, chapter_plan excerpt=%.500s",
+                len(chapters_to_write),
+                chapter_plan_result.chapter_plan,
+            )
 
         return dspy.Prediction(
             arc_outline=arc_outline_result.arc_outline,
