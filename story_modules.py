@@ -254,7 +254,7 @@ class StoryGenerator(dspy.Module):
                 previous_chapters_summary += f"Chapter {i+1}: {chapter_desc}\n"
             except Exception as e:
                 logger.error(f"Error writing chapter {i+1}: {e}", exc_info=True)
-                continue
+                break
 
         if not full_story.strip():
             logger.warning(
