@@ -41,18 +41,4 @@ Chapter 4: Escape
 Mock enhancers guide
 
 ## Final Story
-### Chapter 1: Mock Title
 
-Mock chapter text
-
-### Chapter 2: Mock Title
-
-Mock chapter text
-
-### Chapter 3: Mock Title
-
-Mock chapter text
-
-### Chapter 4: Mock Title
-
-Mock chapter text

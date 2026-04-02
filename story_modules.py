@@ -1,9 +1,22 @@
 import dspy
 import logging
+import random
 import re
 from typing import List
 from pydantic import BaseModel, Field, model_validator
 from typing import Any
+
+# Probability that a chapter receives a random creative flourish (0.0 – 1.0).
+RANDOM_DETAIL_PROBABILITY = 0.35
+
+# The kinds of random detail the LLM can be asked to invent.
+_RANDOM_DETAIL_TYPES = [
+    "an unusually long and vivid description of a piece of scenery or environment",
+    "a quirky or unexpected object placed naturally in the scene (e.g. a paper unicorn on a desk, a rusted music-box on a windowsill)",
+    "a strange but fitting atmospheric detail involving sounds, smells, or textures",
+    "an unusual yet revealing character habit, nervous tic, or physical detail",
+    "a brief, surprising background element that enriches the world without derailing the plot",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +199,16 @@ class GenerateEnhancersSignature(dspy.Signature):
     chapter_plan: str = dspy.InputField(desc="Chapter Plan (Each arc broken into chapters).")
     enhancers_guide: str = dspy.OutputField(desc="A guide evaluating which story enhancers (e.g., Tension, Mystery, Twists) are needed for specific scenes or chapters and how to apply them.")
 
+class GenerateRandomDetailSignature(dspy.Signature):
+    """Invents a single concrete, contextually-appropriate creative flourish to be woven into a chapter.
+    The detail must fit the story's world and genre—no anachronisms or setting violations.
+    Output only the detail itself as a short, vivid description (2-5 sentences)."""
+    world_bible: str = dspy.InputField(desc="The comprehensive World Bible describing the story's setting, rules, and characters.")
+    current_chapter_description: str = dspy.InputField(desc="The specific chapter event that the detail should fit into.")
+    detail_type: str = dspy.InputField(desc="The category of creative flourish to invent.")
+    random_detail: str = dspy.OutputField(desc="A concrete, vivid creative detail (2-5 sentences) that fits the world and can be naturally woven into the chapter.")
+
+
 class GenerateSingleChapterSignature(dspy.Signature):
     """Writes a full, detailed chapter based on the world bible and the specific chapter goal."""
     world_bible: str = dspy.InputField()
@@ -193,16 +216,36 @@ class GenerateSingleChapterSignature(dspy.Signature):
     current_chapter_description: str = dspy.InputField(desc="The specific event to write now.")
     previous_chapters_summary: str = dspy.InputField(desc="Brief summary of what happened so far.")
     enhancers_guide: str = dspy.InputField(desc="A guide evaluating which story enhancers (e.g., Tension, Mystery, Twists) are needed for specific scenes or chapters and how to apply them.")
+    random_detail: str = dspy.InputField(desc="An optional creative flourish to weave naturally into the chapter. Empty string means no special detail is required.")
     title: str = dspy.OutputField(desc="The title of the chapter.")
     chapter_text: str = dspy.OutputField(desc="A long, immersive chapter with dialogue and description.")
 
 class StoryGenerator(dspy.Module):
-    def __init__(self):
+    def __init__(self, random_detail_probability: float = RANDOM_DETAIL_PROBABILITY):
         super().__init__()
+        self.random_detail_probability = random_detail_probability
         self.generate_arc_outline = dspy.ChainOfThought(GenerateArcOutlineSignature)
         self.generate_chapter_plan = dspy.ChainOfThought(GenerateChapterPlanSignature)
         self.generate_enhancers = dspy.ChainOfThought(GenerateEnhancersSignature)
+        self.generate_random_detail = dspy.Predict(GenerateRandomDetailSignature)
         self.write_chapter = dspy.ChainOfThought(GenerateSingleChapterSignature)
+
+    def _maybe_generate_random_detail(self, world_bible: str, chapter_desc: str) -> str:
+        """Roll the dice and, if triggered, generate a contextual creative flourish."""
+        if random.random() >= self.random_detail_probability:
+            return ""
+        detail_type = random.choice(_RANDOM_DETAIL_TYPES)
+        logger.debug("Probabilistic detail triggered for chapter (type: %s)", detail_type)
+        try:
+            result = self.generate_random_detail(
+                world_bible=world_bible,
+                current_chapter_description=chapter_desc,
+                detail_type=detail_type,
+            )
+            return result.random_detail
+        except Exception as e:
+            logger.warning("Failed to generate random detail: %s", e)
+            return ""
 
     def forward(self, core_premise: str, spine_template: str, world_bible: str):
         arc_outline_result = self.generate_arc_outline(
@@ -239,12 +282,17 @@ class StoryGenerator(dspy.Module):
 
         for i, chapter_desc in enumerate(chapters_to_write):
             try:
+                random_detail = self._maybe_generate_random_detail(world_bible, chapter_desc)
+                if random_detail:
+                    logger.info("Chapter %d: injecting probabilistic detail.", i + 1)
+
                 result = self.write_chapter(
                     world_bible=world_bible,
                     chapter_plan=chapter_plan_result.chapter_plan,
                     current_chapter_description=chapter_desc,
                     previous_chapters_summary=previous_chapters_summary,
-                    enhancers_guide=enhancers_result.enhancers_guide
+                    enhancers_guide=enhancers_result.enhancers_guide,
+                    random_detail=random_detail,
                 )
 
                 chapter_text = result.chapter_text
