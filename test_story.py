@@ -181,9 +181,11 @@ def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=
                 path = img_gen.generate_character_portrait(prompt=cv.full_prompt, character_name=cv.name)
                 print(f"  Mock portrait for {cv.name}: {path}")
 
-    # 7. Story
-    story_gen = StoryGenerator()
-    story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
+    # 7. Story — patch random.random so probabilistic detail always triggers,
+    # ensuring the random_detail mock path in MockLM is exercised every run.
+    with patch("story_modules.random.random", return_value=0.1):
+        story_gen = StoryGenerator()
+        story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
     logger.info("Story generated.")
 
     # 8. Scene image prompts
