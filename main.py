@@ -26,6 +26,30 @@ coloredlogs.install(level='INFO')
 
 console = Console()
 
+
+def setup_logging():
+    """Configure file logging for DSPy and application into .logs/ folder."""
+    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    log_file = os.path.join(log_dir, "story_writer.log")
+    file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+    )
+
+    # Root logger so we capture DSPy internals too
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    root.addHandler(file_handler)
+
+    # Also capture dspy specifically at DEBUG
+    for name in ("dspy", "dspy.adapters", "dspy.clients"):
+        logging.getLogger(name).setLevel(logging.DEBUG)
+
+    logger.info("Logging initialised – file: %s", log_file)
+
 def configure_dspy(model_name: str, api_base: str = None, api_key: str = None, max_tokens: int = 2000):
     kwargs = {}
     if api_base:
@@ -74,6 +98,7 @@ def main():
 
     args = parser.parse_args()
 
+    setup_logging()
     configure_dspy(model_name=args.model, api_base=args.llm_url, api_key=args.api_key, max_tokens=args.max_tokens)
 
     console.print("[bold magenta]Welcome to the AI DSPy Story Writer![/bold magenta]")

@@ -235,6 +235,23 @@ def test_question_with_answer_key_normalization(payload, expected):
     assert result.model_dump() == expected
 
 
+@pytest.mark.parametrize(
+    "raw_title,expected_clean",
+    [
+        ("Chapter 1: The Awakening", "The Awakening"),
+        ("Chapter 12 - Descent", "Descent"),
+        ("chapter 3: rising dawn", "rising dawn"),
+        ("Chapter 1. First Light", "First Light"),
+        ("The Awakening", "The Awakening"),           # no prefix – unchanged
+        ("Chapter One: Narrative", "Chapter One: Narrative"),  # spelled-out number – unchanged
+    ],
+)
+def test_chapter_title_prefix_stripping(raw_title, expected_clean):
+    from story_modules import _chapter_prefix_re
+    clean = _chapter_prefix_re.sub('', raw_title).strip()
+    assert clean == expected_clean
+
+
 def test_question_with_answer_does_not_promote_unrelated_fields():
     with pytest.raises(Exception):
         QuestionWithAnswer.model_validate({"question": "Why?", "confidence": 0.92})
