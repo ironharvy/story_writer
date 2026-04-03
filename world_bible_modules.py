@@ -1,6 +1,7 @@
 import dspy
 from typing import List
 from story_modules import QuestionWithAnswer
+from langfuse import observe
 
 class GenerateWorldBibleQuestionsSignature(dspy.Signature):
     """Generates a few follow-up questions to ask the user to help flesh out the world bible before generating the final version."""
@@ -13,6 +14,7 @@ class WorldBibleQuestionGenerator(dspy.Module):
         super().__init__()
         self.generate = dspy.Predict(GenerateWorldBibleQuestionsSignature)
 
+    @observe()
     def forward(self, core_premise: str, spine_template: str):
         return self.generate(core_premise=core_premise, spine_template=spine_template)
 
@@ -58,6 +60,7 @@ class WorldBibleGenerator(dspy.Module):
         self.generate_locations = dspy.ChainOfThought(GenerateLocationsSignature)
         self.generate_timeline = dspy.ChainOfThought(GeneratePlotTimelineSignature)
 
+    @observe()
     def forward(self, core_premise: str, spine_template: str, user_additions: str = ""):
         rules_result = self.generate_rules(
             core_premise=core_premise,

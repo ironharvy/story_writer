@@ -5,6 +5,7 @@ import re
 from typing import List
 from pydantic import BaseModel, Field, model_validator
 from typing import Any
+from langfuse import observe
 
 # Probability that a chapter receives a random creative flourish (0.0 – 1.0).
 RANDOM_DETAIL_PROBABILITY = 0.35
@@ -102,6 +103,7 @@ class QuestionGenerator(dspy.Module):
         super().__init__()
         self.generate = dspy.Predict(GenerateQuestionsSignature)
 
+    @observe()
     def forward(self, idea: str):
         return self.generate(idea=idea)
 
@@ -117,6 +119,7 @@ class CorePremiseGenerator(dspy.Module):
         super().__init__()
         self.generate = dspy.Predict(GenerateCorePremiseSignature)
 
+    @observe()
     def forward(self, idea: str, qa_pairs: str):
         return self.generate(idea=idea, qa_pairs=qa_pairs)
 
@@ -131,6 +134,7 @@ class SpineTemplateGenerator(dspy.Module):
         super().__init__()
         self.generate = dspy.Predict(GenerateSpineTemplateSignature)
 
+    @observe()
     def forward(self, core_premise: str):
         return self.generate(core_premise=core_premise)
 
@@ -192,6 +196,7 @@ class CharacterVisualDescriber(dspy.Module):
         super().__init__()
         self.generate = dspy.Predict(GenerateCharacterVisualsSignature)
 
+    @observe()
     def forward(self, world_bible: str):
         return self.generate(world_bible=world_bible)
 
@@ -217,6 +222,7 @@ class SceneImagePromptGenerator(dspy.Module):
         super().__init__()
         self.generate = dspy.Predict(GenerateSceneImagePromptSignature)
 
+    @observe()
     def forward(self, chapter_text: str, character_visuals_summary: str):
         return self.generate(
             chapter_text=chapter_text,
@@ -299,6 +305,7 @@ class StoryGenerator(dspy.Module):
             logger.warning("Failed to generate random detail: %s", e)
             return ""
 
+    @observe()
     def forward(self, core_premise: str, spine_template: str, world_bible: str):
         chapters_to_write = []
         for act in ["Act 1", "Act 2", "Act 3"]:

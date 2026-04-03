@@ -16,45 +16,14 @@ from world_bible_modules import (
 import os
 import argparse
 import logging
-import coloredlogs
 from dotenv import load_dotenv
+from logging_config import setup_logging
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 console = Console()
-
-
-def setup_logging(verbose: bool = False, log_file: str | None = None):
-    """Configure timestamped console logging and optional file logging."""
-    level = logging.DEBUG if verbose else logging.INFO
-    log_format = "%(asctime)s.%(msecs)03d %(levelname)s [%(name)s] %(message)s"
-    date_format = "%Y-%m-%d %H:%M:%S"
-
-    coloredlogs.install(level=level, fmt=log_format, datefmt=date_format)
-
-    root = logging.getLogger()
-    root.setLevel(level)
-
-    if log_file is None:
-        log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".logs")
-        os.makedirs(log_dir, exist_ok=True)
-        log_file = os.path.join(log_dir, "story_writer.log")
-    else:
-        log_dir = os.path.dirname(os.path.abspath(log_file))
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
-
-    file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
-    root.addHandler(file_handler)
-
-    for name in ("dspy", "dspy.adapters", "dspy.clients"):
-        logging.getLogger(name).setLevel(level)
-
-    logger.info("Logging initialized. level=%s log_file=%s", logging.getLevelName(level), log_file)
 
 
 def configure_dspy(
@@ -97,7 +66,16 @@ def configure_dspy(
     )
     lm = dspy.LM(model_name, max_tokens=max_tokens, cache=cache, **kwargs)
 
-    dspy.configure(lm=lm)
+    callbacks = []
+    if os.environ.get("LANGFUSE_PUBLIC_KEY"):
+        try:
+            from langfuse.integrations.dspy import LangfuseDspyCallbackHandler
+            callbacks.append(LangfuseDspyCallbackHandler())
+            logger.info("Langfuse DSPy callback handler registered.")
+        except Exception as exc:
+            logger.warning("Langfuse DSPy callback handler unavailable: %s", exc)
+
+    dspy.configure(lm=lm, callbacks=callbacks)
 
 def get_answers_for_questions(questions_with_answers) -> str:
     qa_pairs = []
@@ -128,11 +106,12 @@ def main():
     parser.add_argument("--memory-cache", action=argparse.BooleanOptionalAction, default=True, help="Enable/disable DSPy in-memory cache.")
     parser.add_argument("--cache-dir", type=str, default=os.environ.get("DSPY_CACHE_DIR"), help="Override DSPy disk cache directory.")
     parser.add_argument("--log-file", type=str, default=os.environ.get("LOG_FILE"), help="Path to write detailed logs.")
-    parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Enable verbose logging.")
+    parser.add_argument("-v", "--verbose", action="count", default=0,
+                        help="Logging verbosity: -v INFO, -vv LLM debug, -vvv full firehose.")
 
     args = parser.parse_args()
 
-    setup_logging(verbose=args.verbose, log_file=args.log_file)
+    setup_logging(verbosity=args.verbose, log_file=args.log_file)
     configure_dspy(
         model_name=args.model,
         api_base=args.llm_url,
