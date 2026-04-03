@@ -138,7 +138,10 @@ def setup_logging(
         log_level: Override level by name. Env var LOG_LEVEL also works.
         log_format: "json" or "text". Env var LOG_FORMAT also works.
                     Default: "text" if stderr is a TTY, "json" otherwise.
-        log_file: Optional file path. Env var LOG_FILE also works.
+        log_file: Optional file path to write logs to (in addition to stderr).
+                  Env var LOG_FILE also works. File logging is disabled when
+                  neither this argument nor LOG_FILE resolves to a non-empty
+                  string — there is no implicit fallback path.
     """
     # Resolve level
     level_str = log_level or os.environ.get("LOG_LEVEL")
@@ -172,13 +175,18 @@ def setup_logging(
     stderr_handler.setFormatter(formatter)
     root.addHandler(stderr_handler)
 
-    # Optional file handler — default to .logs/story_writer.log so that
-    # past-run debugging works even without an explicit LOG_FILE setting.
-    file_path = log_file or os.environ.get("LOG_FILE") or ".logs/story_writer.log"
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    file_handler = logging.FileHandler(file_path)
-    file_handler.setFormatter(JSONFormatter())  # always JSON for files
-    root.addHandler(file_handler)
+    # Optional file handler — only enabled when log_file is passed explicitly
+    # or LOG_FILE is set in the environment. Pass log_file="" or set LOG_FILE=""
+    # to disable. No implicit fallback path is used so that library consumers
+    # and containerised environments are not surprised by on-disk output.
+    file_path = log_file if log_file is not None else os.environ.get("LOG_FILE")
+    if file_path:
+        dir_name = os.path.dirname(file_path)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
+        file_handler = logging.FileHandler(file_path)
+        file_handler.setFormatter(JSONFormatter())  # always JSON for files
+        root.addHandler(file_handler)
 
     # --- Verbosity-based logger tuning ---
     #
