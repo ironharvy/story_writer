@@ -2,4 +2,3 @@ dspy-ai
 rich
 python-dotenv
 langfuse
-coloredlogs

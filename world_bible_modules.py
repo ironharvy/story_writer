@@ -1,7 +1,13 @@
 import dspy
 from typing import List
 from story_modules import QuestionWithAnswer
-from langfuse import observe
+try:
+    from langfuse import observe
+except ImportError:
+    def observe():
+        def decorator(fn):
+            return fn
+        return decorator
 
 class GenerateWorldBibleQuestionsSignature(dspy.Signature):
     """Generates a few follow-up questions to ask the user to help flesh out the world bible before generating the final version."""

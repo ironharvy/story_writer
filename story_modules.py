@@ -5,7 +5,13 @@ import re
 from typing import List
 from pydantic import BaseModel, Field, model_validator
 from typing import Any
-from langfuse import observe
+try:
+    from langfuse import observe
+except ImportError:
+    def observe():
+        def decorator(fn):
+            return fn
+        return decorator
 
 # Probability that a chapter receives a random creative flourish (0.0 – 1.0).
 RANDOM_DETAIL_PROBABILITY = 0.35
