@@ -22,35 +22,50 @@ from dotenv import load_dotenv
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-coloredlogs.install(level='INFO')
 
 console = Console()
 
 
-def setup_logging():
-    """Configure file logging for DSPy and application into .logs/ folder."""
-    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".logs")
-    os.makedirs(log_dir, exist_ok=True)
+def setup_logging(verbose: bool = False, log_file: str | None = None):
+    """Configure timestamped console logging and optional file logging."""
+    level = logging.DEBUG if verbose else logging.INFO
+    log_format = "%(asctime)s.%(msecs)03d %(levelname)s [%(name)s] %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
 
-    log_file = os.path.join(log_dir, "story_writer.log")
+    coloredlogs.install(level=level, fmt=log_format, datefmt=date_format)
+
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    if log_file is None:
+        log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, "story_writer.log")
+    else:
+        log_dir = os.path.dirname(os.path.abspath(log_file))
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+
     file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(
-        logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
-    )
-
-    # Root logger so we capture DSPy internals too
-    root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
+    file_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
     root.addHandler(file_handler)
 
-    # Also capture dspy specifically at DEBUG
     for name in ("dspy", "dspy.adapters", "dspy.clients"):
-        logging.getLogger(name).setLevel(logging.DEBUG)
+        logging.getLogger(name).setLevel(level)
 
-    logger.info("Logging initialised – file: %s", log_file)
+    logger.info("Logging initialized. level=%s log_file=%s", logging.getLevelName(level), log_file)
 
-def configure_dspy(model_name: str, api_base: str = None, api_key: str = None, max_tokens: int = 2000):
+
+def configure_dspy(
+    model_name: str,
+    api_base: str = None,
+    api_key: str = None,
+    max_tokens: int = 2000,
+    cache: bool = True,
+    memory_cache: bool = True,
+    cache_dir: str | None = None,
+):
     kwargs = {}
     if api_base:
         kwargs["api_base"] = api_base
@@ -66,8 +81,21 @@ def configure_dspy(model_name: str, api_base: str = None, api_key: str = None, m
         pass
         #kwargs["api_key"] = "" # Ollama typically doesn't need an API key
 
-    logger.info(f"Configuring DSPy to use model '{model_name}'...")
-    lm = dspy.LM(model_name, max_tokens=max_tokens, **kwargs)
+    dspy.configure_cache(
+        enable_disk_cache=cache,
+        enable_memory_cache=memory_cache,
+        disk_cache_dir=cache_dir,
+    )
+
+    logger.info(
+        "Configuring DSPy model=%r max_tokens=%s cache=%s memory_cache=%s cache_dir=%r",
+        model_name,
+        max_tokens,
+        cache,
+        memory_cache,
+        cache_dir,
+    )
+    lm = dspy.LM(model_name, max_tokens=max_tokens, cache=cache, **kwargs)
 
     dspy.configure(lm=lm)
 
@@ -95,11 +123,25 @@ def main():
     parser.add_argument("--max-tokens", type=int, default=8000, help="The maximum number of tokens to use for the model. Defaults to 8000.")
     parser.add_argument("--enable-images", action="store_true", default=False, help="Enable image generation (requires Replicate API token).")
     parser.add_argument("--replicate-api-token", type=str, default=os.environ.get("REPLICATE_API_TOKEN"), help="Replicate API token. Defaults to REPLICATE_API_TOKEN env var.")
+    parser.add_argument("--output-dir", type=str, default=".tmp", help="Directory to save generated content. Defaults to '.tmp'.")
+    parser.add_argument("--cache", action=argparse.BooleanOptionalAction, default=True, help="Enable/disable DSPy disk cache.")
+    parser.add_argument("--memory-cache", action=argparse.BooleanOptionalAction, default=True, help="Enable/disable DSPy in-memory cache.")
+    parser.add_argument("--cache-dir", type=str, default=os.environ.get("DSPY_CACHE_DIR"), help="Override DSPy disk cache directory.")
+    parser.add_argument("--log-file", type=str, default=os.environ.get("LOG_FILE"), help="Path to write detailed logs.")
+    parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Enable verbose logging.")
 
     args = parser.parse_args()
 
-    setup_logging()
-    configure_dspy(model_name=args.model, api_base=args.llm_url, api_key=args.api_key, max_tokens=args.max_tokens)
+    setup_logging(verbose=args.verbose, log_file=args.log_file)
+    configure_dspy(
+        model_name=args.model,
+        api_base=args.llm_url,
+        api_key=args.api_key,
+        max_tokens=args.max_tokens,
+        cache=args.cache,
+        memory_cache=args.memory_cache,
+        cache_dir=args.cache_dir,
+    )
 
     console.print("[bold magenta]Welcome to the AI DSPy Story Writer![/bold magenta]")
 
@@ -250,7 +292,8 @@ def main():
                 console.print(f"  [red]Failed to generate scene for chapter {i}: {e}[/red]")
 
     # 10. Save output to markdown
-    output_filename = "story_output.md"
+    os.makedirs(args.output_dir, exist_ok=True)
+    output_filename = os.path.join(args.output_dir, "story_output.md")
     logger.info(f"Saving story output to {output_filename}...")
     with open(output_filename, "w", encoding="utf-8") as f:
         f.write("# Story Output\n\n")
