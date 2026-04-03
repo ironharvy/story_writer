@@ -40,6 +40,7 @@ def _clean_chapter_title(raw_title: str) -> str:
         title = title[2:-2].strip()
 
     title = _chapter_prefix_re.sub('', title).strip()
+    logger.debug("Cleaned chapter title: %s", title)
     return title.strip('"\'')
 
 
@@ -51,6 +52,8 @@ def _normalize_chapter_plan_entries(chapters: list[str]) -> list[str]:
         if not chapter_text:
             chapter_text = f"Untitled Chapter {index}"
         normalized.append(f"Chapter {index}: {chapter_text}")
+
+    logger.debug("Normalized chapter plan entries: %s", normalized)
     return normalized
 
 class QuestionWithAnswer(BaseModel):
@@ -137,8 +140,6 @@ class SpineTemplateGenerator(dspy.Module):
     @observe()
     def forward(self, core_premise: str):
         return self.generate(core_premise=core_premise)
-
-
 
 
 class CharacterVisual(BaseModel):
@@ -309,6 +310,7 @@ class StoryGenerator(dspy.Module):
     def forward(self, core_premise: str, spine_template: str, world_bible: str):
         chapters_to_write = []
         for act in ["Act 1", "Act 2", "Act 3"]:
+            logger.debug("Generating arc outline for act: %s", act)
             arc_outline_result = self.generate_arc_outline(
                 core_premise=core_premise,
                 spine_template=spine_template,
@@ -316,6 +318,7 @@ class StoryGenerator(dspy.Module):
                 act=act
             )
             for arc in arc_outline_result.arc_outline:
+                logger.debug("Generating chapter plan for arc: %s", arc)
                 chapter_plan_result = self.generate_chapter_plan(
                     core_premise=core_premise,
                     world_bible=world_bible,
@@ -323,6 +326,8 @@ class StoryGenerator(dspy.Module):
                     arc=arc
                 )
                 chapters_to_write.extend(chapter_plan_result.chapter_plan)
+                logger.debug("Added chapters: %s", chapter_plan_result.chapter_plan)
+
 
         chapters_to_write = _normalize_chapter_plan_entries(chapters_to_write)
 
