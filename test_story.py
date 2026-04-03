@@ -42,6 +42,8 @@ class MockLM(dspy.LM):
             return ['```json\n{"character_visuals": [{"name": "Mock Hero", "reference_mix": "a mix of Guts from Berserk and Zuko from Avatar", "distinguishing_features": "short black hair, amber eyes, burn scar on left cheek, dark leather armor", "full_prompt": "anime portrait, a mix of Guts from Berserk and Zuko from Avatar, short black hair, amber eyes, burn scar on left cheek, dark leather armor"}]}\n```']
         if "[[ ## image_prompt ## ]]" in content or ('"image_prompt"' in content and "anime scene" in content):
             return ['```json\n{"image_prompt": "anime scene, a warrior with short black hair and amber eyes standing in a dark cathedral, dramatic lighting"}\n```']
+        if "[[ ## random_detail ## ]]" in content or ('"random_detail"' in content and "naturally woven" in content):
+            return ['```json\n{"random_detail": "A small paper unicorn sat perched on the corner of the desk, its horn casting a faint shadow in the candlelight."}\n```']
         if "[[ ## chapter_text ## ]]" in content or ('"chapter_text"' in content and "immersive chapter" in content):
             return ['```json\n{"reasoning": "Mock reasoning", "title": "Mock Title", "chapter_text": "Mock chapter text"}\n```']
         if "[[ ## story ## ]]" in content or ('"story"' in content and "The final generated story" in content):
@@ -179,9 +181,11 @@ def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=
                 path = img_gen.generate_character_portrait(prompt=cv.full_prompt, character_name=cv.name)
                 print(f"  Mock portrait for {cv.name}: {path}")
 
-    # 7. Story
-    story_gen = StoryGenerator()
-    story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
+    # 7. Story — patch random.random so probabilistic detail always triggers,
+    # ensuring the random_detail mock path in MockLM is exercised every run.
+    with patch("story_modules.random.random", return_value=0.1):
+        story_gen = StoryGenerator()
+        story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
     logger.info("Story generated.")
 
     # 8. Scene image prompts
