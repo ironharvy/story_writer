@@ -172,12 +172,13 @@ def setup_logging(
     stderr_handler.setFormatter(formatter)
     root.addHandler(stderr_handler)
 
-    # Optional file handler
-    file_path = log_file or os.environ.get("LOG_FILE")
-    if file_path:
-        file_handler = logging.FileHandler(file_path)
-        file_handler.setFormatter(JSONFormatter())  # always JSON for files
-        root.addHandler(file_handler)
+    # Optional file handler — default to .logs/story_writer.log so that
+    # past-run debugging works even without an explicit LOG_FILE setting.
+    file_path = log_file or os.environ.get("LOG_FILE") or ".logs/story_writer.log"
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    file_handler = logging.FileHandler(file_path)
+    file_handler.setFormatter(JSONFormatter())  # always JSON for files
+    root.addHandler(file_handler)
 
     # --- Verbosity-based logger tuning ---
     #
@@ -188,6 +189,12 @@ def setup_logging(
     # LLM-related loggers — the stuff you actually want at -vv.
     # litellm is what DSPy uses under the hood for all LLM calls.
     _llm_loggers = ("litellm", "dspy", "langfuse", "openai", "anthropic")
+
+    # When LOG_LEVEL is set explicitly, the caller expects that level to apply
+    # uniformly — including to third-party loggers. Skip the verbosity-based
+    # per-logger tuning so it doesn't silently override the env var.
+    if level_str:
+        return
 
     if verbosity <= 0:
         # Quiet: suppress everything except warnings
