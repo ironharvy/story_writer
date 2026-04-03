@@ -26,6 +26,32 @@ _chapter_prefix_re = re.compile(
     re.IGNORECASE,
 )
 
+
+def _clean_chapter_title(raw_title: str) -> str:
+    title = (raw_title or "").strip()
+    title = re.sub(r'^\s*#+\s*', '', title)
+    title = title.strip()
+    title = title.strip('"\'')
+
+    if (title.startswith("**") and title.endswith("**")) or (
+        title.startswith("__") and title.endswith("__")
+    ):
+        title = title[2:-2].strip()
+
+    title = _chapter_prefix_re.sub('', title).strip()
+    return title.strip('"\'')
+
+
+def _normalize_chapter_plan_entries(chapters: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for index, chapter in enumerate(chapters, start=1):
+        chapter_text = (chapter or "").strip()
+        chapter_text = _clean_chapter_title(chapter_text)
+        if not chapter_text:
+            chapter_text = f"Untitled Chapter {index}"
+        normalized.append(f"Chapter {index}: {chapter_text}")
+    return normalized
+
 class QuestionWithAnswer(BaseModel):
     question: str = Field(description="The interrogative question.")
     proposed_answer: str = Field(description="A proposed answer for the user to potentially accept.")
@@ -128,6 +154,26 @@ class CharacterVisual(BaseModel):
         "distinguishing features into a single descriptive paragraph."
     )
 
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_shape(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        normalized = dict(data)
+        description = normalized.get("description") or normalized.get("visual_description")
+
+        if isinstance(description, str):
+            if "reference_mix" not in normalized:
+                normalized["reference_mix"] = description
+            if "distinguishing_features" not in normalized:
+                normalized["distinguishing_features"] = description
+            if "full_prompt" not in normalized:
+                subject = normalized.get("name", "character")
+                normalized["full_prompt"] = f"anime portrait of {subject}, {description}"
+
+        return normalized
+
 
 class GenerateCharacterVisualsSignature(dspy.Signature):
     """Extracts the main characters from the world bible and generates a
@@ -183,14 +229,16 @@ class GenerateArcOutlineSignature(dspy.Signature):
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     spine_template: str = dspy.InputField(desc="The narrative spine template.")
     world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
-    arc_outline: str = dspy.OutputField(desc="Arc Outline (5-10 major events).")
+    act: str = dspy.InputField(desc="The act of the story.")
+    arc_outline: list[str] = dspy.OutputField(desc="Arc Outline (5-10 major events of the act).")
 
 class GenerateChapterPlanSignature(dspy.Signature):
     """Generates Level 2: Chapter Plan (Each arc broken into chapters)."""
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
-    arc_outline: str = dspy.InputField(desc="Arc Outline (5-10 major events).")
-    chapter_plan: str = dspy.OutputField(desc="Chapter Plan (Each arc broken into chapters).")
+    act: str = dspy.InputField(desc="The act of the story.")
+    arc: str = dspy.InputField(desc="The arc of the story.")
+    chapter_plan: list[str] = dspy.OutputField(desc="Chapter Plan for the arc")
 
 class GenerateEnhancersSignature(dspy.Signature):
     """Evaluates the chapter plan and determines which story enhancers are needed for specific scenes/chapters.
@@ -252,34 +300,31 @@ class StoryGenerator(dspy.Module):
             return ""
 
     def forward(self, core_premise: str, spine_template: str, world_bible: str):
-        arc_outline_result = self.generate_arc_outline(
-            core_premise=core_premise,
-            spine_template=spine_template,
-            world_bible=world_bible
-        )
-        chapter_plan_result = self.generate_chapter_plan(
-            core_premise=core_premise,
-            world_bible=world_bible,
-            arc_outline=arc_outline_result.arc_outline
-        )
+        chapters_to_write = []
+        for act in ["Act 1", "Act 2", "Act 3"]:
+            arc_outline_result = self.generate_arc_outline(
+                core_premise=core_premise,
+                spine_template=spine_template,
+                world_bible=world_bible,
+                act=act
+            )
+            for arc in arc_outline_result.arc_outline:
+                chapter_plan_result = self.generate_chapter_plan(
+                    core_premise=core_premise,
+                    world_bible=world_bible,
+                    act=act,
+                    arc=arc
+                )
+                chapters_to_write.extend(chapter_plan_result.chapter_plan)
+
+        chapters_to_write = _normalize_chapter_plan_entries(chapters_to_write)
+
+        chapter_plan_text = "\n".join(chapters_to_write)
+
         enhancers_result = self.generate_enhancers(
             world_bible=world_bible,
-            chapter_plan=chapter_plan_result.chapter_plan
+            chapter_plan=chapter_plan_text
         )
-
-        # Filter out arc-level headers (e.g. "Arc 1: ...", "**Arc 2: ...**") so
-        # we only write actual chapter entries.  Arc headers are structural
-        # groupings in the chapter plan and should not be expanded into their
-        # own chapters—doing so produces semi-duplicate content.
-        _arc_header_re = re.compile(
-            r'^[\s\*\#]*(arc)\s*\d*\s*[:\-\.]',
-            re.IGNORECASE,
-        )
-        chapters_to_write = [
-            line.strip()
-            for line in chapter_plan_result.chapter_plan.split('\n')
-            if line.strip() and not _arc_header_re.match(line.strip())
-        ]
 
         full_story = ""
         previous_chapters_summary = ""
@@ -292,7 +337,7 @@ class StoryGenerator(dspy.Module):
 
                 result = self.write_chapter(
                     world_bible=world_bible,
-                    chapter_plan=chapter_plan_result.chapter_plan,
+                    chapter_plan=chapter_plan_text,
                     current_chapter_description=chapter_desc,
                     previous_chapters_summary=previous_chapters_summary,
                     enhancers_guide=enhancers_result.enhancers_guide,
@@ -300,8 +345,10 @@ class StoryGenerator(dspy.Module):
                 )
 
                 chapter_text = result.chapter_text
-                # Strip redundant "Chapter N:" prefix the LLM sometimes adds
-                clean_title = _chapter_prefix_re.sub('', result.title).strip()
+                # Strip markdown wrappers and redundant "Chapter N:" prefixes.
+                clean_title = _clean_chapter_title(result.title)
+                if not clean_title:
+                    clean_title = _clean_chapter_title(chapter_desc)
                 full_story += f"\n\n### Chapter {i+1}: {clean_title}\n\n" + chapter_text
                 previous_chapters_summary += f"Chapter {i+1}: {chapter_desc}\n"
             except Exception as e:
@@ -318,7 +365,7 @@ class StoryGenerator(dspy.Module):
 
         return dspy.Prediction(
             arc_outline=arc_outline_result.arc_outline,
-            chapter_plan=chapter_plan_result.chapter_plan,
+            chapter_plan=chapter_plan_text,
             enhancers_guide=enhancers_result.enhancers_guide,
             story=full_story.strip()
         )

@@ -8,6 +8,7 @@ from unittest.mock import patch, MagicMock
 from story_modules import (
     QuestionGenerator,
     QuestionWithAnswer,
+    CharacterVisual,
     CorePremiseGenerator,
     SpineTemplateGenerator,
     StoryGenerator,
@@ -51,9 +52,9 @@ class MockLM(dspy.LM):
         if "[[ ## enhancers_guide ## ]]" in content or ('"enhancers_guide"' in content and "evaluating which story enhancers" in content):
             return ['```json\n{"reasoning": "Mock reasoning", "enhancers_guide": "Mock enhancers guide"}\n```']
         if "[[ ## chapter_plan ## ]]" in content or ('"chapter_plan"' in content and "Each arc broken into chapters" in content):
-            return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": "Arc 1: The Awakening\\nChapter 1: Discovery\\nChapter 2: Training\\nArc 2: The Betrayal\\nChapter 3: Revelation\\nChapter 4: Escape"}\n```']
+            return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": ["Chapter 1: Discovery", "Chapter 2: Training", "Chapter 3: Revelation", "Chapter 4: Escape"]}\n```']
         if "[[ ## arc_outline ## ]]" in content or ('"arc_outline"' in content and "5-10 major events" in content):
-            return ['```json\n{"reasoning": "Mock reasoning", "arc_outline": "Mock arc outline"}\n```']
+            return ['```json\n{"reasoning": "Mock reasoning", "arc_outline": ["Inciting incident", "First reversal", "Midpoint escalation", "Darkest turn", "Act climax"]}\n```']
         if "[[ ## world_bible ## ]]" in content or ('"world_bible"' in content and "setting, lore, and characters" in content):
             return ['```json\n{"world_bible": "Mock world bible"}\n```']
         if "[[ ## plot_timeline ## ]]" in content or ('"plot_timeline"' in content and "A plot timeline." in content):
@@ -84,9 +85,9 @@ class MockLM(dspy.LM):
         elif "world_bible" in content and "arc_outline" not in content:
             return ['```json\n{"world_bible": "Mock world bible"}\n```']
         elif "arc_outline" in content and "chapter_plan" not in content:
-            return ['```json\n{"reasoning": "Mock reasoning", "arc_outline": "Mock arc outline"}\n```']
+            return ['```json\n{"reasoning": "Mock reasoning", "arc_outline": ["Inciting incident", "First reversal", "Midpoint escalation", "Darkest turn", "Act climax"]}\n```']
         elif "chapter_plan" in content and "enhancers_guide" not in content and "story" not in content:
-            return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": "Arc 1: The Awakening\\nChapter 1: Discovery\\nChapter 2: Training\\nArc 2: The Betrayal\\nChapter 3: Revelation\\nChapter 4: Escape"}\n```']
+            return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": ["Chapter 1: Discovery", "Chapter 2: Training", "Chapter 3: Revelation", "Chapter 4: Escape"]}\n```']
         elif "enhancers_guide" in content and "story" not in content and "chapter_text" not in content:
             return ['```json\n{"reasoning": "Mock reasoning", "enhancers_guide": "Mock enhancers guide"}\n```']
         elif "chapter_text" in content:
@@ -96,12 +97,44 @@ class MockLM(dspy.LM):
         return ["Mock response"]
 
 logger = logging.getLogger(__name__)
-coloredlogs.install(level='INFO')
 
-def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=None):
+
+def configure_logging(verbose: bool = False, log_file: str | None = None):
+    level = logging.DEBUG if verbose else logging.INFO
+    log_format = "%(asctime)s.%(msecs)03d %(levelname)s [%(name)s] %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+    coloredlogs.install(
+        level=level,
+        fmt=log_format,
+        datefmt=date_format,
+    )
+
+    if log_file:
+        log_dir = os.path.dirname(os.path.abspath(log_file))
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
+        logging.getLogger().addHandler(file_handler)
+
+    logger.setLevel(level)
+    logging.getLogger("dspy").setLevel(level)
+
+
+def test_pipeline(
+    model_name="mock",
+    api_base="http://localhost:11434",
+    api_key=None,
+    output_dir=".tmp",
+    max_tokens=1024,
+    cache=True,
+    memory_cache=True,
+    cache_dir=None,
+):
     from image_gen import ImageGenerator
 
-    kwargs = {"max_tokens": 2000}
+    kwargs = {"max_tokens": max_tokens}
     if api_base:
         kwargs["api_base"] = api_base
 
@@ -115,6 +148,21 @@ def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=
         pass
 
     logger.info(f"Testing pipeline with model: {model_name}...")
+    logger.debug(
+        "Pipeline config: api_base=%r max_tokens=%r api_key_set=%r cache=%r memory_cache=%r cache_dir=%r",
+        api_base,
+        max_tokens,
+        bool(kwargs.get("api_key")),
+        cache,
+        memory_cache,
+        cache_dir,
+    )
+
+    dspy.configure_cache(
+        enable_disk_cache=cache,
+        enable_memory_cache=memory_cache,
+        disk_cache_dir=cache_dir,
+    )
 
     # For testing in an environment where no actual LLM API is reachable, use the MockLM.
     # To run actual integration tests, you'd provide an active OPENAI_API_KEY or local Ollama running.
@@ -128,7 +176,7 @@ def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=
             logger.warning("OPENAI_API_KEY not found. Skipping full integration test to avoid errors.")
             return
 
-        lm = dspy.LM(model_name, **kwargs)
+        lm = dspy.LM(model_name, cache=cache, **kwargs)
         dspy.configure(lm=lm)
 
     idea = "An unnamed child is raised by the Church as the ultimate weapon against demons. As child grows he learns that the church itself is corrupt and breeds demons for controlled chaos. The church recieves funding for protection and as such decides who should recieve help. The child eventually becomes overpowered and turns back on the Church"
@@ -137,6 +185,7 @@ def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=
     q_gen = QuestionGenerator()
     q_result = q_gen(idea=idea)
     logger.info(f"Generated {len(q_result.questions_with_answers)} questions.")
+    logger.debug("Questions: %s", [q.question for q in q_result.questions_with_answers])
 
     # Fake answers
     qa_text = ""
@@ -147,16 +196,19 @@ def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=
     cp_gen = CorePremiseGenerator()
     cp_result = cp_gen(idea=idea, qa_pairs=qa_text)
     logger.info("Core Premise generated.")
+    logger.debug("Core premise preview: %.300s", cp_result.core_premise)
 
     # 3. Spine Template
     st_gen = SpineTemplateGenerator()
     st_result = st_gen(core_premise=cp_result.core_premise)
     logger.info("Spine Template generated.")
+    logger.debug("Spine template preview: %.300s", st_result.spine_template)
 
     # 4. World Bible
     wb_gen = WorldBibleGenerator()
     wb_result = wb_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template)
     logger.info("World Bible generated.")
+    logger.debug("World bible preview: %.300s", wb_result.world_bible)
 
     # 5. Character Visual Descriptions
     cv_describer = CharacterVisualDescriber()
@@ -187,6 +239,9 @@ def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=
         story_gen = StoryGenerator()
         story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
     logger.info("Story generated.")
+    logger.debug("Arc outline count=%d", len(story_result.arc_outline) if isinstance(story_result.arc_outline, list) else 0)
+    logger.debug("Chapter plan preview: %.500s", story_result.chapter_plan)
+    logger.debug("Story preview: %.500s", story_result.story)
 
     # 8. Scene image prompts
     scene_prompt_gen = SceneImagePromptGenerator()
@@ -194,13 +249,16 @@ def test_pipeline(model_name="mock", api_base="http://localhost:11434", api_key=
         chapter_text="Mock chapter text for testing",
         character_visuals_summary=character_visuals_summary,
     )
+    if prompt_result.image_prompt.strip().lower() in {"{image_prompt}", "image_prompt", "...content..."}:
+        logger.warning("Scene image prompt appears to be a placeholder: %r", prompt_result.image_prompt)
     logger.info(f"Scene image prompt: {prompt_result.image_prompt[:80]}...")
 
     logger.info("Test passed successfully!")
 
-    output_filename = "story_output.md"
-    logger.info(f"Saving story output to {output_filename}...")
-    with open(output_filename, "w", encoding="utf-8") as f:
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, "story_output.md")
+    logger.info(f"Saving story output to {output_path}...")
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write("# Story Output\n\n")
         f.write("## Core Premise\n")
         f.write(f"{cp_result.core_premise}\n\n")
@@ -256,16 +314,64 @@ def test_chapter_title_prefix_stripping(raw_title, expected_clean):
     assert clean == expected_clean
 
 
+@pytest.mark.parametrize(
+    "raw_title,expected_clean",
+    [
+        ("**Chapter 6: The Engine's Breath**", "The Engine's Breath"),
+        ("__Chapter 10 - The Weight of Justice__", "The Weight of Justice"),
+        ("### Chapter 3: The Weaponization of Kael", "The Weaponization of Kael"),
+        ("\"Chapter 8: The Fractured Self\"", "The Fractured Self"),
+    ],
+)
+def test_clean_chapter_title_strips_markdown_and_prefixes(raw_title, expected_clean):
+    from story_modules import _clean_chapter_title
+    assert _clean_chapter_title(raw_title) == expected_clean
+
+
 def test_question_with_answer_does_not_promote_unrelated_fields():
     with pytest.raises(Exception):
         QuestionWithAnswer.model_validate({"question": "Why?", "confidence": 0.92})
+
+
+def test_character_visual_normalizes_description_only_shape():
+    result = CharacterVisual.model_validate(
+        {
+            "name": "Kael",
+            "description": "scarred child warrior in dark combat harness",
+        }
+    )
+
+    assert result.reference_mix == "scarred child warrior in dark combat harness"
+    assert result.distinguishing_features == "scarred child warrior in dark combat harness"
+    assert result.full_prompt == (
+        "anime portrait of Kael, scarred child warrior in dark combat harness"
+    )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test AI DSPy Story Writer")
     parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "mock"), help="The language model to use (e.g., openai/gpt-4o-mini, ollama_chat/llama3). Defaults to MODEL env var or mock.")
     parser.add_argument("--llm-url", type=str, default=os.environ.get("LLM_URL", "http://localhost:11434"), help="The custom API base URL (e.g., http://localhost:11434 for Ollama). Defaults to LLM_URL env var or http://localhost:11434.")
     parser.add_argument("--api-key", type=str, default=os.environ.get("API_KEY"), help="The API key for the model. Defaults to API_KEY env var.")
+    parser.add_argument("--output-dir", type=str, default=".tmp", help="Path to save output to")
+    parser.add_argument("--max_tokens", type=int, default=1024, help="The number of tokens for an LLM to output")
+    parser.add_argument("--cache", action=argparse.BooleanOptionalAction, default=True, help="Enable/disable DSPy disk cache.")
+    parser.add_argument("--memory-cache", action=argparse.BooleanOptionalAction, default=True, help="Enable/disable DSPy in-memory cache.")
+    parser.add_argument("--cache-dir", type=str, default=os.environ.get("DSPY_CACHE_DIR"), help="Override DSPy disk cache directory.")
+    parser.add_argument("--log-file", type=str, default=os.environ.get("LOG_FILE"), help="Path to write detailed logs.")
+    parser.add_argument("-v", "--verbose", action='store_true', help="enable verbose logging")
 
     args = parser.parse_args()
 
-    test_pipeline(model_name=args.model, api_base=args.llm_url, api_key=args.api_key)
+    configure_logging(verbose=args.verbose, log_file=args.log_file)
+
+
+    test_pipeline(
+        model_name=args.model,
+        api_base=args.llm_url,
+        api_key=args.api_key,
+        output_dir=args.output_dir,
+        max_tokens=args.max_tokens,
+        cache=args.cache,
+        memory_cache=args.memory_cache,
+        cache_dir=args.cache_dir,
+    )
