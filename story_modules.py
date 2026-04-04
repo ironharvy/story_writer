@@ -244,8 +244,8 @@ class GenerateChapterPlanSignature(dspy.Signature):
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
     act: str = dspy.InputField(desc="The act of the story.")
-    arc: str = dspy.InputField(desc="The arc of the story.")
-    chapter_plan: list[str] = dspy.OutputField(desc="Chapter Plan for the arc")
+    #arc: str = dspy.InputField(desc="The arc of the story.")
+    chapter_plan: list[str] = dspy.OutputField(desc="Chapter Plan for the arc (5-10 major events of the act)")
 
 class GenerateEnhancersSignature(dspy.Signature):
     """Evaluates the chapter plan and determines which story enhancers are needed for specific scenes/chapters.
@@ -283,7 +283,7 @@ class StoryGenerator(dspy.Module):
             )
         super().__init__()
         self.random_detail_probability = random_detail_probability
-        self.generate_arc_outline = dspy.ChainOfThought(GenerateArcOutlineSignature)
+        #self.generate_arc_outline = dspy.ChainOfThought(GenerateArcOutlineSignature)
         self.generate_chapter_plan = dspy.ChainOfThought(GenerateChapterPlanSignature)
         self.generate_enhancers = dspy.ChainOfThought(GenerateEnhancersSignature)
         self.generate_random_detail = dspy.Predict(GenerateRandomDetailSignature)
@@ -310,23 +310,14 @@ class StoryGenerator(dspy.Module):
     def forward(self, core_premise: str, spine_template: str, world_bible: str):
         chapters_to_write = []
         for act in ["Act 1", "Act 2", "Act 3"]:
-            logger.debug("Generating arc outline for act: %s", act)
-            arc_outline_result = self.generate_arc_outline(
+            logger.debug("Generating chapter plan for %s...", act)
+            chapter_plan_result = self.generate_chapter_plan(
                 core_premise=core_premise,
-                spine_template=spine_template,
                 world_bible=world_bible,
-                act=act
+                act=act,
             )
-            for arc in arc_outline_result.arc_outline:
-                logger.debug("Generating chapter plan for arc: %s", arc)
-                chapter_plan_result = self.generate_chapter_plan(
-                    core_premise=core_premise,
-                    world_bible=world_bible,
-                    act=act,
-                    arc=arc
-                )
-                chapters_to_write.extend(chapter_plan_result.chapter_plan)
-                logger.debug("Added chapters: %s", chapter_plan_result.chapter_plan)
+            chapters_to_write.extend(chapter_plan_result.chapter_plan)
+            logger.debug("Added chapters: %s", chapter_plan_result.chapter_plan)
 
 
         chapters_to_write = _normalize_chapter_plan_entries(chapters_to_write)
@@ -376,7 +367,7 @@ class StoryGenerator(dspy.Module):
             )
 
         return dspy.Prediction(
-            arc_outline=arc_outline_result.arc_outline,
+            arc_outline="[REMOVED]",#arc_outline=arc_outline_result.arc_outline,
             chapter_plan=chapter_plan_text,
             enhancers_guide=enhancers_result.enhancers_guide,
             story=full_story.strip()

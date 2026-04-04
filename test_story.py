@@ -181,12 +181,10 @@ def test_pipeline(
         disk_cache_dir=cache_dir,
     )
 
-    callbacks = []
     if os.environ.get("LANGFUSE_PUBLIC_KEY"):
         try:
-            from langfuse.integrations.dspy import LangfuseDspyCallbackHandler
-            callbacks.append(LangfuseDspyCallbackHandler())
-            logger.info("Langfuse DSPy callback handler registered.")
+            from openinference.instrumentation.dspy import DSPyInstrumentor
+            DSPyInstrumentor().instrument()
         except Exception as exc:
             logger.warning("Langfuse DSPy callback handler unavailable: %s", exc)
 
@@ -195,7 +193,7 @@ def test_pipeline(
     # If the user requested the mock model, or if we want to ensure tests always pass in CI, use MockLM.
     if model_name == "mock" or model_name == "test_mock":
         lm = MockLM()
-        dspy.configure(lm=lm, callbacks=callbacks)
+        dspy.configure(lm=lm)
     else:
         # We assume OPENAI_API_KEY is available in the run_in_bash_session, if not, we skip the actual test
         if "openai" in model_name.lower() and not kwargs.get("api_key"):

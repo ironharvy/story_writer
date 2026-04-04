@@ -66,16 +66,14 @@ def configure_dspy(
     )
     lm = dspy.LM(model_name, max_tokens=max_tokens, cache=cache, **kwargs)
 
-    callbacks = []
     if os.environ.get("LANGFUSE_PUBLIC_KEY"):
         try:
-            from langfuse.integrations.dspy import LangfuseDspyCallbackHandler
-            callbacks.append(LangfuseDspyCallbackHandler())
-            logger.info("Langfuse DSPy callback handler registered.")
+            from openinference.instrumentation.dspy import DSPyInstrumentor
+            DSPyInstrumentor().instrument()
         except Exception as exc:
             logger.warning("Langfuse DSPy callback handler unavailable: %s", exc)
 
-    dspy.configure(lm=lm, callbacks=callbacks)
+    dspy.configure(lm=lm)
 
 def get_answers_for_questions(questions_with_answers) -> str:
     qa_pairs = []
