@@ -201,7 +201,7 @@ def test_pipeline(
             return
 
         lm = dspy.LM(model_name, cache=cache, **kwargs)
-        dspy.configure(lm=lm, callbacks=callbacks)
+        dspy.configure(lm=lm)
 
     idea = "An unnamed child is raised by the Church as the ultimate weapon against demons. As child grows he learns that the church itself is corrupt and breeds demons for controlled chaos. The church recieves funding for protection and as such decides who should recieve help. The child eventually becomes overpowered and turns back on the Church"
 
