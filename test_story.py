@@ -99,8 +99,9 @@ class MockLM(dspy.LM):
 logger = logging.getLogger(__name__)
 
 
-def configure_logging(verbose: bool = False, log_file: str | None = None):
-    level = logging.DEBUG if verbose else logging.INFO
+def configure_logging(verbosity: int = 0, log_file: str | None = None):
+    level_map = {0: logging.INFO, 1: logging.INFO, 2: logging.DEBUG, 3: logging.DEBUG}
+    level = level_map.get(verbosity, logging.DEBUG)
     log_format = "%(asctime)s.%(msecs)03d %(levelname)s [%(name)s] %(message)s"
     date_format = "%Y-%m-%d %H:%M:%S"
     coloredlogs.install(
@@ -119,7 +120,20 @@ def configure_logging(verbose: bool = False, log_file: str | None = None):
         logging.getLogger().addHandler(file_handler)
 
     logger.setLevel(level)
-    logging.getLogger("dspy").setLevel(level)
+    _http_loggers = ("httpx", "httpcore", "urllib3", "requests")
+    _llm_loggers = ("litellm", "dspy", "langfuse", "openai", "anthropic")
+
+    if verbosity <= 1:
+        for name in _http_loggers + _llm_loggers:
+            logging.getLogger(name).setLevel(logging.WARNING)
+    elif verbosity == 2:
+        for name in _llm_loggers:
+            logging.getLogger(name).setLevel(logging.DEBUG)
+        for name in _http_loggers:
+            logging.getLogger(name).setLevel(logging.WARNING)
+    else:
+        for name in _llm_loggers + _http_loggers:
+            logging.getLogger(name).setLevel(logging.DEBUG)
 
 
 def test_pipeline(
@@ -358,11 +372,17 @@ if __name__ == "__main__":
     parser.add_argument("--memory-cache", action=argparse.BooleanOptionalAction, default=True, help="Enable/disable DSPy in-memory cache.")
     parser.add_argument("--cache-dir", type=str, default=os.environ.get("DSPY_CACHE_DIR"), help="Override DSPy disk cache directory.")
     parser.add_argument("--log-file", type=str, default=os.environ.get("LOG_FILE"), help="Path to write detailed logs.")
-    parser.add_argument("-v", "--verbose", action='store_true', help="enable verbose logging")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Logging verbosity: -v INFO, -vv LLM debug, -vvv full firehose.",
+    )
 
     args = parser.parse_args()
 
-    configure_logging(verbose=args.verbose, log_file=args.log_file)
+    configure_logging(verbosity=args.verbose, log_file=args.log_file)
 
 
     test_pipeline(
