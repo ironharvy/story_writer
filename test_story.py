@@ -4,6 +4,7 @@ import argparse
 import logging
 import coloredlogs
 import pytest
+from dotenv import load_dotenv
 from unittest.mock import patch, MagicMock
 from story_modules import (
     QuestionGenerator,
@@ -16,6 +17,8 @@ from story_modules import (
     SceneImagePromptGenerator,
 )
 from world_bible_modules import WorldBibleGenerator
+
+load_dotenv()
 
 # A mock LM to avoid needing an API key for automated testing
 class MockLM(dspy.LM):
@@ -178,12 +181,21 @@ def test_pipeline(
         disk_cache_dir=cache_dir,
     )
 
+    callbacks = []
+    if os.environ.get("LANGFUSE_PUBLIC_KEY"):
+        try:
+            from langfuse.integrations.dspy import LangfuseDspyCallbackHandler
+            callbacks.append(LangfuseDspyCallbackHandler())
+            logger.info("Langfuse DSPy callback handler registered.")
+        except Exception as exc:
+            logger.warning("Langfuse DSPy callback handler unavailable: %s", exc)
+
     # For testing in an environment where no actual LLM API is reachable, use the MockLM.
     # To run actual integration tests, you'd provide an active OPENAI_API_KEY or local Ollama running.
     # If the user requested the mock model, or if we want to ensure tests always pass in CI, use MockLM.
     if model_name == "mock" or model_name == "test_mock":
         lm = MockLM()
-        dspy.configure(lm=lm)
+        dspy.configure(lm=lm, callbacks=callbacks)
     else:
         # We assume OPENAI_API_KEY is available in the run_in_bash_session, if not, we skip the actual test
         if "openai" in model_name.lower() and not kwargs.get("api_key"):
@@ -191,7 +203,7 @@ def test_pipeline(
             return
 
         lm = dspy.LM(model_name, cache=cache, **kwargs)
-        dspy.configure(lm=lm)
+        dspy.configure(lm=lm, callbacks=callbacks)
 
     idea = "An unnamed child is raised by the Church as the ultimate weapon against demons. As child grows he learns that the church itself is corrupt and breeds demons for controlled chaos. The church recieves funding for protection and as such decides who should recieve help. The child eventually becomes overpowered and turns back on the Church"
 
