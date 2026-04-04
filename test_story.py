@@ -4,6 +4,7 @@ import argparse
 import logging
 import coloredlogs
 import pytest
+from dotenv import load_dotenv
 from unittest.mock import patch, MagicMock
 from story_modules import (
     QuestionGenerator,
@@ -16,6 +17,8 @@ from story_modules import (
     SceneImagePromptGenerator,
 )
 from world_bible_modules import WorldBibleGenerator
+
+load_dotenv()
 
 # A mock LM to avoid needing an API key for automated testing
 class MockLM(dspy.LM):
@@ -99,8 +102,9 @@ class MockLM(dspy.LM):
 logger = logging.getLogger(__name__)
 
 
-def configure_logging(verbose: bool = False, log_file: str | None = None):
-    level = logging.DEBUG if verbose else logging.INFO
+def configure_logging(verbosity: int = 0, log_file: str | None = None):
+    level_map = {0: logging.INFO, 1: logging.INFO, 2: logging.DEBUG, 3: logging.DEBUG}
+    level = level_map.get(verbosity, logging.DEBUG)
     log_format = "%(asctime)s.%(msecs)03d %(levelname)s [%(name)s] %(message)s"
     date_format = "%Y-%m-%d %H:%M:%S"
     coloredlogs.install(
@@ -119,7 +123,20 @@ def configure_logging(verbose: bool = False, log_file: str | None = None):
         logging.getLogger().addHandler(file_handler)
 
     logger.setLevel(level)
-    logging.getLogger("dspy").setLevel(level)
+    _http_loggers = ("httpx", "httpcore", "urllib3", "requests")
+    _llm_loggers = ("litellm", "dspy", "langfuse", "openai", "anthropic")
+
+    if verbosity <= 1:
+        for name in _http_loggers + _llm_loggers:
+            logging.getLogger(name).setLevel(logging.WARNING)
+    elif verbosity == 2:
+        for name in _llm_loggers:
+            logging.getLogger(name).setLevel(logging.DEBUG)
+        for name in _http_loggers:
+            logging.getLogger(name).setLevel(logging.WARNING)
+    else:
+        for name in _llm_loggers + _http_loggers:
+            logging.getLogger(name).setLevel(logging.DEBUG)
 
 
 def test_pipeline(
@@ -164,12 +181,21 @@ def test_pipeline(
         disk_cache_dir=cache_dir,
     )
 
+    callbacks = []
+    if os.environ.get("LANGFUSE_PUBLIC_KEY"):
+        try:
+            from langfuse.integrations.dspy import LangfuseDspyCallbackHandler
+            callbacks.append(LangfuseDspyCallbackHandler())
+            logger.info("Langfuse DSPy callback handler registered.")
+        except Exception as exc:
+            logger.warning("Langfuse DSPy callback handler unavailable: %s", exc)
+
     # For testing in an environment where no actual LLM API is reachable, use the MockLM.
     # To run actual integration tests, you'd provide an active OPENAI_API_KEY or local Ollama running.
     # If the user requested the mock model, or if we want to ensure tests always pass in CI, use MockLM.
     if model_name == "mock" or model_name == "test_mock":
         lm = MockLM()
-        dspy.configure(lm=lm)
+        dspy.configure(lm=lm, callbacks=callbacks)
     else:
         # We assume OPENAI_API_KEY is available in the run_in_bash_session, if not, we skip the actual test
         if "openai" in model_name.lower() and not kwargs.get("api_key"):
@@ -177,7 +203,7 @@ def test_pipeline(
             return
 
         lm = dspy.LM(model_name, cache=cache, **kwargs)
-        dspy.configure(lm=lm)
+        dspy.configure(lm=lm, callbacks=callbacks)
 
     idea = "An unnamed child is raised by the Church as the ultimate weapon against demons. As child grows he learns that the church itself is corrupt and breeds demons for controlled chaos. The church recieves funding for protection and as such decides who should recieve help. The child eventually becomes overpowered and turns back on the Church"
 
@@ -358,11 +384,17 @@ if __name__ == "__main__":
     parser.add_argument("--memory-cache", action=argparse.BooleanOptionalAction, default=True, help="Enable/disable DSPy in-memory cache.")
     parser.add_argument("--cache-dir", type=str, default=os.environ.get("DSPY_CACHE_DIR"), help="Override DSPy disk cache directory.")
     parser.add_argument("--log-file", type=str, default=os.environ.get("LOG_FILE"), help="Path to write detailed logs.")
-    parser.add_argument("-v", "--verbose", action='store_true', help="enable verbose logging")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Logging verbosity: -v INFO, -vv LLM debug, -vvv full firehose.",
+    )
 
     args = parser.parse_args()
 
-    configure_logging(verbose=args.verbose, log_file=args.log_file)
+    configure_logging(verbosity=args.verbose, log_file=args.log_file)
 
 
     test_pipeline(
