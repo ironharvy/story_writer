@@ -124,7 +124,7 @@ def configure_logging(verbosity: int = 0, log_file: str | None = None):
         logging.getLogger().addHandler(file_handler)
 
     logger.setLevel(level)
-    _http_loggers = ("httpx", "httpcore", "urllib3", "requests")
+    _http_loggers = ("httpx", "httpcore", "urllib3", "requests", "langfuse")
     _llm_loggers = ("litellm", "dspy", "langfuse", "openai", "anthropic")
 
     if verbosity <= 1:

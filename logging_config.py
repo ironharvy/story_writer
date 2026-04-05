@@ -192,7 +192,7 @@ def setup_logging(
     #
     # HTTP transport loggers — these are the noisy ones that drown out
     # useful LLM debug info. Only unleashed at -vvv.
-    _http_loggers = ("httpx", "httpcore", "urllib3", "requests")
+    _http_loggers = ("httpx", "httpcore", "urllib3", "requests", "langfuse")
     #
     # LLM-related loggers — the stuff you actually want at -vv.
     # litellm is what DSPy uses under the hood for all LLM calls.
