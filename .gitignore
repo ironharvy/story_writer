@@ -8,3 +8,5 @@ images/
 .claude/
 .cursor/
 .cursorrules/
+.pytest_cache/
+.ruff_cache/
