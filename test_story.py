@@ -103,7 +103,7 @@ logger = logging.getLogger(__name__)
 
 
 def configure_logging(verbosity: int = 0, log_file: str | None = None):
-    level_map = {0: logging.INFO, 1: logging.INFO, 2: logging.DEBUG, 3: logging.DEBUG}
+    level_map = {0: logging.WARNING, 1: logging.INFO, 2: logging.DEBUG, 3: logging.DEBUG}
     level = level_map.get(verbosity, logging.DEBUG)
     log_format = "%(asctime)s.%(msecs)03d %(levelname)s [%(name)s] %(message)s"
     date_format = "%Y-%m-%d %H:%M:%S"
@@ -257,11 +257,9 @@ def test_pipeline(
                 path = img_gen.generate_character_portrait(prompt=cv.full_prompt, character_name=cv.name)
                 print(f"  Mock portrait for {cv.name}: {path}")
 
-    # 7. Story — patch random.random so probabilistic detail always triggers,
-    # ensuring the random_detail mock path in MockLM is exercised every run.
-    with patch("story_modules.random.random", return_value=0.1):
-        story_gen = StoryGenerator()
-        story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
+    # 7. Story — use real randomness so probabilistic detail behavior matches production.
+    story_gen = StoryGenerator()
+    story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
     logger.info("Story generated.")
     logger.debug("Arc outline count=%d", len(story_result.arc_outline) if isinstance(story_result.arc_outline, list) else 0)
     logger.debug("Chapter plan preview: %.500s", story_result.chapter_plan)
