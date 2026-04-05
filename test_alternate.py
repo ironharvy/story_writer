@@ -1,4 +1,4 @@
-"""Tests for the alternate story pipeline: Architect → Director → Scripter → Writer."""
+"""Tests for the alternate story pipeline: Phase 1 → Phase 2 → Phase 3."""
 
 import dspy
 import os
@@ -13,17 +13,20 @@ from alternate_story_modules import (
     Scripter,
     Writer,
     AlternateStoryOrchestrator,
-    ActOutline,
+    Foundation,
+    Spine,
+    WorldRule,
+    ActBreakdown,
     Sequence,
-    SceneBeats,
-    Beat,
+    Scene,
+    SceneBeat,
 )
 
 load_dotenv()
 
 
 class AlternateMockLM(dspy.LM):
-    """Mock LM tuned for the alternate pipeline's signatures."""
+    """Mock LM tuned for the 3-phase alternate pipeline's signatures."""
 
     def __init__(self):
         super().__init__(model="mock")
@@ -31,70 +34,79 @@ class AlternateMockLM(dspy.LM):
     def __call__(self, prompt=None, messages=None, **kwargs):
         content = prompt if prompt else str(messages)
 
-        # Match on DSPy signature docstrings — these are the most reliable
-        # discriminator since each signature has a unique description.
+        # Match on DSPy signature docstrings — most reliable discriminator.
 
-        # Module D — Writer (check before Scripter since both mention "scene")
+        # Phase 3b — Writer (check before Scripter since both mention "scene")
         if "Writes vivid, immersive prose" in content:
             return [self._scene_prose_response()]
 
-        # Module C — Scripter
-        if "Generates the beats for exactly 3 scenes" in content:
-            return [self._scene_beats_response()]
+        # Phase 3a — Scripter: Scenes
+        if "Generates detailed scenes for a single sequence" in content:
+            return [self._scenes_response()]
 
-        # Module B — Director
-        if "Breaks a single act into exactly 4 sequences" in content:
+        # Phase 3a — Scripter: Sequences
+        if "Breaks a single act into sequences" in content:
             return [self._sequences_response()]
 
-        # Module A — Architect: Act Outlines (check before World Bible)
-        if "Generates a 3-Act story outline" in content:
-            return [self._act_outlines_response()]
+        # Phase 2 — Director
+        if "Breaks the Foundation into a 3-Act macro structure" in content:
+            return [self._act_breakdowns_response()]
 
-        # Module A — Architect: World Bible
-        if "Generates a comprehensive World Bible" in content:
-            return [self._world_bible_response()]
+        # Phase 1 — Architect
+        if "Generates the story Foundation from a vague idea" in content:
+            return [self._foundation_response()]
 
         # Fallback chain using field name heuristics
-        if "act_outlines" in content:
-            return [self._act_outlines_response()]
+        if "foundation" in content and "logline" in content:
+            return [self._foundation_response()]
+        if "act_breakdowns" in content:
+            return [self._act_breakdowns_response()]
         if "sequences" in content:
             return [self._sequences_response()]
-        if "scene_beats" in content:
-            return [self._scene_beats_response()]
+        if "scenes" in content and "beats" in content:
+            return [self._scenes_response()]
         if "scene_prose" in content:
             return [self._scene_prose_response()]
-        if "world_bible" in content:
-            return [self._world_bible_response()]
 
         return ["Mock response"]
 
     @staticmethod
-    def _world_bible_response():
+    def _foundation_response():
         return (
-            '```json\n{"reasoning": "Mock reasoning", '
-            '"world_bible": "### Rules\\nDemon-binding magic powered by faith. '
-            'The Church controls all sanctioned exorcisms.\\n\\n'
-            '### Characters\\nKael: orphan raised as a weapon. '
-            'Archbishop Dران: corrupt leader.\\n\\n'
-            '### Locations\\nThe Sanctum: fortified cathedral. '
-            'The Ashlands: demon-scarred wasteland.\\n\\n'
-            '### Timeline\\nYear 1: Kael found. Year 10: first mission. '
-            'Year 15: discovers truth."}\n```'
+            '```json\n{"reasoning": "Mock reasoning", "foundation": {'
+            '"logline": "A genius high school student finds a supernatural notebook '
+            'that kills anyone whose name is written in it; he uses it to cleanse '
+            'the world of criminals while playing a cat-and-mouse game with a '
+            'world-class detective.", '
+            '"spine": {'
+            '"internal_want": "Light wants to be a God of the new world (Justice/Ego).", '
+            '"external_need": "Light needs to avoid being caught and maintain secrecy (Survival)."'
+            '}, '
+            '"world_rules": ['
+            '{"rule_number": 1, "description": "You must have the person\'s face in mind when writing their name."}, '
+            '{"rule_number": 2, "description": "Death occurs in 40 seconds after the name is written."}, '
+            '{"rule_number": 3, "description": "The cause of death can be specified within 6 minutes and 40 seconds."}'
+            '], '
+            '"observer": "Ryuk, a Shinigami (death god) who dropped the notebook into the human world out of boredom."'
+            '}}\n```'
         )
 
     @staticmethod
-    def _act_outlines_response():
+    def _act_breakdowns_response():
         return (
-            '```json\n{"reasoning": "Mock reasoning", "act_outlines": ['
-            '{"act_number": 1, "title": "The Weapon Forged", '
-            '"summary": "Kael is raised by the Church as their ultimate weapon. '
-            'He trains relentlessly and completes his first demon hunt."},'
-            '{"act_number": 2, "title": "Cracks in the Faith", '
-            '"summary": "Kael discovers the Church breeds demons for profit. '
-            'His loyalty fractures as he uncovers the conspiracy."},'
-            '{"act_number": 3, "title": "The Reckoning", '
-            '"summary": "Overpowered and disillusioned, Kael turns against the Church '
-            'and dismantles their corrupt empire."}'
+            '```json\n{"reasoning": "Mock reasoning", "act_breakdowns": ['
+            '{"act_number": 1, "phase": "Setup", "title": "The God Complex Awakens", '
+            '"summary": "Light finds the Death Note, kills his first criminal, and decides to become Kira. '
+            'The world notices the pattern of criminal deaths.", '
+            '"dramatic_marker": "Inciting Incident: L broadcasts globally and challenges Kira, narrowing his location to Japan."},'
+            '{"act_number": 2, "phase": "Confrontation", "title": "The Mind Game", '
+            '"summary": "Light joins the investigation team to get close to L. He eliminates FBI agents and Naomi Misora. '
+            'Light and L meet face-to-face at the university.", '
+            '"dramatic_marker": "Midpoint: Light and L meet face-to-face, each suspecting the other."},'
+            '{"act_number": 3, "phase": "Resolution", "title": "Checkmate", '
+            '"summary": "The Second Kira (Misa) appears. Light manipulates the Shinigami Rem into sacrificing herself. '
+            'Light successfully eliminates L.", '
+            '"dramatic_marker": "Climax: Light orchestrates L\'s death through Rem, becoming the unchallenged Kira."}'
             ']}\n```'
         )
 
@@ -102,53 +114,40 @@ class AlternateMockLM(dspy.LM):
     def _sequences_response():
         return (
             '```json\n{"reasoning": "Mock reasoning", "sequences": ['
-            '{"sequence_number": 1, "title": "Awakening", '
-            '"summary": "The protagonist is introduced in their ordinary world."},'
-            '{"sequence_number": 2, "title": "Training", '
-            '"summary": "Rigorous preparation reveals hidden strengths and costs."},'
-            '{"sequence_number": 3, "title": "First Trial", '
-            '"summary": "A dangerous mission tests everything learned so far."},'
-            '{"sequence_number": 4, "title": "Turning Point", '
-            '"summary": "A revelation changes the protagonist\'s understanding of their world."}'
+            '{"sequence_number": 1, "title": "The Discovery", '
+            '"summary": "Light finds the Death Note in the school yard and tests it on a criminal he sees on TV."},'
+            '{"sequence_number": 2, "title": "The First Kills", '
+            '"summary": "Light begins systematically killing criminals, establishing the Kira pattern."},'
+            '{"sequence_number": 3, "title": "The Challenge", '
+            '"summary": "L appears on television and challenges Kira, narrowing the search to the Kanto region."}'
             ']}\n```'
         )
 
     @staticmethod
-    def _scene_beats_response():
+    def _scenes_response():
         return (
-            '```json\n{"reasoning": "Mock reasoning", "scene_beats": ['
-            '{"scene_number": 1, "scene_title": "The Cold Morning", "beats": ['
-            '{"beat_summary": "Kael wakes before dawn in the stone dormitory.", '
-            '"emotion": "isolation", '
-            '"purpose": "Establish the protagonist\'s lonely routine."},'
-            '{"beat_summary": "He recites the Litany of Binding from memory.", '
-            '"emotion": "discipline", '
-            '"purpose": "Show the Church\'s indoctrination."},'
-            '{"beat_summary": "A senior cleric watches from the shadows, taking notes.", '
-            '"emotion": "unease", '
-            '"purpose": "Hint at surveillance and control."}'
+            '```json\n{"reasoning": "Mock reasoning", "scenes": ['
+            '{"scene_number": 1, "title": "The Train Station Death", '
+            '"location": "Yamanote Line Train", '
+            '"characters": ["Light Yagami", "Raye Penber"], '
+            '"goal": "Light must force Raye to write the names of all other FBI agents without Raye seeing Light\'s face.", '
+            '"beats": ['
+            '{"label": "Input", "description": "Light enters the train and stands behind Raye Penber."}, '
+            '{"label": "Action", "description": "Light speaks to Raye, proving he knows Raye is FBI."}, '
+            '{"label": "Conflict", "description": "Raye tries to turn around; Light threatens to kill everyone on the train."}, '
+            '{"label": "Climax", "description": "Light hands Raye a file with a Death Note page inside and tells him to write the names."}, '
+            '{"label": "Resolution", "description": "Raye leaves the train and dies of a heart attack as the doors close."}'
             ']},'
-            '{"scene_number": 2, "scene_title": "The Sparring Ring", "beats": ['
-            '{"beat_summary": "Kael fights three older acolytes simultaneously.", '
-            '"emotion": "intensity", '
-            '"purpose": "Demonstrate his combat superiority."},'
-            '{"beat_summary": "He holds back a killing blow at the last instant.", '
-            '"emotion": "restraint", '
-            '"purpose": "Show his humanity despite training."},'
-            '{"beat_summary": "The weapons-master nods approval but his eyes are cold.", '
-            '"emotion": "ambiguity", '
-            '"purpose": "Foreshadow the Church viewing Kael as a tool."}'
-            ']},'
-            '{"scene_number": 3, "scene_title": "The Archive Whisper", "beats": ['
-            '{"beat_summary": "Kael sneaks into the restricted archives after hours.", '
-            '"emotion": "curiosity", '
-            '"purpose": "Plant seeds of his eventual rebellion."},'
-            '{"beat_summary": "He finds a half-burned ledger with strange entries.", '
-            '"emotion": "suspicion", '
-            '"purpose": "First concrete clue of the Church\'s corruption."},'
-            '{"beat_summary": "Footsteps echo down the corridor and he barely escapes.", '
-            '"emotion": "tension", '
-            '"purpose": "Raise stakes and keep the reader hooked."}'
+            '{"scene_number": 2, "title": "Naomi\'s Investigation", '
+            '"location": "Tokyo Streets", '
+            '"characters": ["Light Yagami", "Naomi Misora"], '
+            '"goal": "Light must prevent Naomi from reaching L with her critical deduction about Kira.", '
+            '"beats": ['
+            '{"label": "Input", "description": "Naomi approaches the task force building, carrying evidence."}, '
+            '{"label": "Action", "description": "Light intercepts Naomi and pretends to be an ally."}, '
+            '{"label": "Conflict", "description": "Naomi is suspicious but Light earns her trust by sharing insider details."}, '
+            '{"label": "Climax", "description": "Light convinces Naomi to reveal her real name."}, '
+            '{"label": "Resolution", "description": "Naomi walks away in a daze and is never seen again."}'
             ']}]}\n```'
         )
 
@@ -156,16 +155,20 @@ class AlternateMockLM(dspy.LM):
     def _scene_prose_response():
         return (
             '```json\n{"reasoning": "Mock reasoning", '
-            '"scene_prose": "The first light of dawn had not yet breached the narrow '
-            'windows of the dormitory when Kael opened his eyes. He lay still for a '
-            'moment, listening to the breathing of the other acolytes, then swung his '
-            'legs over the side of the stone cot and stood.\\n\\n'
-            '\\"Another day in paradise,\\" he muttered to no one in particular.\\n\\n'
-            'The cold bit into his bare feet as he crossed the flagstones to the washbasin. '
-            'He splashed icy water on his face and stared at his reflection — hollow '
-            'cheeks, sharp eyes, the faint scar across his jaw from last month\'s trial. '
-            'The Church had made him into something precise and dangerous, and he was '
-            'only beginning to understand what that meant."}\n```'
+            '"scene_prose": "The Yamanote Line train swayed gently as it pulled away from '
+            'Shinjuku Station. Light Yagami stood near the rear door, his school bag slung '
+            'over one shoulder, eyes fixed on the back of the man in the dark suit three '
+            'seats ahead.\\n\\n'
+            'Raye Penber. FBI. One of twelve agents sent to investigate the Kira case in '
+            'Japan. Light had known about the tail for three days now — ever since Ryuk had '
+            'casually mentioned someone was following him.\\n\\n'
+            '\\"I know who you are,\\" Light said quietly, stepping closer. His voice was '
+            'barely audible above the rattle of the train.\\n\\n'
+            'Raye stiffened but did not turn around. \\"I don\'t know what you\'re talking '
+            'about.\\"\\n\\n'
+            '\\"Turn around and everyone on this train dies.\\" Light\'s tone was calm, '
+            'almost conversational. \\"I have a piece of the Death Note in my watch. '
+            'One wrong move and I write a name.\\""}\n```'
         )
 
 
@@ -250,24 +253,26 @@ def test_alternate_pipeline(
         dspy.configure(lm=lm)
 
     idea = (
-        "An unnamed child is raised by the Church as the ultimate weapon against demons. "
-        "As the child grows he learns that the church itself is corrupt and breeds demons "
-        "for controlled chaos. The church receives funding for protection and as such "
-        "decides who should receive help. The child eventually becomes overpowered and "
-        "turns against the Church."
+        "A genius high school student finds a supernatural notebook that kills "
+        "anyone whose name is written in it. He decides to use it to rid the "
+        "world of criminals, but a brilliant detective begins hunting him."
     )
 
     # Run the full orchestrator
     orchestrator = AlternateStoryOrchestrator()
     result = orchestrator(idea=idea)
 
-    logger.info("World Bible length: %d characters", len(result.world_bible))
-    logger.info("Acts: %d", len(result.act_outlines))
+    logger.info("Foundation logline: %s", result.foundation.logline[:80])
+    logger.info("Acts: %d", len(result.act_breakdowns))
     logger.info("Scenes generated: %d", result.scene_count)
     logger.info("Story length: %d characters", len(result.story))
 
-    assert result.world_bible, "World Bible should not be empty"
-    assert len(result.act_outlines) == 3, f"Expected 3 acts, got {len(result.act_outlines)}"
+    assert result.foundation.logline, "Logline should not be empty"
+    assert result.foundation.spine.internal_want, "Internal want should not be empty"
+    assert result.foundation.spine.external_need, "External need should not be empty"
+    assert len(result.foundation.world_rules) > 0, "Should have at least one world rule"
+    assert result.foundation.observer, "Observer should not be empty"
+    assert len(result.act_breakdowns) == 3, f"Expected 3 acts, got {len(result.act_breakdowns)}"
     assert result.scene_count > 0, "Should have generated at least one scene"
     assert result.story.strip(), "Story should not be empty"
 
@@ -277,30 +282,79 @@ def test_alternate_pipeline(
     logger.info("Saving story output to %s...", output_path)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("# Alternate Pipeline Story Output\n\n")
-        f.write("## World Bible\n")
-        f.write(f"{result.world_bible}\n\n")
-        f.write("## 3-Act Outline\n")
-        for act in result.act_outlines:
-            f.write(f"### Act {act.act_number}: {act.title}\n")
-            f.write(f"{act.summary}\n\n")
-        f.write("## Full Story\n")
+
+        f.write("## Phase 1: Foundation\n\n")
+        f.write(f"**Logline:** {result.foundation.logline}\n\n")
+        f.write("**Spine:**\n")
+        f.write(f"- Internal Want: {result.foundation.spine.internal_want}\n")
+        f.write(f"- External Need: {result.foundation.spine.external_need}\n\n")
+        f.write("**World Rules:**\n")
+        for rule in result.foundation.world_rules:
+            f.write(f"- Rule {rule.rule_number}: {rule.description}\n")
+        f.write(f"\n**Observer:** {result.foundation.observer}\n\n")
+
+        f.write("## Phase 2: Macro Structure\n\n")
+        for act in result.act_breakdowns:
+            f.write(f"### Act {act.act_number} ({act.phase}): {act.title}\n")
+            f.write(f"{act.summary}\n")
+            f.write(f"**Dramatic Marker:** {act.dramatic_marker}\n\n")
+
+        f.write("## Phase 3: Full Story\n")
         f.write(f"{result.story}\n")
 
     logger.info("Alternate pipeline test passed!")
 
 
 # ---------------------------------------------------------------------------
-# Unit tests
+# Unit tests — Pydantic models
 # ---------------------------------------------------------------------------
 
-def test_act_outline_model():
-    act = ActOutline.model_validate({
+def test_spine_model():
+    spine = Spine.model_validate({
+        "internal_want": "Wants to be a god",
+        "external_need": "Must avoid capture",
+    })
+    assert spine.internal_want == "Wants to be a god"
+    assert spine.external_need == "Must avoid capture"
+
+
+def test_world_rule_model():
+    rule = WorldRule.model_validate({
+        "rule_number": 1,
+        "description": "Must know the face",
+    })
+    assert rule.rule_number == 1
+
+
+def test_foundation_model():
+    foundation = Foundation.model_validate({
+        "logline": "A student finds a deadly notebook.",
+        "spine": {
+            "internal_want": "Wants justice",
+            "external_need": "Must survive",
+        },
+        "world_rules": [
+            {"rule_number": 1, "description": "Must know the face."},
+            {"rule_number": 2, "description": "Death in 40 seconds."},
+        ],
+        "observer": "Ryuk the Shinigami",
+    })
+    assert foundation.logline
+    assert len(foundation.world_rules) == 2
+    assert foundation.observer == "Ryuk the Shinigami"
+
+
+def test_act_breakdown_model():
+    act = ActBreakdown.model_validate({
         "act_number": 1,
+        "phase": "Setup",
         "title": "The Beginning",
         "summary": "Everything starts here.",
+        "dramatic_marker": "Inciting Incident: The notebook is found.",
     })
     assert act.act_number == 1
-    assert act.title == "The Beginning"
+    assert act.phase == "Setup"
+    assert act.dramatic_marker.startswith("Inciting")
 
 
 def test_sequence_model():
@@ -313,27 +367,37 @@ def test_sequence_model():
     assert seq.title == "Rising Action"
 
 
-def test_beat_model():
-    beat = Beat.model_validate({
-        "beat_summary": "Hero draws sword.",
-        "emotion": "determination",
-        "purpose": "Show resolve.",
+def test_scene_beat_model():
+    beat = SceneBeat.model_validate({
+        "label": "Conflict",
+        "description": "Raye tries to turn around.",
     })
-    assert beat.emotion == "determination"
+    assert beat.label == "Conflict"
 
 
-def test_scene_beats_model():
-    scene = SceneBeats.model_validate({
+def test_scene_model():
+    scene = Scene.model_validate({
         "scene_number": 1,
-        "scene_title": "Opening",
+        "title": "The Train Station Death",
+        "location": "Yamanote Line Train",
+        "characters": ["Light Yagami", "Raye Penber"],
+        "goal": "Force Raye to write the names.",
         "beats": [
-            {"beat_summary": "Dawn breaks.", "emotion": "calm", "purpose": "Set the tone."},
-            {"beat_summary": "A scream.", "emotion": "shock", "purpose": "Inciting incident."},
+            {"label": "Input", "description": "Light enters the train."},
+            {"label": "Action", "description": "Light reveals he knows."},
+            {"label": "Conflict", "description": "Raye tries to resist."},
+            {"label": "Climax", "description": "Light hands Raye the file."},
+            {"label": "Resolution", "description": "Raye dies on the platform."},
         ],
     })
-    assert len(scene.beats) == 2
-    assert scene.scene_title == "Opening"
+    assert len(scene.beats) == 5
+    assert scene.characters == ["Light Yagami", "Raye Penber"]
+    assert scene.location == "Yamanote Line Train"
 
+
+# ---------------------------------------------------------------------------
+# Unit tests — Agents with mock LM
+# ---------------------------------------------------------------------------
 
 @pytest.fixture
 def mock_lm_configured():
@@ -343,40 +407,70 @@ def mock_lm_configured():
     return lm
 
 
-def test_architect_produces_world_bible_and_acts(mock_lm_configured):
+def test_architect_produces_foundation(mock_lm_configured):
     architect = Architect()
-    result = architect(idea="A child raised as a weapon discovers the truth.")
-    assert result.world_bible
-    assert len(result.act_outlines) == 3
+    result = architect(idea="A student finds a notebook that can kill people.")
+    assert result.foundation.logline
+    assert result.foundation.spine.internal_want
+    assert result.foundation.spine.external_need
+    assert len(result.foundation.world_rules) >= 1
+    assert result.foundation.observer
 
 
-def test_director_produces_four_sequences(mock_lm_configured):
+def test_director_produces_three_acts(mock_lm_configured):
     director = Director()
     result = director(
-        world_bible="Mock world bible.",
-        act_outline="Act 1: The Beginning — The hero is introduced.",
-        full_outline="Act 1: Beginning\nAct 2: Middle\nAct 3: End",
+        foundation="Logline: A student finds a deadly notebook.\n"
+                   "Spine:\n  Internal Want: God complex\n  External Need: Avoid capture\n"
+                   "World Rules:\n  Rule 1: Must know the face\n"
+                   "Observer: Ryuk",
     )
-    assert len(result.sequences) == 4
+    assert len(result.act_breakdowns) == 3
+    assert result.act_breakdowns[0].phase == "Setup"
 
 
-def test_scripter_produces_three_scenes(mock_lm_configured):
+def test_scripter_produces_sequences(mock_lm_configured):
     scripter = Scripter()
     result = scripter(
-        world_bible="Mock world bible.",
-        act_outline="Act 1: The Beginning — The hero is introduced.",
-        sequence_summary="Sequence 1: Awakening — The protagonist wakes.",
+        foundation="Mock foundation text.",
+        act_breakdown="Act 1 (Setup): The Beginning — Light finds the notebook.",
+        full_structure="Act 1: Setup\nAct 2: Confrontation\nAct 3: Resolution",
         previous_context="This is the beginning of the story.",
     )
-    assert len(result.scene_beats) == 3
+    assert len(result.sequences) >= 2
+
+
+def test_scripter_produces_scenes_with_beats(mock_lm_configured):
+    scripter = Scripter()
+    result = scripter.generate_scene_beats(
+        foundation="Mock foundation text.",
+        act_breakdown="Act 1 (Setup): The Beginning — Light finds the notebook.",
+        sequence_summary="Sequence 1: The Discovery — Light finds the Death Note.",
+        previous_context="This is the beginning of the story.",
+    )
+    assert len(result.scenes) >= 1
+    scene = result.scenes[0]
+    assert scene.location
+    assert scene.characters
+    assert scene.goal
+    assert len(scene.beats) >= 3
+    # Verify beat structure
+    labels = [b.label for b in scene.beats]
+    assert "Input" in labels
+    assert "Resolution" in labels
 
 
 def test_writer_produces_prose(mock_lm_configured):
     writer = Writer()
     result = writer(
-        world_bible="Mock world bible.",
-        scene_title="The Cold Morning",
-        beats="- Kael wakes before dawn. [isolation] (Establish routine.)",
+        foundation="Mock foundation text.",
+        scene_title="The Train Station Death",
+        location="Yamanote Line Train",
+        characters="Light Yagami, Raye Penber",
+        goal="Force Raye to write the names.",
+        beats="Input: Light enters the train.\nAction: Light reveals he knows.\n"
+              "Conflict: Raye tries to resist.\nClimax: Light hands the file.\n"
+              "Resolution: Raye dies.",
         previous_context="This is the beginning of the story.",
     )
     assert result.scene_prose
@@ -388,7 +482,7 @@ def test_writer_produces_prose(mock_lm_configured):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Test Alternate Story Pipeline (A→B→C→D)")
+    parser = argparse.ArgumentParser(description="Test Alternate Story Pipeline (3-Phase)")
     parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "mock"),
                         help="The language model to use. Defaults to MODEL env var or mock.")
     parser.add_argument("--llm-url", type=str, default=os.environ.get("LLM_URL", "http://localhost:11434"),
