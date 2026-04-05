@@ -291,7 +291,16 @@ class StoryGenerator(dspy.Module):
 
     def _maybe_generate_random_detail(self, world_bible: str, chapter_desc: str) -> str:
         """Roll the dice and, if triggered, generate a contextual creative flourish."""
-        if random.random() >= self.random_detail_probability:
+        roll = random.random()
+        triggered = roll < self.random_detail_probability
+        logger.debug(
+            "Random detail roll=%.4f threshold=%.4f triggered=%s",
+            roll,
+            self.random_detail_probability,
+            triggered,
+        )
+        if not triggered:
+            logger.debug("Random detail skipped for chapter.")
             return ""
         detail_type = random.choice(_RANDOM_DETAIL_TYPES)
         logger.debug("Probabilistic detail triggered for chapter (type: %s)", detail_type)
