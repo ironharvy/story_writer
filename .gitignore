@@ -5,3 +5,6 @@ __pycache__/
 .gitignore
 images/
 .logs/
+.claude/
+.cursor/
+.cursorrules/
