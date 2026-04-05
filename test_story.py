@@ -379,7 +379,12 @@ if __name__ == "__main__":
     parser.add_argument("--cache", action=argparse.BooleanOptionalAction, default=True, help="Enable/disable DSPy disk cache.")
     parser.add_argument("--memory-cache", action=argparse.BooleanOptionalAction, default=True, help="Enable/disable DSPy in-memory cache.")
     parser.add_argument("--cache-dir", type=str, default=os.environ.get("DSPY_CACHE_DIR"), help="Override DSPy disk cache directory.")
-    parser.add_argument("--log-file", type=str, default=os.environ.get("LOG_FILE"), help="Path to write detailed logs.")
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=os.environ.get("LOG_FILE", ".tmp/test_debug.log"),
+        help="Path to write detailed logs (default: LOG_FILE env var or .tmp/test_debug.log).",
+    )
     parser.add_argument(
         "-v",
         "--verbose",
