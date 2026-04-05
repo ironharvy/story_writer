@@ -63,6 +63,8 @@ Core model/runtime settings:
 - `LLM_URL` (for local/custom providers, e.g. Ollama)
 - `API_KEY`
 - `DSPY_CACHE_DIR`
+- `DSPY_USE_OPTIMIZED` (set `true`/`1` to load optimized text-module artifacts)
+- `DSPY_OPTIMIZED_MANIFEST` (path to text-pipeline optimization manifest)
 
 Optional image generation:
 
@@ -110,10 +112,37 @@ python main.py --enable-images --replicate-api-token "$REPLICATE_API_TOKEN"
 - `--cache` / `--no-cache`
 - `--memory-cache` / `--no-memory-cache`
 - `--cache-dir`
+- `--use-optimized` / `--no-use-optimized`
+- `--optimized-manifest` (default: `.tmp/dspy_optimized/text_pipeline_manifest.json`)
 - `--enable-images`
 - `--replicate-api-token`
 - `--log-file`
 - `-v`, `-vv`, `-vvv` (increasing verbosity)
+
+## Text Pipeline Optimization
+
+Compile/save text-module artifacts and a manifest:
+
+```bash
+python scripts/optimize_text_pipeline.py \
+  --model openai/gpt-4o-mini \
+  --manifest .tmp/dspy_optimized/text_pipeline_manifest.json
+```
+
+Run with optimized text modules enabled:
+
+```bash
+python main.py \
+  --use-optimized \
+  --optimized-manifest .tmp/dspy_optimized/text_pipeline_manifest.json
+```
+
+Optimize only a subset of text modules:
+
+```bash
+python scripts/optimize_text_pipeline.py \
+  --modules QuestionGenerator,CorePremiseGenerator,StoryGenerator
+```
 
 ## Output
 
@@ -160,3 +189,9 @@ python scripts/fetch_langfuse_traces.py --mode summarize --input .tmp/langfuse_t
 ```bash
 pytest -q
 ```
+
+## TODO
+
+- Defer DSPy optimization for image-oriented modules until text-pipeline metrics are stable:
+  - `CharacterVisualDescriber`
+  - `SceneImagePromptGenerator`
