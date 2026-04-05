@@ -1,9 +1,17 @@
-"""Alternate story generation pipeline: Architect → Director → Scripter → Writer.
+"""Alternate story generation pipeline using a 3-phase architecture.
 
-Module A (The Architect): Vague Idea → World Bible + 3-Act Outline
-Module B (The Director): Act + World Bible → 4 Sequences
-Module C (The Scripter): Sequence + World Bible → Beats for 3 Scenes
-Module D (The Writer): Beats + World Bible → Prose Paragraphs
+Phase 1 — The Foundation (System State):
+    Architect Agent takes a vague idea and generates the "global variables":
+    logline, spine (internal want + external need), and world bible rules.
+
+Phase 2 — The Macro Structure (Control Flow):
+    Director Agent takes the Foundation and breaks it into 3-Act structure
+    with dramatic markers (inciting incident, midpoint, climax).
+
+Phase 3 — The Granular Breakdown (Execution):
+    Scripter Agent breaks acts into sequences, sequences into scenes.
+    Writer Agent expands scene beats into full prose.
+    Beats follow: Input → Action → Conflict → Climax → Resolution.
 """
 
 import dspy
@@ -16,173 +24,242 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Pydantic models
+# Phase 1 Pydantic models — The Foundation
 # ---------------------------------------------------------------------------
 
-class ActOutline(BaseModel):
-    act_number: int = Field(description="The act number (1, 2, or 3).")
-    title: str = Field(description="A short title for the act.")
-    summary: str = Field(description="A 2-3 sentence summary of what happens in this act.")
-
-
-class Sequence(BaseModel):
-    sequence_number: int = Field(description="The sequence number (1-4) within the act.")
-    title: str = Field(description="A short title for the sequence.")
-    summary: str = Field(description="A 2-3 sentence summary of the sequence's purpose and events.")
-
-
-class Beat(BaseModel):
-    beat_summary: str = Field(description="A concise description of what happens in this beat.")
-    emotion: str = Field(description="The dominant emotion or tone of this beat.")
-    purpose: str = Field(description="Why this beat matters to the scene and overall story.")
-
-
-class SceneBeats(BaseModel):
-    scene_number: int = Field(description="The scene number (1-3) within the sequence.")
-    scene_title: str = Field(description="A short title for the scene.")
-    beats: List[Beat] = Field(description="The 3-5 narrative beats that make up this scene.")
-
-
-# ---------------------------------------------------------------------------
-# Module A — The Architect
-# ---------------------------------------------------------------------------
-
-class ArchitectWorldBibleSignature(dspy.Signature):
-    """Generates a comprehensive World Bible from a vague story idea.
-    The World Bible covers: world rules (magic, science, laws),
-    characters (names, descriptions, relationships),
-    locations (places, climates, relationships between them),
-    and a high-level plot timeline."""
-    idea: str = dspy.InputField(desc="The user's vague story idea.")
-    world_bible: str = dspy.OutputField(
-        desc="A comprehensive World Bible covering world rules, characters, locations, and plot timeline."
+class Spine(BaseModel):
+    internal_want: str = Field(
+        description="What the protagonist consciously desires (ego, justice, love, power, etc.)."
+    )
+    external_need: str = Field(
+        description="What the protagonist must do to survive or succeed in the external world."
     )
 
 
-class ArchitectOutlineSignature(dspy.Signature):
-    """Generates a 3-Act story outline based on the idea and World Bible.
-    Each act has a number, title, and 2-3 sentence summary."""
-    idea: str = dspy.InputField(desc="The user's story idea.")
-    world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
-    act_outlines: List[ActOutline] = dspy.OutputField(
-        desc="Exactly 3 act outlines forming a complete 3-act structure."
+class WorldRule(BaseModel):
+    rule_number: int = Field(description="Sequential rule number.")
+    description: str = Field(description="A concise statement of the rule or constraint.")
+
+
+class Foundation(BaseModel):
+    logline: str = Field(
+        description="A 1-2 sentence summary capturing protagonist, conflict, and stakes."
+    )
+    spine: Spine = Field(
+        description="The core conflict expressed as internal want vs external need."
+    )
+    world_rules: List[WorldRule] = Field(
+        description="The key rules, constraints, or laws that govern this story's world."
+    )
+    observer: str = Field(
+        description="The neutral or antagonistic observer figure who watches the protagonist."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 Pydantic models — The Macro Structure
+# ---------------------------------------------------------------------------
+
+class ActBreakdown(BaseModel):
+    act_number: int = Field(description="The act number (1, 2, or 3).")
+    phase: str = Field(description="The dramatic phase: Setup, Confrontation, or Resolution.")
+    title: str = Field(description="A short title for the act.")
+    summary: str = Field(description="A 2-3 sentence summary of what happens in this act.")
+    dramatic_marker: str = Field(
+        description=(
+            "The key dramatic turning point for this act. "
+            "Act 1: Inciting Incident. Act 2: Midpoint reversal. Act 3: Climax."
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 Pydantic models — The Granular Breakdown
+# ---------------------------------------------------------------------------
+
+class Sequence(BaseModel):
+    sequence_number: int = Field(description="The sequence number within the act.")
+    title: str = Field(description="A short title for the sequence.")
+    summary: str = Field(
+        description="A series of scenes with a unified dramatic purpose."
+    )
+
+
+class SceneBeat(BaseModel):
+    label: str = Field(
+        description="The beat type: Input, Action, Conflict, Climax, or Resolution."
+    )
+    description: str = Field(description="What happens in this beat.")
+
+
+class Scene(BaseModel):
+    scene_number: int = Field(description="The scene number within the sequence.")
+    title: str = Field(description="A short title for the scene.")
+    location: str = Field(description="Where this scene takes place.")
+    characters: List[str] = Field(description="Characters present in this scene.")
+    goal: str = Field(
+        description="What the protagonist must accomplish in this scene."
+    )
+    beats: List[SceneBeat] = Field(
+        description=(
+            "The logic steps of the scene following the structure: "
+            "Input → Action → Conflict → Climax → Resolution."
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 — The Architect
+# ---------------------------------------------------------------------------
+
+class FoundationSignature(dspy.Signature):
+    """Generates the story Foundation from a vague idea.
+    The Foundation includes: a logline (1-2 sentences capturing protagonist,
+    conflict, and stakes), a spine (internal want vs external need), world
+    rules (the key constraints/laws governing the world), and an observer
+    figure who watches the protagonist."""
+    idea: str = dspy.InputField(desc="The user's vague story idea.")
+    foundation: Foundation = dspy.OutputField(
+        desc="The complete Foundation: logline, spine, world_rules, and observer."
     )
 
 
 class Architect(dspy.Module):
-    """Module A: Takes a vague idea and produces a World Bible + 3-Act Outline."""
+    """Phase 1: Takes a vague idea and produces the Foundation —
+    logline, spine, world rules, and observer."""
 
     def __init__(self):
         super().__init__()
-        self.generate_world_bible = dspy.ChainOfThought(ArchitectWorldBibleSignature)
-        self.generate_outline = dspy.ChainOfThought(ArchitectOutlineSignature)
+        self.generate_foundation = dspy.ChainOfThought(FoundationSignature)
 
     @observe()
     def forward(self, idea: str):
-        logger.info("Architect: generating World Bible...")
-        wb_result = self.generate_world_bible(idea=idea)
-
-        logger.info("Architect: generating 3-Act Outline...")
-        outline_result = self.generate_outline(
-            idea=idea, world_bible=wb_result.world_bible
-        )
-
-        return dspy.Prediction(
-            world_bible=wb_result.world_bible,
-            act_outlines=outline_result.act_outlines,
-        )
+        logger.info("Architect: generating Foundation (logline, spine, world rules)...")
+        result = self.generate_foundation(idea=idea)
+        return dspy.Prediction(foundation=result.foundation)
 
 
 # ---------------------------------------------------------------------------
-# Module B — The Director
+# Phase 2 — The Director
 # ---------------------------------------------------------------------------
 
-class DirectorSignature(dspy.Signature):
-    """Breaks a single act into exactly 4 sequences. Each sequence is a
-    self-contained dramatic movement within the act."""
-    world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
-    act_outline: str = dspy.InputField(
-        desc="The act number, title, and summary to break into sequences."
+class MacroStructureSignature(dspy.Signature):
+    """Breaks the Foundation into a 3-Act macro structure.
+    Each act has a phase (Setup/Confrontation/Resolution), title, summary,
+    and a dramatic marker (Inciting Incident / Midpoint / Climax).
+    The acts should form a complete dramatic arc."""
+    foundation: str = dspy.InputField(
+        desc="The Foundation: logline, spine, world rules, and observer."
     )
-    full_outline: str = dspy.InputField(
-        desc="The full 3-act outline for context on the overall story arc."
-    )
-    sequences: List[Sequence] = dspy.OutputField(
-        desc="Exactly 4 sequences for this act."
+    act_breakdowns: List[ActBreakdown] = dspy.OutputField(
+        desc="Exactly 3 act breakdowns forming the macro structure."
     )
 
 
 class Director(dspy.Module):
-    """Module B: Takes an act outline and produces 4 sequences."""
+    """Phase 2: Takes the Foundation and produces the 3-Act macro structure."""
 
     def __init__(self):
         super().__init__()
-        self.generate_sequences = dspy.ChainOfThought(DirectorSignature)
+        self.generate_structure = dspy.ChainOfThought(MacroStructureSignature)
 
     @observe()
-    def forward(self, world_bible: str, act_outline: str, full_outline: str):
-        logger.info("Director: breaking act into 4 sequences...")
-        result = self.generate_sequences(
-            world_bible=world_bible,
-            act_outline=act_outline,
-            full_outline=full_outline,
-        )
-        return dspy.Prediction(sequences=result.sequences)
+    def forward(self, foundation: str):
+        logger.info("Director: generating 3-Act macro structure...")
+        result = self.generate_structure(foundation=foundation)
+        return dspy.Prediction(act_breakdowns=result.act_breakdowns)
 
 
 # ---------------------------------------------------------------------------
-# Module C — The Scripter
+# Phase 3a — The Scripter (sequences + scenes)
 # ---------------------------------------------------------------------------
 
-class ScripterSignature(dspy.Signature):
-    """Generates the beats for exactly 3 scenes within a single sequence.
-    Each scene has 3-5 beats describing what happens, the emotion, and purpose."""
-    world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
-    act_outline: str = dspy.InputField(desc="The act this sequence belongs to.")
+class SequenceSignature(dspy.Signature):
+    """Breaks a single act into sequences. Each sequence is a self-contained
+    dramatic movement — a series of scenes with a unified purpose."""
+    foundation: str = dspy.InputField(desc="The Foundation for world context.")
+    act_breakdown: str = dspy.InputField(
+        desc="The act to break down, including phase, summary, and dramatic marker."
+    )
+    full_structure: str = dspy.InputField(
+        desc="The full 3-act structure for overall story arc context."
+    )
+    previous_context: str = dspy.InputField(
+        desc="Brief summary of everything that happened before this act."
+    )
+    sequences: List[Sequence] = dspy.OutputField(
+        desc="The sequences for this act (typically 2-4)."
+    )
+
+
+class SceneSignature(dspy.Signature):
+    """Generates detailed scenes for a single sequence.
+    Each scene has a location, characters, goal, and structured beats
+    following: Input → Action → Conflict → Climax → Resolution."""
+    foundation: str = dspy.InputField(desc="The Foundation for world context.")
+    act_breakdown: str = dspy.InputField(desc="The act this sequence belongs to.")
     sequence_summary: str = dspy.InputField(
-        desc="The sequence number, title, and summary to break into scenes."
+        desc="The sequence to break into scenes."
     )
     previous_context: str = dspy.InputField(
         desc="Brief summary of everything that happened before this sequence."
     )
-    scene_beats: List[SceneBeats] = dspy.OutputField(
-        desc="Exactly 3 scenes, each with 3-5 narrative beats."
+    scenes: List[Scene] = dspy.OutputField(
+        desc="The scenes for this sequence (typically 2-4), each with structured beats."
     )
 
 
 class Scripter(dspy.Module):
-    """Module C: Takes a sequence and produces beats for 3 scenes."""
+    """Phase 3a: Breaks acts into sequences, sequences into scenes with
+    structured beats (Input → Action → Conflict → Climax → Resolution)."""
 
     def __init__(self):
         super().__init__()
-        self.generate_scene_beats = dspy.ChainOfThought(ScripterSignature)
+        self.generate_sequences = dspy.ChainOfThought(SequenceSignature)
+        self.generate_scenes = dspy.ChainOfThought(SceneSignature)
 
     @observe()
-    def forward(self, world_bible: str, act_outline: str,
-                sequence_summary: str, previous_context: str):
-        logger.info("Scripter: generating beats for 3 scenes...")
-        result = self.generate_scene_beats(
-            world_bible=world_bible,
-            act_outline=act_outline,
+    def forward(self, foundation: str, act_breakdown: str,
+                full_structure: str, previous_context: str):
+        logger.info("Scripter: breaking act into sequences...")
+        seq_result = self.generate_sequences(
+            foundation=foundation,
+            act_breakdown=act_breakdown,
+            full_structure=full_structure,
+            previous_context=previous_context,
+        )
+        return dspy.Prediction(sequences=seq_result.sequences)
+
+    @observe()
+    def generate_scene_beats(self, foundation: str, act_breakdown: str,
+                             sequence_summary: str, previous_context: str):
+        logger.info("Scripter: generating scenes with structured beats...")
+        result = self.generate_scenes(
+            foundation=foundation,
+            act_breakdown=act_breakdown,
             sequence_summary=sequence_summary,
             previous_context=previous_context,
         )
-        return dspy.Prediction(scene_beats=result.scene_beats)
+        return dspy.Prediction(scenes=result.scenes)
 
 
 # ---------------------------------------------------------------------------
-# Module D — The Writer
+# Phase 3b — The Writer (prose)
 # ---------------------------------------------------------------------------
 
 class WriterSignature(dspy.Signature):
-    """Writes vivid, immersive prose for a single scene based on its beats.
-    The output should include dialogue, description, and internal character
-    thoughts as appropriate. The prose should flow naturally and read like
-    a published novel."""
-    world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
+    """Writes vivid, immersive prose for a single scene based on its structured
+    beats. The output should include dialogue, description, and internal
+    character thoughts as appropriate. The prose should flow naturally and
+    read like a published novel. Each beat (Input, Action, Conflict, Climax,
+    Resolution) should be woven into the narrative seamlessly."""
+    foundation: str = dspy.InputField(desc="The Foundation for world context.")
     scene_title: str = dspy.InputField(desc="The title of this scene.")
+    location: str = dspy.InputField(desc="Where this scene takes place.")
+    characters: str = dspy.InputField(desc="Characters present in this scene.")
+    goal: str = dspy.InputField(desc="What the protagonist must accomplish.")
     beats: str = dspy.InputField(
-        desc="The narrative beats to expand into full prose."
+        desc="The structured beats (Input → Action → Conflict → Climax → Resolution)."
     )
     previous_context: str = dspy.InputField(
         desc="Brief summary of everything that happened before this scene."
@@ -193,19 +270,22 @@ class WriterSignature(dspy.Signature):
 
 
 class Writer(dspy.Module):
-    """Module D: Takes beats and produces actual prose paragraphs."""
+    """Phase 3b: Takes structured scene beats and produces prose paragraphs."""
 
     def __init__(self):
         super().__init__()
         self.write_scene = dspy.ChainOfThought(WriterSignature)
 
     @observe()
-    def forward(self, world_bible: str, scene_title: str,
-                beats: str, previous_context: str):
+    def forward(self, foundation: str, scene_title: str, location: str,
+                characters: str, goal: str, beats: str, previous_context: str):
         logger.info("Writer: producing prose for scene '%s'...", scene_title)
         result = self.write_scene(
-            world_bible=world_bible,
+            foundation=foundation,
             scene_title=scene_title,
+            location=location,
+            characters=characters,
+            goal=goal,
             beats=beats,
             previous_context=previous_context,
         )
@@ -213,19 +293,15 @@ class Writer(dspy.Module):
 
 
 # ---------------------------------------------------------------------------
-# Orchestrator — runs the full A → B → C → D pipeline
+# Orchestrator — runs the full Phase 1 → 2 → 3 pipeline
 # ---------------------------------------------------------------------------
 
 class AlternateStoryOrchestrator(dspy.Module):
-    """Runs the full hierarchical pipeline:
-    Architect → Director → Scripter → Writer
+    """Runs the full 3-phase pipeline:
 
-    Produces a complete story by iterating:
-    - 3 acts (from Architect)
-    - 4 sequences per act (from Director)
-    - 3 scenes per sequence (from Scripter)
-    - Prose per scene (from Writer)
-    = 36 scenes total
+    Phase 1 (Foundation):  Idea → Logline + Spine + World Rules + Observer
+    Phase 2 (Structure):   Foundation → 3-Act Breakdown
+    Phase 3 (Execution):   Acts → Sequences → Scenes (with beats) → Prose
     """
 
     def __init__(self):
@@ -235,44 +311,75 @@ class AlternateStoryOrchestrator(dspy.Module):
         self.scripter = Scripter()
         self.writer = Writer()
 
-    def _format_act(self, act: ActOutline) -> str:
-        return f"Act {act.act_number}: {act.title} — {act.summary}"
+    def _format_foundation(self, foundation: Foundation) -> str:
+        rules_str = "\n".join(
+            f"  Rule {r.rule_number}: {r.description}" for r in foundation.world_rules
+        )
+        return (
+            f"Logline: {foundation.logline}\n\n"
+            f"Spine:\n"
+            f"  Internal Want: {foundation.spine.internal_want}\n"
+            f"  External Need: {foundation.spine.external_need}\n\n"
+            f"World Rules:\n{rules_str}\n\n"
+            f"Observer: {foundation.observer}"
+        )
+
+    def _format_act(self, act: ActBreakdown) -> str:
+        return (
+            f"Act {act.act_number} ({act.phase}): {act.title}\n"
+            f"  Summary: {act.summary}\n"
+            f"  Dramatic Marker: {act.dramatic_marker}"
+        )
 
     def _format_sequence(self, seq: Sequence) -> str:
         return f"Sequence {seq.sequence_number}: {seq.title} — {seq.summary}"
 
-    def _format_beats(self, scene: SceneBeats) -> str:
+    def _format_beats(self, scene: Scene) -> str:
         lines = []
         for b in scene.beats:
-            lines.append(f"- {b.beat_summary} [{b.emotion}] ({b.purpose})")
+            lines.append(f"  {b.label}: {b.description}")
         return "\n".join(lines)
 
     @observe()
     def forward(self, idea: str):
-        # --- Module A: Architect ---
+        # --- Phase 1: Foundation ---
+        logger.info("=== Phase 1: The Foundation ===")
         arch_result = self.architect(idea=idea)
-        world_bible = arch_result.world_bible
-        act_outlines = arch_result.act_outlines
+        foundation = arch_result.foundation
+        foundation_str = self._format_foundation(foundation)
 
-        full_outline = "\n".join(self._format_act(a) for a in act_outlines)
-        logger.info("Architect complete: %d acts, world bible length=%d",
-                     len(act_outlines), len(world_bible))
+        logger.info("Foundation complete: logline=%d chars, %d world rules",
+                     len(foundation.logline), len(foundation.world_rules))
 
+        # --- Phase 2: Macro Structure ---
+        logger.info("=== Phase 2: The Macro Structure ===")
+        dir_result = self.director(foundation=foundation_str)
+        act_breakdowns = dir_result.act_breakdowns
+
+        full_structure = "\n\n".join(self._format_act(a) for a in act_breakdowns)
+        logger.info("Macro structure complete: %d acts", len(act_breakdowns))
+
+        # --- Phase 3: Granular Breakdown ---
+        logger.info("=== Phase 3: The Granular Breakdown ===")
         full_story = ""
         running_context = ""
         scene_counter = 0
+        all_sequences = []
+        all_scenes = []
 
-        for act in act_outlines:
+        for act in act_breakdowns:
             act_str = self._format_act(act)
-            logger.info("Processing %s", act_str[:60])
+            logger.info("Processing %s", act_str.split("\n")[0])
 
-            # --- Module B: Director ---
-            dir_result = self.director(
-                world_bible=world_bible,
-                act_outline=act_str,
-                full_outline=full_outline,
+            # Phase 3a: Act → Sequences
+            script_result = self.scripter(
+                foundation=foundation_str,
+                act_breakdown=act_str,
+                full_structure=full_structure,
+                previous_context=running_context or "This is the beginning of the story.",
             )
-            sequences = dir_result.sequences
+            sequences = script_result.sequences
+            all_sequences.extend(sequences)
 
             full_story += f"\n\n# Act {act.act_number}: {act.title}\n"
 
@@ -280,42 +387,50 @@ class AlternateStoryOrchestrator(dspy.Module):
                 seq_str = self._format_sequence(seq)
                 logger.info("  Processing %s", seq_str[:60])
 
-                # --- Module C: Scripter ---
-                script_result = self.scripter(
-                    world_bible=world_bible,
-                    act_outline=act_str,
+                # Phase 3a: Sequence → Scenes with beats
+                scene_result = self.scripter.generate_scene_beats(
+                    foundation=foundation_str,
+                    act_breakdown=act_str,
                     sequence_summary=seq_str,
                     previous_context=running_context or "This is the beginning of the story.",
                 )
-                scene_beats_list = script_result.scene_beats
+                scenes = scene_result.scenes
+                all_scenes.extend(scenes)
 
-                for scene in scene_beats_list:
+                for scene in scenes:
                     scene_counter += 1
                     beats_str = self._format_beats(scene)
+                    characters_str = ", ".join(scene.characters)
 
-                    # --- Module D: Writer ---
+                    # Phase 3b: Scene → Prose
                     writer_result = self.writer(
-                        world_bible=world_bible,
-                        scene_title=scene.scene_title,
+                        foundation=foundation_str,
+                        scene_title=scene.title,
+                        location=scene.location,
+                        characters=characters_str,
+                        goal=scene.goal,
                         beats=beats_str,
                         previous_context=running_context or "This is the beginning of the story.",
                     )
 
-                    full_story += f"\n\n## Scene {scene_counter}: {scene.scene_title}\n\n"
+                    full_story += f"\n\n## Scene {scene_counter}: {scene.title}\n"
+                    full_story += f"*{scene.location}*\n\n"
                     full_story += writer_result.scene_prose
 
                     # Update running context
+                    beat_summary = "; ".join(b.description for b in scene.beats)
                     running_context += (
-                        f"Scene {scene_counter} ({scene.scene_title}): "
-                        f"{'; '.join(b.beat_summary for b in scene.beats)}\n"
+                        f"Scene {scene_counter} ({scene.title} at {scene.location}): "
+                        f"{beat_summary}\n"
                     )
 
         logger.info("Story complete: %d scenes generated.", scene_counter)
 
         return dspy.Prediction(
-            world_bible=world_bible,
-            act_outlines=act_outlines,
-            full_outline=full_outline,
+            foundation=foundation,
+            foundation_text=foundation_str,
+            act_breakdowns=act_breakdowns,
+            full_structure=full_structure,
             story=full_story.strip(),
             scene_count=scene_counter,
         )
