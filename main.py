@@ -18,12 +18,20 @@ import argparse
 import logging
 from dotenv import load_dotenv
 from logging_config import setup_logging
+from dspy_optimization import try_load_optimized_module
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 console = Console()
+
+
+def _env_flag_true(name: str, default: bool = False) -> bool:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def configure_dspy(
@@ -75,6 +83,36 @@ def configure_dspy(
 
     dspy.configure(lm=lm)
 
+
+def initialize_text_generators(
+    *,
+    use_optimized: bool = False,
+    optimized_manifest: str | None = None,
+):
+    generators = {
+        "QuestionGenerator": QuestionGenerator(),
+        "CorePremiseGenerator": CorePremiseGenerator(),
+        "SpineTemplateGenerator": SpineTemplateGenerator(),
+        "WorldBibleQuestionGenerator": WorldBibleQuestionGenerator(),
+        "WorldBibleGenerator": WorldBibleGenerator(),
+        "StoryGenerator": StoryGenerator(),
+    }
+
+    if use_optimized:
+        logger.info(
+            "Optimized text modules enabled (manifest=%r)",
+            optimized_manifest,
+        )
+        for module_name, module in generators.items():
+            try_load_optimized_module(
+                module,
+                module_name=module_name,
+                manifest_path=optimized_manifest,
+                logger=logger,
+            )
+
+    return generators
+
 def get_answers_for_questions(questions_with_answers) -> str:
     qa_pairs = []
     for i, qa in enumerate(questions_with_answers):
@@ -104,6 +142,18 @@ def main():
     parser.add_argument("--memory-cache", action=argparse.BooleanOptionalAction, default=True, help="Enable/disable DSPy in-memory cache.")
     parser.add_argument("--cache-dir", type=str, default=os.environ.get("DSPY_CACHE_DIR"), help="Override DSPy disk cache directory.")
     parser.add_argument(
+        "--use-optimized",
+        action=argparse.BooleanOptionalAction,
+        default=_env_flag_true("DSPY_USE_OPTIMIZED", default=False),
+        help="Enable/disable loading optimized text-pipeline module artifacts.",
+    )
+    parser.add_argument(
+        "--optimized-manifest",
+        type=str,
+        default=os.environ.get("DSPY_OPTIMIZED_MANIFEST", ".tmp/dspy_optimized/text_pipeline_manifest.json"),
+        help="Path to optimized text-pipeline manifest JSON.",
+    )
+    parser.add_argument(
         "--log-file",
         type=str,
         default=os.environ.get("LOG_FILE", ".tmp/test_debug.log"),
@@ -131,11 +181,15 @@ def main():
     idea = Prompt.ask("\n[bold yellow]What is your initial story idea/prompt?[/bold yellow]")
 
     # Initialize generators
-    q_gen = QuestionGenerator()
-    cp_gen = CorePremiseGenerator()
-    st_gen = SpineTemplateGenerator()
-    wb_gen = WorldBibleGenerator()
-    story_gen = StoryGenerator()
+    generators = initialize_text_generators(
+        use_optimized=args.use_optimized,
+        optimized_manifest=args.optimized_manifest,
+    )
+    q_gen = generators["QuestionGenerator"]
+    cp_gen = generators["CorePremiseGenerator"]
+    st_gen = generators["SpineTemplateGenerator"]
+    wb_gen = generators["WorldBibleGenerator"]
+    story_gen = generators["StoryGenerator"]
 
     core_premise = ""
     while True:
@@ -174,7 +228,7 @@ def main():
 
     # 5. Ask World Bible Questions
     console.print("\n[italic]Generating follow-up questions to help flesh out the World Bible...[/italic]")
-    wb_q_gen = WorldBibleQuestionGenerator()
+    wb_q_gen = generators["WorldBibleQuestionGenerator"]
     wb_q_result = wb_q_gen(core_premise=core_premise, spine_template=spine_template)
 
     wb_qa_text = get_answers_for_questions(wb_q_result.questions_with_answers)

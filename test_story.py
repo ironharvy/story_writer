@@ -17,6 +17,7 @@ from story_modules import (
     SceneImagePromptGenerator,
 )
 from world_bible_modules import WorldBibleGenerator
+from main import initialize_text_generators
 
 load_dotenv()
 
@@ -368,6 +369,33 @@ def test_character_visual_normalizes_description_only_shape():
     assert result.full_prompt == (
         "anime portrait of Kael, scarred child warrior in dark combat harness"
     )
+
+
+def test_initialize_text_generators_uses_loader_when_enabled():
+    with patch("main.try_load_optimized_module", return_value=True) as mocked_loader:
+        generators = initialize_text_generators(
+            use_optimized=True,
+            optimized_manifest=".tmp/dspy_optimized/text_pipeline_manifest.json",
+        )
+
+    expected_module_names = {
+        "QuestionGenerator",
+        "CorePremiseGenerator",
+        "SpineTemplateGenerator",
+        "WorldBibleQuestionGenerator",
+        "WorldBibleGenerator",
+        "StoryGenerator",
+    }
+    assert set(generators.keys()) == expected_module_names
+    assert mocked_loader.call_count == len(expected_module_names)
+
+
+def test_initialize_text_generators_skips_loader_when_disabled():
+    with patch("main.try_load_optimized_module") as mocked_loader:
+        generators = initialize_text_generators(use_optimized=False)
+
+    assert "StoryGenerator" in generators
+    mocked_loader.assert_not_called()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test AI DSPy Story Writer")
