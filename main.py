@@ -19,6 +19,7 @@ import logging
 from dotenv import load_dotenv
 from logging_config import setup_logging
 from dspy_optimization import try_load_optimized_module
+from postprocessing import find_similar_sentences, format_report
 
 load_dotenv()
 
@@ -161,6 +162,18 @@ def main():
     )
     parser.add_argument("-v", "--verbose", action="count", default=0,
                         help="Logging verbosity: -v INFO, -vv LLM debug, -vvv full firehose.")
+    parser.add_argument(
+        "--check-similar",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run similar-sentence detection on the final story (default: enabled).",
+    )
+    parser.add_argument(
+        "--similar-threshold",
+        type=float,
+        default=0.65,
+        help="Similarity threshold (0-1) for flagging sentence pairs (default: 0.65).",
+    )
 
     args = parser.parse_args()
 
@@ -327,7 +340,21 @@ def main():
             except Exception as e:
                 console.print(f"  [red]Failed to generate scene for chapter {i}: {e}[/red]")
 
-    # 10. Save output to markdown
+    # 10. Post-processing: detect similar sentences
+    if args.check_similar:
+        console.print("\n[bold yellow]--- Similar Sentence Check ---[/bold yellow]")
+        similar_pairs = find_similar_sentences(
+            story_result.story, threshold=args.similar_threshold,
+        )
+        report = format_report(similar_pairs)
+        console.print(report)
+        if similar_pairs:
+            logger.warning(
+                "Detected %d similar sentence pair(s) in generated story",
+                len(similar_pairs),
+            )
+
+    # 11. Save output to markdown
     os.makedirs(args.output_dir, exist_ok=True)
     output_filename = os.path.join(args.output_dir, "story_output.md")
     logger.info(f"Saving story output to {output_filename}...")
