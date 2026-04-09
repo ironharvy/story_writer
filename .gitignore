@@ -5,7 +5,8 @@ __pycache__/
 .gitignore
 images/
 .logs/
-.claude/
+.claude/*
+!.claude/skills/
 .cursor/
 .cursorrules/
 .pytest_cache/
