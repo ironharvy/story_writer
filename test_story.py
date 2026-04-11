@@ -351,6 +351,47 @@ def test_clean_chapter_title_strips_markdown_and_prefixes(raw_title, expected_cl
     assert _clean_chapter_title(raw_title) == expected_clean
 
 
+def test_normalize_plot_timeline_deduplicates_contiguous_act_headings():
+    from world_bible_modules import _normalize_plot_timeline
+
+    raw_timeline = "\n".join(
+        [
+            "Act 1 - Setup",
+            "Act 1 - Setup",
+            "- Hero receives the call.",
+            "Act 2: Confrontation",
+            "Act 2: Confrontation",
+            "- Stakes escalate.",
+        ]
+    )
+
+    normalized = _normalize_plot_timeline(raw_timeline)
+    assert normalized == "\n".join(
+        [
+            "Act 1 - Setup",
+            "- Hero receives the call.",
+            "Act 2: Confrontation",
+            "- Stakes escalate.",
+        ]
+    )
+
+
+def test_normalize_plot_timeline_keeps_noncontiguous_repeated_act_headings():
+    from world_bible_modules import _normalize_plot_timeline
+
+    raw_timeline = "\n".join(
+        [
+            "Act 1 - Setup",
+            "- First beat.",
+            "Act 1 - Setup",
+            "- Later callback beat.",
+        ]
+    )
+
+    normalized = _normalize_plot_timeline(raw_timeline)
+    assert normalized == raw_timeline
+
+
 def test_question_with_answer_does_not_promote_unrelated_fields():
     with pytest.raises(Exception):
         QuestionWithAnswer.model_validate({"question": "Why?", "confidence": 0.92})

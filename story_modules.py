@@ -318,7 +318,7 @@ class StoryGenerator(dspy.Module):
     @observe()
     def forward(self, core_premise: str, spine_template: str, world_bible: str):
         chapters_to_write = []
-        for act in ["Act 1", "Act 2", "Act 3"]:
+        for act in ["Act 1 - Setup", "Act 2 - Confrontation", "Act 3 - Resolution"]:
             logger.debug("Generating chapter plan for %s...", act)
             chapter_plan_result = self.generate_chapter_plan(
                 core_premise=core_premise,
@@ -345,7 +345,7 @@ class StoryGenerator(dspy.Module):
             try:
                 random_detail = self._maybe_generate_random_detail(world_bible, chapter_desc)
                 if random_detail:
-                    logger.info("Chapter %d: injecting probabilistic detail.", i + 1)
+                    logger.info("Chapter %d: injecting probabilistic detail: %.300s", i + 1, random_detail)
 
                 result = self.write_chapter(
                     world_bible=world_bible,
@@ -356,6 +356,7 @@ class StoryGenerator(dspy.Module):
                     random_detail=random_detail,
                 )
 
+                logger.debug("Chapter %d written: %.300s", i + 1, result.chapter_text)
                 chapter_text = result.chapter_text
                 # Strip markdown wrappers and redundant "Chapter N:" prefixes.
                 clean_title = _clean_chapter_title(result.title)

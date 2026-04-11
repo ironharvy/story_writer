@@ -1,7 +1,37 @@
 import dspy
+import re
 from typing import List
 from story_modules import QuestionWithAnswer
 from _compat import observe
+
+
+_act_heading_re = re.compile(
+    r"^\s*(?:#+\s*)?Act\s+(\d+)\b(?:\s*[-:–—]\s*(.*))?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _normalize_plot_timeline(plot_timeline: str) -> str:
+    lines = (plot_timeline or "").splitlines()
+    normalized_lines: list[str] = []
+    last_emitted_act_number: str | None = None
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        match = _act_heading_re.match(line)
+        if match:
+            act_number = match.group(1)
+            if act_number == last_emitted_act_number:
+                continue
+            normalized_lines.append(raw_line.rstrip())
+            last_emitted_act_number = act_number
+            continue
+
+        normalized_lines.append(raw_line.rstrip())
+        if line:
+            last_emitted_act_number = None
+
+    return "\n".join(normalized_lines).strip()
 
 class GenerateWorldBibleQuestionsSignature(dspy.Signature):
     """Generates a few follow-up questions to ask the user to help flesh out the world bible before generating the final version."""
@@ -92,11 +122,13 @@ class WorldBibleGenerator(dspy.Module):
             locations=locations_result.locations
         )
 
+        normalized_plot_timeline = _normalize_plot_timeline(timeline_result.plot_timeline)
+
         world_bible = (
             f"### Rules of the World\n{rules_result.world_rules}\n\n"
             f"### Characters\n{characters_result.characters}\n\n"
             f"### Locations\n{locations_result.locations}\n\n"
-            f"### Plot Timeline\n{timeline_result.plot_timeline}"
+            f"### Plot Timeline\n{normalized_plot_timeline}"
         )
 
         return dspy.Prediction(
@@ -104,5 +136,5 @@ class WorldBibleGenerator(dspy.Module):
             world_rules=rules_result.world_rules,
             characters=characters_result.characters,
             locations=locations_result.locations,
-            plot_timeline=timeline_result.plot_timeline
+            plot_timeline=normalized_plot_timeline
         )
