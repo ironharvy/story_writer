@@ -2,9 +2,8 @@ import dspy
 import logging
 import random
 import re
-from typing import List
+from typing import Any, List
 from pydantic import BaseModel, Field, model_validator
-from typing import Any
 from _compat import observe
 
 # Probability that a chapter receives a random creative flourish (0.0 – 1.0).
@@ -18,6 +17,8 @@ _RANDOM_DETAIL_TYPES = [
     "an unusual yet revealing character habit, nervous tic, or physical detail",
     "a brief, surprising background element that enriches the world without derailing the plot",
 ]
+
+_chapter_heading_re = re.compile(r"^###\s+Chapter\s+\d+:.*$", re.MULTILINE)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,34 @@ def _normalize_chapter_plan_entries(chapters: list[str]) -> list[str]:
 
     logger.debug("Normalized chapter plan entries: %s", normalized)
     return normalized
+
+
+def _split_story_into_chapters(story_text: str) -> list[tuple[str, str]]:
+    chapter_matches = list(_chapter_heading_re.finditer(story_text or ""))
+    if not chapter_matches:
+        return []
+
+    chapters: list[tuple[str, str]] = []
+    for index, match in enumerate(chapter_matches):
+        body_start = match.end()
+        body_end = (
+            chapter_matches[index + 1].start()
+            if index + 1 < len(chapter_matches)
+            else len(story_text)
+        )
+        header = match.group(0).strip()
+        body = story_text[body_start:body_end].strip()
+        chapters.append((header, body))
+
+    return chapters
+
+
+def _compose_story_from_chapters(chapters: list[tuple[str, str]]) -> str:
+    chapter_blocks = [
+        f"{chapter_header}\n\n{chapter_body}".strip()
+        for chapter_header, chapter_body in chapters
+    ]
+    return "\n\n".join(chapter_blocks).strip()
 
 class QuestionWithAnswer(BaseModel):
     question: str = Field(description="The interrogative question.")
@@ -274,6 +303,89 @@ class GenerateSingleChapterSignature(dspy.Signature):
     random_detail: str = dspy.InputField(desc="An optional creative flourish to weave naturally into the chapter. Empty string means no special detail is required.")
     title: str = dspy.OutputField(desc="The title of the chapter.")
     chapter_text: str = dspy.OutputField(desc="A long, immersive chapter with dialogue and description.")
+
+
+class GenerateChapterInpaintingSignature(dspy.Signature):
+    """Expands an existing chapter with richer detail while preserving plot facts."""
+
+    world_bible: str = dspy.InputField(
+        desc="The comprehensive World Bible describing setting, rules, and characters.",
+    )
+    chapter_plan: str = dspy.InputField(
+        desc="The full chapter plan for continuity and pacing context.",
+    )
+    chapter_header: str = dspy.InputField(
+        desc="The chapter markdown header (e.g., '### Chapter 4: ...').",
+    )
+    chapter_text: str = dspy.InputField(
+        desc="The already-written chapter text to be expanded.",
+    )
+    expansion_ratio: float = dspy.InputField(
+        desc="Target expansion ratio. Add detail to approach this length multiplier without bloat.",
+    )
+    expanded_chapter_text: str = dspy.OutputField(
+        desc=(
+            "A more detailed chapter that preserves all major events, outcomes, and continuity. "
+            "Do not introduce major new plot points."
+        ),
+    )
+
+
+class ChapterInpaintingGenerator(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.expand_chapter = dspy.ChainOfThought(GenerateChapterInpaintingSignature)
+
+    @observe()
+    def forward(
+        self,
+        story: str,
+        world_bible: str,
+        chapter_plan: str,
+        expansion_ratio: float = 1.35,
+    ):
+        if expansion_ratio <= 1.0:
+            raise ValueError(f"expansion_ratio must be > 1.0, got {expansion_ratio}")
+
+        chapters = _split_story_into_chapters(story)
+        if not chapters:
+            logger.warning("Chapter inpainting skipped: no chapter headings detected.")
+            return dspy.Prediction(
+                story=story,
+                expanded_chapters=0,
+                total_chapters=0,
+            )
+
+        expanded_chapters: list[tuple[str, str]] = []
+        expanded_count = 0
+        for chapter_header, chapter_text in chapters:
+            try:
+                result = self.expand_chapter(
+                    world_bible=world_bible,
+                    chapter_plan=chapter_plan,
+                    chapter_header=chapter_header,
+                    chapter_text=chapter_text,
+                    expansion_ratio=expansion_ratio,
+                )
+                expanded_chapter_text = result.expanded_chapter_text.strip()
+                if expanded_chapter_text:
+                    expanded_count += 1
+                    expanded_chapters.append((chapter_header, expanded_chapter_text))
+                else:
+                    expanded_chapters.append((chapter_header, chapter_text))
+            except Exception as exc:
+                logger.warning(
+                    "Chapter inpainting failed for %s: %s",
+                    chapter_header,
+                    exc,
+                )
+                expanded_chapters.append((chapter_header, chapter_text))
+
+        return dspy.Prediction(
+            story=_compose_story_from_chapters(expanded_chapters),
+            expanded_chapters=expanded_count,
+            total_chapters=len(chapters),
+        )
 
 class StoryGenerator(dspy.Module):
     def __init__(self, random_detail_probability: float = RANDOM_DETAIL_PROBABILITY):
