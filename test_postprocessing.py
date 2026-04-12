@@ -1,4 +1,4 @@
-from postprocessing import extract_sentences, find_similar_sentences, format_report
+from postprocessing import _normalize, extract_sentences, find_similar_sentences, format_report
 
 
 SAMPLE_STORY = (
@@ -7,6 +7,31 @@ SAMPLE_STORY = (
     "She drew her sword and advanced carefully. The air smelled of pine and damp earth. "
     "She drew her sword and moved forward carefully. Nothing stirred in the underbrush."
 )
+
+
+def test_normalize_preserves_leading_quote():
+    assert _normalize('"Hello there," she said warmly') == '"hello there," she said warmly'
+
+
+def test_normalize_preserves_leading_parenthesis():
+    assert _normalize("(Whispering) she crept forward") == "(whispering) she crept forward"
+
+
+def test_normalize_strips_markdown_heading():
+    assert _normalize("## The Grand Adventure") == "the grand adventure"
+
+
+def test_normalize_strips_unordered_list_marker():
+    assert _normalize("- item one goes here") == "item one goes here"
+    assert _normalize("* item two goes here") == "item two goes here"
+
+
+def test_normalize_strips_ordered_list_marker():
+    assert _normalize("1. first ordered item") == "first ordered item"
+
+
+def test_normalize_strips_blockquote():
+    assert _normalize("> quoted text here") == "quoted text here"
 
 
 def test_extract_sentences_filters_short_fragments():

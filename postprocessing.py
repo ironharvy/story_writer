@@ -13,13 +13,28 @@ logger = logging.getLogger(__name__)
 # Sentence-ending punctuation pattern
 _SENTENCE_SPLIT_RE = re.compile(r'(?<=[.!?])\s+')
 
-# Markdown artifacts to strip before comparison
-_MARKDOWN_NOISE_RE = re.compile(r'^[\s#*_>\-\d.]+')
+# Markdown/list artifacts to strip before comparison.
+# Each pattern targets a specific construct so that meaningful opening
+# punctuation (quotes, parentheses, etc.) is never consumed.
+_MARKDOWN_NOISE_RES = [
+    re.compile(r'^\s*#{1,6}\s+'),   # headings:  ## Foo
+    re.compile(r'^\s*[-*]\s+'),     # unordered list markers:  - Foo / * Foo
+    re.compile(r'^\s*\d+\.\s+'),    # ordered list markers:  1. Foo
+    re.compile(r'^\s*>\s*'),        # blockquotes:  > Foo
+    re.compile(r'^\s*[_*]{1,3}(?=[A-Za-z"\'])'),  # leading emphasis: _Foo / **Foo
+]
 
 
 def _normalize(sentence: str) -> str:
-    """Lowercase, strip markdown noise and extra whitespace for comparison."""
-    s = _MARKDOWN_NOISE_RE.sub('', sentence)
+    """Lowercase, strip markdown noise and extra whitespace for comparison.
+
+    Meaningful leading punctuation (opening quotes, parentheses, etc.) is
+    preserved so that similarity matching remains faithful to the prose.
+    """
+    s = sentence
+    for pat in _MARKDOWN_NOISE_RES:
+        s = pat.sub('', s)
+    s = s.strip()
     return ' '.join(s.lower().split())
 
 
