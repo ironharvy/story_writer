@@ -6,6 +6,7 @@ from story_modules import (
     CorePremiseGenerator,
     SpineTemplateGenerator,
     StoryGenerator,
+    ChapterInpaintingGenerator,
     CharacterVisualDescriber,
     SceneImagePromptGenerator,
 )
@@ -97,6 +98,7 @@ def initialize_text_generators(
         "WorldBibleQuestionGenerator": WorldBibleQuestionGenerator(),
         "WorldBibleGenerator": WorldBibleGenerator(),
         "StoryGenerator": StoryGenerator(),
+        "ChapterInpaintingGenerator": ChapterInpaintingGenerator(),
     }
 
     if use_optimized:
@@ -174,6 +176,18 @@ def main():
         default=0.65,
         help="Similarity threshold (0-1) for flagging sentence pairs (default: 0.65).",
     )
+    parser.add_argument(
+        "--inpaint-chapters",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Run a post-generation chapter expansion pass for richer detail (default: disabled).",
+    )
+    parser.add_argument(
+        "--inpaint-ratio",
+        type=float,
+        default=1.35,
+        help="Target chapter expansion ratio for inpainting (must be > 1.0, default: 1.35).",
+    )
 
     args = parser.parse_args()
 
@@ -203,6 +217,7 @@ def main():
     st_gen = generators["SpineTemplateGenerator"]
     wb_gen = generators["WorldBibleGenerator"]
     story_gen = generators["StoryGenerator"]
+    chapter_inpainting_gen = generators["ChapterInpaintingGenerator"]
 
     core_premise = ""
     while True:
@@ -313,13 +328,34 @@ def main():
     console.print("\n[bold red]--- Final Story ---[/bold red]")
     console.print(story_result.story)
 
+    final_story_text = story_result.story
+    if args.inpaint_chapters:
+        if args.inpaint_ratio <= 1.0:
+            parser.error("--inpaint-ratio must be greater than 1.0")
+
+        console.print("\n[italic]Running chapter inpainting pass...[/italic]")
+        inpaint_result = chapter_inpainting_gen(
+            story=story_result.story,
+            world_bible=world_bible,
+            chapter_plan=story_result.chapter_plan,
+            expansion_ratio=args.inpaint_ratio,
+        )
+        final_story_text = inpaint_result.story
+
+        console.print(
+            "[italic]Chapter inpainting complete "
+            f"({inpaint_result.expanded_chapters}/{inpaint_result.total_chapters} chapters expanded).[/italic]"
+        )
+        console.print("\n[bold red]--- Inpainted Story ---[/bold red]")
+        console.print(final_story_text)
+
     # 9. Generate scene illustrations for each chapter (if images enabled)
     scene_image_paths = {}
     if args.enable_images and image_gen:
         console.print("\n[italic]Generating scene illustrations for each chapter...[/italic]")
         scene_prompt_gen = SceneImagePromptGenerator()
 
-        chapters = story_result.story.split("### Chapter ")
+        chapters = final_story_text.split("### Chapter ")
         chapters = [c for c in chapters if c.strip()]
 
         reference_paths = list(character_portrait_paths.values())
@@ -344,7 +380,7 @@ def main():
     if args.check_similar:
         console.print("\n[bold yellow]--- Similar Sentence Check ---[/bold yellow]")
         similar_pairs = find_similar_sentences(
-            story_result.story, threshold=args.similar_threshold,
+            final_story_text, threshold=args.similar_threshold,
         )
         report = format_report(similar_pairs)
         console.print(report)
@@ -386,7 +422,7 @@ def main():
         f.write("## Final Story\n")
 
         if scene_image_paths:
-            chapters = story_result.story.split("### Chapter ")
+            chapters = final_story_text.split("### Chapter ")
             chapters = [c for c in chapters if c.strip()]
             for i, chapter_text in enumerate(chapters, start=1):
                 f.write(f"\n\n### Chapter {chapter_text}")
@@ -394,7 +430,7 @@ def main():
                 if scene:
                     f.write(f"\n\n![Chapter {i} scene]({scene})\n")
         else:
-            f.write(f"{story_result.story}\n")
+            f.write(f"{final_story_text}\n")
 
     console.print(f"\n[bold magenta]Story generation complete! Results saved to {output_filename}[/bold magenta]")
 

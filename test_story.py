@@ -13,6 +13,7 @@ from story_modules import (
     CorePremiseGenerator,
     SpineTemplateGenerator,
     StoryGenerator,
+    ChapterInpaintingGenerator,
     CharacterVisualDescriber,
     SceneImagePromptGenerator,
 )
@@ -49,8 +50,13 @@ class MockLM(dspy.LM):
             return ['```json\n{"image_prompt": "anime scene, a warrior with short black hair and amber eyes standing in a dark cathedral, dramatic lighting"}\n```']
         if "[[ ## random_detail ## ]]" in content or ('"random_detail"' in content and "naturally woven" in content):
             return ['```json\n{"random_detail": "A small paper unicorn sat perched on the corner of the desk, its horn casting a faint shadow in the candlelight."}\n```']
-        if "[[ ## chapter_text ## ]]" in content or ('"chapter_text"' in content and "immersive chapter" in content):
+        if (
+            "[[ ## chapter_text ## ]]" in content
+            or ('"chapter_text"' in content and "immersive chapter" in content)
+        ) and '"expanded_chapter_text"' not in content:
             return ['```json\n{"reasoning": "Mock reasoning", "title": "Mock Title", "chapter_text": "Mock chapter text"}\n```']
+        if "[[ ## expanded_chapter_text ## ]]" in content or '"expanded_chapter_text"' in content:
+            return ['```json\n{"reasoning": "Mock reasoning", "expanded_chapter_text": "Mock expanded chapter text with richer detail and slower pacing."}\n```']
         if "[[ ## story ## ]]" in content or ('"story"' in content and "The final generated story" in content):
             return ['```json\n{"story": "Mock final story"}\n```']
         if "[[ ## enhancers_guide ## ]]" in content or ('"enhancers_guide"' in content and "evaluating which story enhancers" in content):
@@ -94,8 +100,10 @@ class MockLM(dspy.LM):
             return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": ["Chapter 1: Discovery", "Chapter 2: Training", "Chapter 3: Revelation", "Chapter 4: Escape"]}\n```']
         elif "enhancers_guide" in content and "story" not in content and "chapter_text" not in content:
             return ['```json\n{"reasoning": "Mock reasoning", "enhancers_guide": "Mock enhancers guide"}\n```']
-        elif "chapter_text" in content:
+        elif "chapter_text" in content and "expanded_chapter_text" not in content:
             return ['```json\n{"reasoning": "Mock reasoning", "title": "Mock Title", "chapter_text": "Mock chapter text"}\n```']
+        elif "expanded_chapter_text" in content:
+            return ['```json\n{"reasoning": "Mock reasoning", "expanded_chapter_text": "Mock expanded chapter text with richer detail and slower pacing."}\n```']
         elif "story" in content:
             return ['```json\n{"story": "Mock final story"}\n```']
         return ["Mock response"]
@@ -426,6 +434,7 @@ def test_initialize_text_generators_uses_loader_when_enabled():
         "WorldBibleQuestionGenerator",
         "WorldBibleGenerator",
         "StoryGenerator",
+        "ChapterInpaintingGenerator",
     }
     assert set(generators.keys()) == expected_module_names
     assert mocked_loader.call_count == len(expected_module_names)
@@ -436,7 +445,43 @@ def test_initialize_text_generators_skips_loader_when_disabled():
         generators = initialize_text_generators(use_optimized=False)
 
     assert "StoryGenerator" in generators
+    assert "ChapterInpaintingGenerator" in generators
     mocked_loader.assert_not_called()
+
+
+def test_chapter_inpainting_generator_expands_detected_chapters():
+    dspy.configure(lm=MockLM())
+    inpainting = ChapterInpaintingGenerator()
+    story = (
+        "### Chapter 1: Arrival\n\nThe caravan reached the city gates at dusk.\n\n"
+        "### Chapter 2: The Oath\n\nShe swore to protect the archive."
+    )
+
+    result = inpainting(
+        story=story,
+        world_bible="Mock world bible",
+        chapter_plan="Chapter 1: Arrival\nChapter 2: The Oath",
+        expansion_ratio=1.3,
+    )
+
+    assert result.total_chapters == 2
+    assert result.expanded_chapters == 2
+    assert "### Chapter 1: Arrival" in result.story
+    assert "### Chapter 2: The Oath" in result.story
+    assert "Mock expanded chapter text" in result.story
+
+
+def test_chapter_inpainting_generator_rejects_invalid_ratio():
+    dspy.configure(lm=MockLM())
+    inpainting = ChapterInpaintingGenerator()
+
+    with pytest.raises(ValueError, match="expansion_ratio must be > 1.0"):
+        inpainting(
+            story="### Chapter 1: Start\n\nShort text.",
+            world_bible="Mock world bible",
+            chapter_plan="Chapter 1: Start",
+            expansion_ratio=1.0,
+        )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test AI DSPy Story Writer")
