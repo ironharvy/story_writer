@@ -18,7 +18,7 @@ from story_modules import (
     SceneImagePromptGenerator,
 )
 from world_bible_modules import WorldBibleGenerator
-from main import initialize_text_generators
+from engine.config import initialize_text_generators
 
 load_dotenv()
 
@@ -421,7 +421,7 @@ def test_character_visual_normalizes_description_only_shape():
 
 
 def test_initialize_text_generators_uses_loader_when_enabled():
-    with patch("main.try_load_optimized_module", return_value=True) as mocked_loader:
+    with patch("engine.config.try_load_optimized_module", return_value=True) as mocked_loader:
         generators = initialize_text_generators(
             use_optimized=True,
             optimized_manifest=".tmp/dspy_optimized/text_pipeline_manifest.json",
@@ -441,7 +441,7 @@ def test_initialize_text_generators_uses_loader_when_enabled():
 
 
 def test_initialize_text_generators_skips_loader_when_disabled():
-    with patch("main.try_load_optimized_module") as mocked_loader:
+    with patch("engine.config.try_load_optimized_module") as mocked_loader:
         generators = initialize_text_generators(use_optimized=False)
 
     assert "StoryGenerator" in generators

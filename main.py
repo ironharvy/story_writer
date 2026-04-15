@@ -1,25 +1,15 @@
-import dspy
 from rich.console import Console
 from rich.prompt import Prompt, Confirm
 from story_modules import (
-    QuestionGenerator,
-    CorePremiseGenerator,
-    SpineTemplateGenerator,
-    StoryGenerator,
-    ChapterInpaintingGenerator,
     CharacterVisualDescriber,
     SceneImagePromptGenerator,
-)
-from world_bible_modules import (
-    WorldBibleGenerator,
-    WorldBibleQuestionGenerator,
 )
 import os
 import argparse
 import logging
 from dotenv import load_dotenv
+from engine.config import configure_dspy, initialize_text_generators
 from logging_config import setup_logging
-from dspy_optimization import try_load_optimized_module
 from postprocessing import find_similar_sentences, format_report
 
 load_dotenv()
@@ -34,87 +24,6 @@ def _env_flag_true(name: str, default: bool = False) -> bool:
     if raw_value is None:
         return default
     return raw_value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def configure_dspy(
-    model_name: str,
-    api_base: str = None,
-    api_key: str = None,
-    max_tokens: int = 2000,
-    cache: bool = True,
-    memory_cache: bool = True,
-    cache_dir: str | None = None,
-):
-    kwargs = {}
-    if api_base:
-        kwargs["api_base"] = api_base
-    if api_key is not None:
-        kwargs["api_key"] = api_key
-    elif "openai" in model_name.lower():
-        env_key = os.environ.get("OPENAI_API_KEY")
-        if not env_key:
-            logger.warning("OPENAI_API_KEY not found in environment variables. Assuming mock or alternative setup.")
-        else:
-            kwargs["api_key"] = env_key
-    elif "ollama" in model_name.lower():
-        pass
-        #kwargs["api_key"] = "" # Ollama typically doesn't need an API key
-
-    dspy.configure_cache(
-        enable_disk_cache=cache,
-        enable_memory_cache=memory_cache,
-        disk_cache_dir=cache_dir,
-    )
-
-    logger.info(
-        "Configuring DSPy model=%r max_tokens=%s cache=%s memory_cache=%s cache_dir=%r",
-        model_name,
-        max_tokens,
-        cache,
-        memory_cache,
-        cache_dir,
-    )
-    lm = dspy.LM(model_name, max_tokens=max_tokens, cache=cache, **kwargs)
-
-    if os.environ.get("LANGFUSE_PUBLIC_KEY"):
-        try:
-            from openinference.instrumentation.dspy import DSPyInstrumentor
-            DSPyInstrumentor().instrument()
-        except Exception as exc:
-            logger.warning("Langfuse DSPy callback handler unavailable: %s", exc)
-
-    dspy.configure(lm=lm)
-
-
-def initialize_text_generators(
-    *,
-    use_optimized: bool = False,
-    optimized_manifest: str | None = None,
-):
-    generators = {
-        "QuestionGenerator": QuestionGenerator(),
-        "CorePremiseGenerator": CorePremiseGenerator(),
-        "SpineTemplateGenerator": SpineTemplateGenerator(),
-        "WorldBibleQuestionGenerator": WorldBibleQuestionGenerator(),
-        "WorldBibleGenerator": WorldBibleGenerator(),
-        "StoryGenerator": StoryGenerator(),
-        "ChapterInpaintingGenerator": ChapterInpaintingGenerator(),
-    }
-
-    if use_optimized:
-        logger.info(
-            "Optimized text modules enabled (manifest=%r)",
-            optimized_manifest,
-        )
-        for module_name, module in generators.items():
-            try_load_optimized_module(
-                module,
-                module_name=module_name,
-                manifest_path=optimized_manifest,
-                logger=logger,
-            )
-
-    return generators
 
 def get_answers_for_questions(questions_with_answers) -> str:
     qa_pairs = []
