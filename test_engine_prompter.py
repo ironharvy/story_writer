@@ -19,38 +19,36 @@ def test_ask_idea_without_idea_raises():
         ScriptedPrompter().ask_idea()
 
 
-def test_answer_questions_routes_first_call_to_ideation_and_second_to_world_bible():
+def test_answer_questions_pops_batches_in_order():
     prompter = ScriptedPrompter(
         idea="x",
-        ideation_answers=["iA", None, "iC"],
-        world_bible_answers=["wA"],
+        answer_batches=[["iA", None, "iC"], ["wA"]],
     )
 
-    ideation = prompter.answer_questions(_questions(3))
-    assert [qa.user_answer for qa in ideation] == ["iA", None, "iC"]
+    first = prompter.answer_questions(_questions(3))
+    assert [qa.user_answer for qa in first] == ["iA", None, "iC"]
     # Accepting the proposed answer is represented by user_answer=None;
     # effective_answer should fall back to the proposed value.
-    assert ideation[1].effective_answer == "p1"
+    assert first[1].effective_answer == "p1"
 
-    wb = prompter.answer_questions(_questions(1))
-    assert [qa.user_answer for qa in wb] == ["wA"]
+    second = prompter.answer_questions(_questions(1))
+    assert [qa.user_answer for qa in second] == ["wA"]
 
 
-def test_answer_questions_raises_if_script_exhausted():
-    prompter = ScriptedPrompter(idea="x", ideation_answers=["only one"])
-    with pytest.raises(RuntimeError, match="ideation answers"):
+def test_answer_questions_raises_when_batch_too_short():
+    prompter = ScriptedPrompter(idea="x", answer_batches=[["only one"]])
+    with pytest.raises(RuntimeError, match="batch has 1 answers"):
         prompter.answer_questions(_questions(2))
 
 
-def test_answer_questions_raises_on_third_call():
+def test_answer_questions_raises_when_batches_exhausted():
     prompter = ScriptedPrompter(
         idea="x",
-        ideation_answers=["a"],
-        world_bible_answers=["b"],
+        answer_batches=[["a"], ["b"]],
     )
     prompter.answer_questions(_questions(1))
     prompter.answer_questions(_questions(1))
-    with pytest.raises(RuntimeError, match="more than twice"):
+    with pytest.raises(RuntimeError, match="more times than"):
         prompter.answer_questions(_questions(1))
 
 

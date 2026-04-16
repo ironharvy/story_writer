@@ -36,41 +36,37 @@ class PremiseDecision:
 class ScriptedPrompter(Prompter):
     """Replay a pre-collected script of answers.
 
+    The pipeline may call :meth:`answer_questions` an arbitrary number of
+    times (one per ideation round triggered by :meth:`confirm_premise`, plus
+    once for the world-bible questions). We model this as an ordered queue
+    of "answer batches" — each call pops the next batch.
+
     Attributes:
-        idea: the initial story idea supplied up-front.
-        ideation_answers: answers for :meth:`answer_questions` during the
-            ideation step, in call order. Each entry is the full replacement
-            ``user_answer`` string, or ``None`` to accept the proposed answer.
-        world_bible_answers: same shape, used for the world-bible question
-            batch.
+        idea: the initial story idea returned by :meth:`ask_idea`.
+        answer_batches: one list per expected ``answer_questions`` call, in
+            call order. Each inner list must be long enough for the question
+            batch the pipeline hands in; entries are either the full
+            replacement ``user_answer`` string, or ``None`` to accept the
+            proposed answer.
         premise_decisions: iterable of :class:`PremiseDecision` values. The
-            pipeline may loop over premise refinement; the final decision
-            must be ``accept=True`` or the script will raise.
+            final decision must be ``accept=True`` or the script will raise.
         notify_sink: optional callback receiving ``(level, message)`` — lets
             the web worker forward messages as SSE events. Defaults to a
             logger.
     """
 
     idea: str = ""
-    ideation_answers: Sequence[Optional[str]] = field(default_factory=list)
-    world_bible_answers: Sequence[Optional[str]] = field(default_factory=list)
+    answer_batches: Sequence[Sequence[Optional[str]]] = field(default_factory=list)
     premise_decisions: Sequence[PremiseDecision] = field(default_factory=list)
     notify_sink: Optional[Callable[[str, str], None]] = None
 
-    # Private iterators are populated lazily so the dataclass remains
-    # trivially constructible/serializable.
-    _ideation_iter: Optional[Iterator[Optional[str]]] = field(
-        default=None, init=False, repr=False
-    )
-    _wb_iter: Optional[Iterator[Optional[str]]] = field(
+    # Lazy iterators keep the dataclass trivially constructible.
+    _answer_iter: Optional[Iterator[Sequence[Optional[str]]]] = field(
         default=None, init=False, repr=False
     )
     _premise_iter: Optional[Iterator[PremiseDecision]] = field(
         default=None, init=False, repr=False
     )
-    # Toggles between the two batches. The pipeline calls ``answer_questions``
-    # exactly twice (ideation, then world bible), so we route by call order.
-    _questions_call_count: int = field(default=0, init=False, repr=False)
 
     def ask_idea(self) -> str:
         if not self.idea:
@@ -80,37 +76,31 @@ class ScriptedPrompter(Prompter):
         return self.idea
 
     def answer_questions(self, qa: Sequence[QAPair]) -> list[QAPair]:
-        # First call = ideation questions; second = world bible questions.
-        if self._questions_call_count == 0:
-            answers = list(self.ideation_answers)
-            label = "ideation"
-        elif self._questions_call_count == 1:
-            answers = list(self.world_bible_answers)
-            label = "world_bible"
-        else:
+        if self._answer_iter is None:
+            self._answer_iter = iter(self.answer_batches)
+
+        try:
+            answers = list(next(self._answer_iter))
+        except StopIteration as exc:
             raise RuntimeError(
-                "ScriptedPrompter.answer_questions called more than twice; "
-                "the pipeline contract only includes ideation and world-bible "
-                "question batches."
-            )
-        self._questions_call_count += 1
+                "ScriptedPrompter.answer_questions called more times than "
+                "the number of answer_batches provided."
+            ) from exc
 
         if len(answers) < len(qa):
             raise RuntimeError(
-                f"ScriptedPrompter has {len(answers)} {label} answers but was "
+                f"ScriptedPrompter batch has {len(answers)} answers but was "
                 f"asked for {len(qa)}."
             )
 
-        answered: list[QAPair] = []
-        for pair, user_answer in zip(qa, answers):
-            answered.append(
-                QAPair(
-                    question=pair.question,
-                    proposed_answer=pair.proposed_answer,
-                    user_answer=user_answer,
-                )
+        return [
+            QAPair(
+                question=pair.question,
+                proposed_answer=pair.proposed_answer,
+                user_answer=user_answer,
             )
-        return answered
+            for pair, user_answer in zip(qa, answers)
+        ]
 
     def confirm_premise(self, premise: str) -> tuple[bool, str]:
         if self._premise_iter is None:

@@ -1,22 +1,31 @@
-from rich.console import Console
-from rich.prompt import Prompt, Confirm
-from story_modules import (
-    CharacterVisualDescriber,
-    SceneImagePromptGenerator,
-)
-import os
+"""Interactive CLI entrypoint.
+
+This is intentionally thin: it parses command-line flags, wires up a
+:class:`CLIPrompter`, configures DSPy, and hands off to the headless pipeline
+runner in :mod:`engine.pipeline`. All generation logic lives in
+:mod:`engine.stages`.
+"""
+
+from __future__ import annotations
+
 import argparse
 import logging
+import os
+import sys
+
 from dotenv import load_dotenv
+from rich.console import Console
+
+from engine import PipelineOptions, StoryState, run_all
 from engine.config import configure_dspy, initialize_text_generators
+from engine.prompter_cli import CLIPrompter
+from engine.writers import write_markdown
 from logging_config import setup_logging
-from postprocessing import find_similar_sentences, format_report
+
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-
-console = Console()
 
 
 def _env_flag_true(name: str, default: bool = False) -> bool:
@@ -25,23 +34,8 @@ def _env_flag_true(name: str, default: bool = False) -> bool:
         return default
     return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
-def get_answers_for_questions(questions_with_answers) -> str:
-    qa_pairs = []
-    for i, qa in enumerate(questions_with_answers):
-        console.print(f"\n[bold cyan]Question {i+1}:[/bold cyan] {qa.question}")
-        console.print(f"[bold green]Proposed Answer:[/bold green] {qa.proposed_answer}")
 
-        accept = Confirm.ask("Accept this proposed answer?")
-        if accept:
-            user_answer = qa.proposed_answer
-        else:
-            user_answer = Prompt.ask("Enter your answer")
-
-        qa_pairs.append(f"Q: {qa.question}\nA: {user_answer}")
-
-    return "\n\n".join(qa_pairs)
-
-def main():
+def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="AI DSPy Story Writer")
     parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "openai/gpt-4o-mini"), help="The language model to use (e.g., openai/gpt-4o-mini, ollama_chat/llama3). Defaults to MODEL env var.")
     parser.add_argument("--llm-url", type=str, default=os.environ.get("LLM_URL"), help="The custom API base URL (e.g., http://localhost:11434 for Ollama). Defaults to LLM_URL env var.")
@@ -97,10 +91,36 @@ def main():
         default=1.35,
         help="Target chapter expansion ratio for inpainting (must be > 1.0, default: 1.35).",
     )
+    return parser
 
+
+def _options_from_args(args: argparse.Namespace) -> PipelineOptions:
+    return PipelineOptions(
+        enable_images=args.enable_images,
+        replicate_api_token=args.replicate_api_token,
+        inpaint_chapters=args.inpaint_chapters,
+        inpaint_ratio=args.inpaint_ratio,
+        check_similar=args.check_similar,
+        similar_threshold=args.similar_threshold,
+        use_optimized=args.use_optimized,
+        optimized_manifest=args.optimized_manifest,
+    )
+
+
+def main() -> int:
+    parser = _build_arg_parser()
     args = parser.parse_args()
 
     setup_logging(verbosity=args.verbose, log_file=args.log_file)
+
+    options = _options_from_args(args)
+    try:
+        options.validate()
+    except ValueError as exc:
+        # Surface the same CLI-friendly error the old code raised for bad
+        # --inpaint-ratio / missing --replicate-api-token combinations.
+        parser.error(str(exc))
+
     configure_dspy(
         model_name=args.model,
         api_base=args.llm_url,
@@ -111,237 +131,26 @@ def main():
         cache_dir=args.cache_dir,
     )
 
+    console = Console()
     console.print("[bold magenta]Welcome to the AI DSPy Story Writer![/bold magenta]")
 
-    # 1. Prompt for initial idea
-    idea = Prompt.ask("\n[bold yellow]What is your initial story idea/prompt?[/bold yellow]")
-
-    # Initialize generators
+    prompter = CLIPrompter(console=console)
     generators = initialize_text_generators(
         use_optimized=args.use_optimized,
         optimized_manifest=args.optimized_manifest,
     )
-    q_gen = generators["QuestionGenerator"]
-    cp_gen = generators["CorePremiseGenerator"]
-    st_gen = generators["SpineTemplateGenerator"]
-    wb_gen = generators["WorldBibleGenerator"]
-    story_gen = generators["StoryGenerator"]
-    chapter_inpainting_gen = generators["ChapterInpaintingGenerator"]
 
-    core_premise = ""
-    while True:
-        # 2. Ask questions
-        console.print("\n[italic]Generating questions to interrogate your idea...[/italic]")
-        q_result = q_gen(idea=idea)
+    state = StoryState()
+    state = run_all(state, generators, prompter, options)
 
-        qa_text = get_answers_for_questions(q_result.questions_with_answers)
+    output_path = os.path.join(args.output_dir, "story_output.md")
+    write_markdown(state, output_path)
+    console.print(
+        f"\n[bold magenta]Story generation complete! "
+        f"Results saved to {output_path}[/bold magenta]"
+    )
+    return 0
 
-        # 3. Generate Core Premise
-        console.print("\n[italic]Generating Core Premise...[/italic]")
-        cp_result = cp_gen(idea=idea, qa_pairs=qa_text)
-        core_premise = cp_result.core_premise
-
-        console.print("\n[bold magenta]--- Core Premise ---[/bold magenta]")
-        console.print(core_premise)
-        console.print("[bold magenta]--------------------[/bold magenta]")
-
-        refine = Confirm.ask("Do you want to refine this premise? (Choosing 'Yes' will let you provide more details and regenerate, 'No' proceeds)", default=False)
-        if refine:
-            refinement_details = Prompt.ask("Provide more details or changes")
-            idea = f"Original idea: {idea}\nRefinements: {refinement_details}\nCurrent Core Premise: {core_premise}"
-        else:
-            break
-
-    # 4. Generate Spine Template
-    console.print("\n[italic]Generating Spine Template...[/italic]")
-    st_result = st_gen(core_premise=core_premise)
-    spine_template = st_result.spine_template
-
-    console.print("\n[bold blue]--- Spine Template ---[/bold blue]")
-    console.print(spine_template)
-    console.print("[bold blue]--------------------[/bold blue]")
-
-    Confirm.ask("Press Enter to continue to World Bible generation...", default=True, show_default=False)
-
-    # 5. Ask World Bible Questions
-    console.print("\n[italic]Generating follow-up questions to help flesh out the World Bible...[/italic]")
-    wb_q_gen = generators["WorldBibleQuestionGenerator"]
-    wb_q_result = wb_q_gen(core_premise=core_premise, spine_template=spine_template)
-
-    wb_qa_text = get_answers_for_questions(wb_q_result.questions_with_answers)
-
-    # 6. Generate World Bible
-    console.print("\n[italic]Generating World Bible...[/italic]")
-    wb_result = wb_gen(core_premise=core_premise, spine_template=spine_template, user_additions=wb_qa_text)
-    world_bible = wb_result.world_bible
-
-    console.print("\n[bold green]--- World Bible ---[/bold green]")
-    console.print(world_bible)
-    console.print("[bold green]-------------------[/bold green]")
-
-    # 7. Character visuals & portrait generation (if images enabled)
-    character_visuals = []
-    character_portrait_paths = {}
-    character_visuals_summary = ""
-    image_gen = None
-
-    if args.enable_images:
-        if not args.replicate_api_token:
-            console.print("[bold red]Error: --enable-images requires a Replicate API token. "
-                          "Set REPLICATE_API_TOKEN env var or pass --replicate-api-token.[/bold red]")
-            return
-
-        from image_gen import ImageGenerator
-        image_gen = ImageGenerator(api_token=args.replicate_api_token)
-
-        console.print("\n[italic]Generating character visual descriptions...[/italic]")
-        cv_describer = CharacterVisualDescriber()
-        cv_result = cv_describer(world_bible=world_bible)
-        character_visuals = cv_result.character_visuals
-
-        lines = []
-        for cv in character_visuals:
-            console.print(f"\n[bold cyan]{cv.name}:[/bold cyan] {cv.reference_mix}")
-            console.print(f"  [dim]{cv.distinguishing_features}[/dim]")
-            lines.append(
-                f"- {cv.name}: {cv.reference_mix}. {cv.distinguishing_features}"
-            )
-        character_visuals_summary = "\n".join(lines)
-
-        console.print("\n[italic]Generating character portraits...[/italic]")
-        for cv in character_visuals:
-            try:
-                path = image_gen.generate_character_portrait(
-                    prompt=cv.full_prompt, character_name=cv.name
-                )
-                character_portrait_paths[cv.name] = path
-                console.print(f"  [green]Saved portrait:[/green] {path}")
-            except Exception as e:
-                console.print(f"  [red]Failed to generate portrait for {cv.name}: {e}[/red]")
-
-    Confirm.ask("Press Enter to continue to Story generation...", default=True, show_default=False)
-
-    # 8. Generate Story
-    console.print("\n[italic]Generating Story (Arc Outline, Chapter Plan, Final Story)...[/italic]")
-    story_result = story_gen(core_premise=core_premise, spine_template=spine_template, world_bible=world_bible)
-
-    console.print("\n[bold red]--- Level 1: Arc Outline ---[/bold red]")
-    console.print(story_result.arc_outline)
-
-    console.print("\n[bold red]--- Level 2: Chapter Plan ---[/bold red]")
-    console.print(story_result.chapter_plan)
-
-    console.print("\n[bold red]--- Enhancers Guide ---[/bold red]")
-    console.print(story_result.enhancers_guide)
-
-    console.print("\n[bold red]--- Final Story ---[/bold red]")
-    console.print(story_result.story)
-
-    final_story_text = story_result.story
-    if args.inpaint_chapters:
-        if args.inpaint_ratio <= 1.0:
-            parser.error("--inpaint-ratio must be greater than 1.0")
-
-        console.print("\n[italic]Running chapter inpainting pass...[/italic]")
-        inpaint_result = chapter_inpainting_gen(
-            story=story_result.story,
-            world_bible=world_bible,
-            chapter_plan=story_result.chapter_plan,
-            expansion_ratio=args.inpaint_ratio,
-        )
-        final_story_text = inpaint_result.story
-
-        console.print(
-            "[italic]Chapter inpainting complete "
-            f"({inpaint_result.expanded_chapters}/{inpaint_result.total_chapters} chapters expanded).[/italic]"
-        )
-        console.print("\n[bold red]--- Inpainted Story ---[/bold red]")
-        console.print(final_story_text)
-
-    # 9. Generate scene illustrations for each chapter (if images enabled)
-    scene_image_paths = {}
-    if args.enable_images and image_gen:
-        console.print("\n[italic]Generating scene illustrations for each chapter...[/italic]")
-        scene_prompt_gen = SceneImagePromptGenerator()
-
-        chapters = final_story_text.split("### Chapter ")
-        chapters = [c for c in chapters if c.strip()]
-
-        reference_paths = list(character_portrait_paths.values())
-
-        for i, chapter_text in enumerate(chapters, start=1):
-            try:
-                prompt_result = scene_prompt_gen(
-                    chapter_text=chapter_text,
-                    character_visuals_summary=character_visuals_summary,
-                )
-                path = image_gen.generate_scene_illustration(
-                    prompt=prompt_result.image_prompt,
-                    reference_image_paths=reference_paths,
-                    chapter_index=i,
-                )
-                scene_image_paths[i] = path
-                console.print(f"  [green]Chapter {i} scene:[/green] {path}")
-            except Exception as e:
-                console.print(f"  [red]Failed to generate scene for chapter {i}: {e}[/red]")
-
-    # 10. Post-processing: detect similar sentences
-    if args.check_similar:
-        console.print("\n[bold yellow]--- Similar Sentence Check ---[/bold yellow]")
-        similar_pairs = find_similar_sentences(
-            final_story_text, threshold=args.similar_threshold,
-        )
-        report = format_report(similar_pairs)
-        console.print(report)
-        if similar_pairs:
-            logger.warning(
-                "Detected %d similar sentence pair(s) in generated story",
-                len(similar_pairs),
-            )
-
-    # 11. Save output to markdown
-    os.makedirs(args.output_dir, exist_ok=True)
-    output_filename = os.path.join(args.output_dir, "story_output.md")
-    logger.info(f"Saving story output to {output_filename}...")
-    with open(output_filename, "w", encoding="utf-8") as f:
-        f.write("# Story Output\n\n")
-        f.write("## Core Premise\n")
-        f.write(f"{core_premise}\n\n")
-        f.write("## Spine Template\n")
-        f.write(f"{spine_template}\n\n")
-        f.write("## World Bible\n")
-        f.write(f"{world_bible}\n\n")
-
-        if character_visuals:
-            f.write("## Character Visuals\n\n")
-            for cv in character_visuals:
-                f.write(f"### {cv.name}\n")
-                f.write(f"**Reference:** {cv.reference_mix}\n\n")
-                f.write(f"**Features:** {cv.distinguishing_features}\n\n")
-                portrait = character_portrait_paths.get(cv.name)
-                if portrait:
-                    f.write(f"![{cv.name} portrait]({portrait})\n\n")
-
-        f.write("## Arc Outline\n")
-        f.write(f"{story_result.arc_outline}\n\n")
-        f.write("## Chapter Plan\n")
-        f.write(f"{story_result.chapter_plan}\n\n")
-        f.write("## Enhancers Guide\n")
-        f.write(f"{story_result.enhancers_guide}\n\n")
-        f.write("## Final Story\n")
-
-        if scene_image_paths:
-            chapters = final_story_text.split("### Chapter ")
-            chapters = [c for c in chapters if c.strip()]
-            for i, chapter_text in enumerate(chapters, start=1):
-                f.write(f"\n\n### Chapter {chapter_text}")
-                scene = scene_image_paths.get(i)
-                if scene:
-                    f.write(f"\n\n![Chapter {i} scene]({scene})\n")
-        else:
-            f.write(f"{final_story_text}\n")
-
-    console.print(f"\n[bold magenta]Story generation complete! Results saved to {output_filename}[/bold magenta]")
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
