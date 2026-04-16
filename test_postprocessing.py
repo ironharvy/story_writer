@@ -1,4 +1,16 @@
-from postprocessing import _normalize, extract_sentences, find_similar_sentences, format_report
+from postprocessing import (
+    _normalize,
+    context_for_sentence,
+    extract_sentences,
+    extract_world_bible_allowlist,
+    find_overused_words,
+    find_sentences_containing_lemma,
+    find_similar_sentences,
+    format_overused_report,
+    format_report,
+    lemmatize,
+    sentence_contains_lemma,
+)
 
 
 SAMPLE_STORY = (
@@ -98,3 +110,130 @@ def test_format_report_with_pairs():
     assert "1 similar" in report
     assert "85%" in report
     assert "Sentence A" in report
+
+
+# ---------------------------------------------------------------------------
+# Overused-vocabulary detection
+# ---------------------------------------------------------------------------
+
+
+def test_lemmatize_collapses_plurals():
+    assert lemmatize("parchment") == "parchment"
+    assert lemmatize("parchments") == "parchment"
+    assert lemmatize("Parchment") == "parchment"
+
+
+def test_lemmatize_collapses_common_tense():
+    assert lemmatize("whispered") == "whisper"
+    assert lemmatize("whispering") == "whisper"
+
+
+def test_lemmatize_preserves_short_words():
+    # Don't over-stem: 'bus' should stay 'bus', not become 'bu'.
+    assert lemmatize("bus") == "bus"
+    assert lemmatize("pass") == "pass"
+    assert lemmatize("focus") == "focus"
+
+
+def test_find_overused_words_detects_repetition():
+    text = (
+        "His skin was parchment. Her voice was dry as parchment. "
+        "The scroll was parchment too. He held another parchment up. "
+        "It smelled of old parchment. The parchment crumbled."
+    )
+    flagged = find_overused_words(text, max_occurrences=3)
+    lemmas = {entry["lemma"] for entry in flagged}
+    assert "parchment" in lemmas
+    parchment = next(e for e in flagged if e["lemma"] == "parchment")
+    assert parchment["count"] == 6
+
+
+def test_find_overused_words_respects_threshold():
+    text = "Dragon. Dragon. Dragon. Dragon."
+    assert find_overused_words(text, max_occurrences=3) != []
+    assert find_overused_words(text, max_occurrences=10) == []
+
+
+def test_find_overused_words_ignores_stopwords():
+    text = " ".join(["the"] * 20)
+    assert find_overused_words(text, max_occurrences=3) == []
+
+
+def test_find_overused_words_ignores_short_tokens():
+    # 'cat' is only 3 chars; should be filtered by min_word_length.
+    text = "cat " * 20
+    assert find_overused_words(text, max_occurrences=3) == []
+
+
+def test_find_overused_words_honors_allowlist():
+    text = (
+        "Aragorn rode north. Aragorn drew his sword. Aragorn shouted. "
+        "Aragorn charged. Aragorn fell."
+    )
+    allowlist = {"aragorn"}
+    assert find_overused_words(text, max_occurrences=3, allowlist=allowlist) == []
+
+
+def test_extract_world_bible_allowlist_collects_lemmas():
+    wb = "The hero Aragorn travels to Minas Tirith carrying palantiri."
+    allow = extract_world_bible_allowlist(wb)
+    # Proper nouns and invented terms end up in the allowlist.
+    assert "aragorn" in allow
+    assert "tirith" in allow
+    assert "palantiri" in allow or "palantir" in allow
+    # "Minas" is lemmatized (stripped 's') — the lemma form is what gets
+    # stored, and "Minas" in the story will be lemmatized the same way.
+    assert lemmatize("Minas") in allow
+
+
+def test_extract_world_bible_allowlist_handles_empty():
+    assert extract_world_bible_allowlist("") == set()
+    assert extract_world_bible_allowlist(None) == set()
+
+
+def test_find_sentences_containing_lemma_preserves_order():
+    text = (
+        "A parchment lay on the desk. The hero studied the map. "
+        "Another parchment fluttered to the floor. Wind stirred the curtains. "
+        "He lifted the third parchment carefully."
+    )
+    sentences = find_sentences_containing_lemma(text, "parchment")
+    assert len(sentences) == 3
+    assert sentences[0].startswith("A parchment")
+    assert "third parchment" in sentences[2]
+
+
+def test_find_sentences_containing_lemma_matches_inflections():
+    text = "She kept many parchments. One parchment fell. He studied parchment."
+    sentences = find_sentences_containing_lemma(text, "parchment")
+    assert len(sentences) == 3
+
+
+def test_context_for_sentence_returns_neighbors():
+    text = "Alpha alpha alpha. Beta beta beta. Gamma gamma gamma. Delta delta delta."
+    ctx = context_for_sentence(text, "Gamma gamma gamma.", window=1)
+    assert "Beta" in ctx
+    assert "Delta" in ctx
+    assert "Gamma" not in ctx  # target itself is excluded
+
+
+def test_context_for_sentence_missing_sentence_returns_empty():
+    assert context_for_sentence("Some text here.", "Not present.") == ""
+
+
+def test_sentence_contains_lemma_matches_inflected_forms():
+    assert sentence_contains_lemma("She held the parchments tightly.", "parchment")
+    assert sentence_contains_lemma("He whispered softly.", "whisper")
+    assert not sentence_contains_lemma("The scroll was clean.", "parchment")
+
+
+def test_format_overused_report_empty():
+    assert format_overused_report([]) == "No overused words found."
+
+
+def test_format_overused_report_with_entries():
+    report = format_overused_report([
+        {"lemma": "parchment", "count": 7, "tokens": ["parchment"] * 7},
+    ])
+    assert "parchment" in report
+    assert "x7" in report

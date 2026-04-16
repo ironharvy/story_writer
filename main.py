@@ -9,6 +9,7 @@ from story_modules import (
     ChapterInpaintingGenerator,
     CharacterVisualDescriber,
     SceneImagePromptGenerator,
+    VocabularyDeduplicator,
 )
 from world_bible_modules import (
     WorldBibleGenerator,
@@ -20,7 +21,13 @@ import logging
 from dotenv import load_dotenv
 from logging_config import setup_logging
 from dspy_optimization import try_load_optimized_module
-from postprocessing import find_similar_sentences, format_report
+from postprocessing import (
+    extract_world_bible_allowlist,
+    find_overused_words,
+    find_similar_sentences,
+    format_overused_report,
+    format_report,
+)
 
 load_dotenv()
 
@@ -99,6 +106,7 @@ def initialize_text_generators(
         "WorldBibleGenerator": WorldBibleGenerator(),
         "StoryGenerator": StoryGenerator(),
         "ChapterInpaintingGenerator": ChapterInpaintingGenerator(),
+        "VocabularyDeduplicator": VocabularyDeduplicator(),
     }
 
     if use_optimized:
@@ -188,6 +196,24 @@ def main():
         default=1.35,
         help="Target chapter expansion ratio for inpainting (must be > 1.0, default: 1.35).",
     )
+    parser.add_argument(
+        "--check-repetition",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Detect and report over-used vocabulary in the final story (default: enabled).",
+    )
+    parser.add_argument(
+        "--dedupe-vocab",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Rewrite sentences containing over-used vocabulary (costs LLM calls; default: disabled).",
+    )
+    parser.add_argument(
+        "--repetition-threshold",
+        type=int,
+        default=3,
+        help="Flag any distinctive word appearing strictly more than N times (default: 3).",
+    )
 
     args = parser.parse_args()
 
@@ -218,6 +244,7 @@ def main():
     wb_gen = generators["WorldBibleGenerator"]
     story_gen = generators["StoryGenerator"]
     chapter_inpainting_gen = generators["ChapterInpaintingGenerator"]
+    vocab_dedup_gen = generators["VocabularyDeduplicator"]
 
     core_premise = ""
     while True:
@@ -388,6 +415,41 @@ def main():
             logger.warning(
                 "Detected %d similar sentence pair(s) in generated story",
                 len(similar_pairs),
+            )
+
+    # 10b. Post-processing: detect over-used vocabulary (and optionally rewrite)
+    if args.dedupe_vocab:
+        console.print("\n[bold yellow]--- Vocabulary Deduplication ---[/bold yellow]")
+        dedup_result = vocab_dedup_gen(
+            story=final_story_text,
+            world_bible=world_bible,
+            max_occurrences=args.repetition_threshold,
+        )
+        final_story_text = dedup_result.story
+        console.print(format_overused_report(dedup_result.flagged_words))
+        console.print(
+            f"[italic]Rewrote {dedup_result.rewrites} sentence(s) across "
+            f"{len(dedup_result.flagged_words)} flagged word(s).[/italic]"
+        )
+        if dedup_result.flagged_words:
+            logger.info(
+                "Vocabulary dedup rewrote %d sentence(s); flagged=%s",
+                dedup_result.rewrites,
+                [entry["lemma"] for entry in dedup_result.flagged_words],
+            )
+    elif args.check_repetition:
+        console.print("\n[bold yellow]--- Overused Vocabulary Check ---[/bold yellow]")
+        flagged = find_overused_words(
+            final_story_text,
+            max_occurrences=args.repetition_threshold,
+            allowlist=extract_world_bible_allowlist(world_bible),
+        )
+        console.print(format_overused_report(flagged))
+        if flagged:
+            logger.warning(
+                "Detected %d overused word(s) in generated story: %s",
+                len(flagged),
+                [entry["lemma"] for entry in flagged],
             )
 
     # 11. Save output to markdown

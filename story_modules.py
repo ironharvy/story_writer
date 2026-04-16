@@ -387,6 +387,116 @@ class ChapterInpaintingGenerator(dspy.Module):
             total_chapters=len(chapters),
         )
 
+class RewriteSentenceForVocabularySignature(dspy.Signature):
+    """Rewrites a single sentence to eliminate an over-used word.
+
+    The overused word has appeared too many times across the full story.
+    Rewrite the target sentence so it no longer contains the overused word
+    OR any of its plural / tense / possessive variants, while preserving
+    the sentence's meaning, character voice, emotional beat, and continuity
+    with the surrounding prose.  Return ONLY the rewritten sentence — no
+    commentary, no quotes around the output, no leading labels.
+    """
+
+    overused_word: str = dspy.InputField(
+        desc="The lowercase lemma of the word that is repeated too often.",
+    )
+    target_sentence: str = dspy.InputField(
+        desc="The sentence to rewrite.  Leave structure roughly intact.",
+    )
+    surrounding_context: str = dspy.InputField(
+        desc="One or two sentences before and after the target sentence, "
+             "to preserve tone and continuity.",
+    )
+    rewritten_sentence: str = dspy.OutputField(
+        desc="A rewritten version of the target sentence that no longer "
+             "contains the overused word or any inflected form of it.",
+    )
+
+
+class VocabularyDeduplicator(dspy.Module):
+    """Detects and rewrites sentences carrying overused vocabulary.
+
+    Delegates detection to :mod:`postprocessing` and rewrites each extra
+    occurrence (keeping the first) with a single-sentence-scope LLM call.
+    Preserves plot: only sentences containing the overused word are
+    touched, and each rewrite is validated to ensure the offending lemma
+    is gone before it is spliced back in.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.rewrite = dspy.ChainOfThought(RewriteSentenceForVocabularySignature)
+
+    @observe()
+    def forward(
+        self,
+        story: str,
+        world_bible: str = "",
+        max_occurrences: int = 3,
+    ):
+        # Imported here to avoid a circular import at module load time.
+        from postprocessing import (
+            context_for_sentence,
+            extract_world_bible_allowlist,
+            find_overused_words,
+            find_sentences_containing_lemma,
+            sentence_contains_lemma,
+        )
+
+        allowlist = extract_world_bible_allowlist(world_bible)
+        flagged = find_overused_words(
+            story,
+            max_occurrences=max_occurrences,
+            allowlist=allowlist,
+        )
+
+        rewritten_story = story
+        total_rewrites = 0
+        per_word_rewrites: dict[str, int] = {}
+
+        for entry in flagged:
+            lemma = entry["lemma"]
+            sentences = find_sentences_containing_lemma(rewritten_story, lemma)
+            # Keep the first occurrence untouched; rewrite every subsequent one.
+            for target in sentences[1:]:
+                if target not in rewritten_story:
+                    # A previous rewrite already consumed this sentence.
+                    continue
+                context = context_for_sentence(rewritten_story, target)
+                try:
+                    result = self.rewrite(
+                        overused_word=lemma,
+                        target_sentence=target,
+                        surrounding_context=context,
+                    )
+                    new_sentence = (result.rewritten_sentence or "").strip()
+                    if not new_sentence:
+                        continue
+                    if sentence_contains_lemma(new_sentence, lemma):
+                        logger.debug(
+                            "Rewrite for lemma=%r still contains the lemma; skipping.",
+                            lemma,
+                        )
+                        continue
+                    rewritten_story = rewritten_story.replace(target, new_sentence, 1)
+                    total_rewrites += 1
+                    per_word_rewrites[lemma] = per_word_rewrites.get(lemma, 0) + 1
+                except Exception as exc:  # LLM or schema failure — log and carry on.
+                    logger.warning(
+                        "Vocabulary dedup rewrite failed for lemma=%r: %s",
+                        lemma,
+                        exc,
+                    )
+
+        return dspy.Prediction(
+            story=rewritten_story,
+            flagged_words=flagged,
+            rewrites=total_rewrites,
+            rewrites_per_word=per_word_rewrites,
+        )
+
+
 class StoryGenerator(dspy.Module):
     def __init__(self, random_detail_probability: float = RANDOM_DETAIL_PROBABILITY):
         if not (0.0 <= random_detail_probability <= 1.0):

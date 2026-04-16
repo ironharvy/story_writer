@@ -16,6 +16,7 @@ from story_modules import (
     ChapterInpaintingGenerator,
     CharacterVisualDescriber,
     SceneImagePromptGenerator,
+    VocabularyDeduplicator,
 )
 from world_bible_modules import WorldBibleGenerator
 from main import initialize_text_generators
@@ -57,6 +58,8 @@ class MockLM(dspy.LM):
             return ['```json\n{"reasoning": "Mock reasoning", "title": "Mock Title", "chapter_text": "Mock chapter text"}\n```']
         if "[[ ## expanded_chapter_text ## ]]" in content or '"expanded_chapter_text"' in content:
             return ['```json\n{"reasoning": "Mock reasoning", "expanded_chapter_text": "Mock expanded chapter text with richer detail and slower pacing."}\n```']
+        if "[[ ## rewritten_sentence ## ]]" in content or '"rewritten_sentence"' in content:
+            return ['```json\n{"reasoning": "Mock reasoning", "rewritten_sentence": "The vellum sheet crackled softly under his fingertips."}\n```']
         if "[[ ## story ## ]]" in content or ('"story"' in content and "The final generated story" in content):
             return ['```json\n{"story": "Mock final story"}\n```']
         if "[[ ## enhancers_guide ## ]]" in content or ('"enhancers_guide"' in content and "evaluating which story enhancers" in content):
@@ -435,6 +438,7 @@ def test_initialize_text_generators_uses_loader_when_enabled():
         "WorldBibleGenerator",
         "StoryGenerator",
         "ChapterInpaintingGenerator",
+        "VocabularyDeduplicator",
     }
     assert set(generators.keys()) == expected_module_names
     assert mocked_loader.call_count == len(expected_module_names)
@@ -469,6 +473,47 @@ def test_chapter_inpainting_generator_expands_detected_chapters():
     assert "### Chapter 1: Arrival" in result.story
     assert "### Chapter 2: The Oath" in result.story
     assert "Mock expanded chapter text" in result.story
+
+
+def test_vocabulary_deduplicator_rewrites_overused_words():
+    dspy.configure(lm=MockLM())
+    dedup = VocabularyDeduplicator()
+    # "parchment" appears 5 times — above the default threshold of 3.
+    story = (
+        "### Chapter 1: The Scroll\n\n"
+        "His skin was parchment in the candlelight. "
+        "Her voice was dry as parchment across the hall. "
+        "The scroll he unrolled was parchment too, brittle with age. "
+        "He held another parchment up to the flame. "
+        "It smelled of old parchment and ink."
+    )
+
+    result = dedup(story=story, world_bible="", max_occurrences=3)
+
+    assert any(entry["lemma"] == "parchment" for entry in result.flagged_words)
+    # First occurrence is preserved, remaining 4 should be rewritten.
+    assert result.rewrites == 4
+    # The canned mock rewrite replaces occurrences with a vellum sentence.
+    assert "vellum sheet crackled" in result.story
+
+
+def test_vocabulary_deduplicator_respects_world_bible_allowlist():
+    dspy.configure(lm=MockLM())
+    dedup = VocabularyDeduplicator()
+    # "Aragorn" appears many times but is in the world bible — don't touch it.
+    story = (
+        "Aragorn rode. Aragorn drew his sword. Aragorn shouted. "
+        "Aragorn charged. Aragorn fell."
+    )
+    result = dedup(
+        story=story,
+        world_bible="The hero Aragorn leads the company.",
+        max_occurrences=3,
+    )
+
+    assert result.flagged_words == []
+    assert result.rewrites == 0
+    assert result.story == story
 
 
 def test_chapter_inpainting_generator_rejects_invalid_ratio():
