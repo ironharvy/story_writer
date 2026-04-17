@@ -194,7 +194,6 @@ def test_specific_function():
 - `main.py` - CLI entry point and orchestration
 - `story_modules.py` - Core story generation modules
 - `world_bible_modules.py` - World bible generation
-- `alternate_story_modules.py` - 3-phase alternative pipeline
 - `postprocessing.py` - Post-generation utilities
 - `image_gen.py` - Replicate image generation
 - `logging_config.py` - Centralized logging setup

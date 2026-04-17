@@ -378,15 +378,6 @@ class SceneImagePromptGenerator(dspy.Module):
             character_visuals_summary=character_visuals_summary,
         )
 
-
-class GenerateArcOutlineSignature(dspy.Signature):
-    """Generates Level 1: Arc Outline (5-10 major events)."""
-    core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
-    spine_template: str = dspy.InputField(desc="The narrative spine template.")
-    world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
-    act: str = dspy.InputField(desc="The act of the story.")
-    arc_outline: list[str] = dspy.OutputField(desc="Arc Outline (5-10 major events of the act).")
-
 class GenerateChapterPlanSignature(dspy.Signature):
     """Generates Level 2: Chapter Plan (Each arc broken into chapters)."""
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
@@ -520,7 +511,6 @@ class StoryGenerator(dspy.Module):
             )
         super().__init__()
         self.random_detail_probability = random_detail_probability
-        #self.generate_arc_outline = dspy.ChainOfThought(GenerateArcOutlineSignature)
         self.generate_chapter_plan = dspy.ChainOfThought(GenerateChapterPlanSignature)
         self.generate_enhancers = dspy.ChainOfThought(GenerateEnhancersSignature)
         self.generate_random_detail = dspy.Predict(GenerateRandomDetailSignature)
@@ -618,7 +608,6 @@ class StoryGenerator(dspy.Module):
             )
 
         return dspy.Prediction(
-            arc_outline="[REMOVED]",#arc_outline=arc_outline_result.arc_outline,
             chapter_plan=chapter_plan_text,
             enhancers_guide=enhancers_result.enhancers_guide,
             story=full_story.strip()

@@ -63,8 +63,6 @@ class MockLM(dspy.LM):
             return ['```json\n{"reasoning": "Mock reasoning", "enhancers_guide": "Mock enhancers guide"}\n```']
         if "[[ ## chapter_plan ## ]]" in content or ('"chapter_plan"' in content and "Each arc broken into chapters" in content):
             return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": ["Chapter 1: Discovery", "Chapter 2: Training", "Chapter 3: Revelation", "Chapter 4: Escape"]}\n```']
-        if "[[ ## arc_outline ## ]]" in content or ('"arc_outline"' in content and "5-10 major events" in content):
-            return ['```json\n{"reasoning": "Mock reasoning", "arc_outline": ["Inciting incident", "First reversal", "Midpoint escalation", "Darkest turn", "Act climax"]}\n```']
         if "[[ ## world_bible ## ]]" in content or ('"world_bible"' in content and "setting, lore, and characters" in content):
             return ['```json\n{"world_bible": "Mock world bible"}\n```']
         if "[[ ## plot_timeline ## ]]" in content or ('"plot_timeline"' in content and "A plot timeline." in content):
@@ -92,10 +90,8 @@ class MockLM(dspy.LM):
             return ['```json\n{"core_premise": "Mock premise"}\n```']
         elif "spine_template" in content and "world_bible" not in content:
             return ['```json\n{"spine_template": "Mock spine"}\n```']
-        elif "world_bible" in content and "arc_outline" not in content:
+        elif "world_bible" in content:
             return ['```json\n{"world_bible": "Mock world bible"}\n```']
-        elif "arc_outline" in content and "chapter_plan" not in content:
-            return ['```json\n{"reasoning": "Mock reasoning", "arc_outline": ["Inciting incident", "First reversal", "Midpoint escalation", "Darkest turn", "Act climax"]}\n```']
         elif "chapter_plan" in content and "enhancers_guide" not in content and "story" not in content:
             return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": ["Chapter 1: Discovery", "Chapter 2: Training", "Chapter 3: Revelation", "Chapter 4: Escape"]}\n```']
         elif "enhancers_guide" in content and "story" not in content and "chapter_text" not in content:
@@ -270,7 +266,6 @@ def test_pipeline(
     story_gen = StoryGenerator()
     story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
     logger.info("Story generated.")
-    logger.debug("Arc outline count=%d", len(story_result.arc_outline) if isinstance(story_result.arc_outline, list) else 0)
     logger.debug("Chapter plan preview: %.500s", story_result.chapter_plan)
     logger.debug("Story preview: %.500s", story_result.story)
 
@@ -305,8 +300,6 @@ def test_pipeline(
                 f.write(f"**Reference:** {cv.reference_mix}\n\n")
                 f.write(f"**Features:** {cv.distinguishing_features}\n\n")
 
-        f.write("## Arc Outline\n")
-        f.write(f"{story_result.arc_outline}\n\n")
         f.write("## Chapter Plan\n")
         f.write(f"{story_result.chapter_plan}\n\n")
         f.write("## Enhancers Guide\n")

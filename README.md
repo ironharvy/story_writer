@@ -13,7 +13,7 @@ python main.py
 ## What It Does
 
 - Guides you through an interactive ideation flow (questions, premise refinement, spine, world bible).
-- Generates structured story artifacts (arc outline, chapter plan, enhancers guide, full story).
+- Generates structured story artifacts (chapter plan, enhancers guide, full story).
 - Optionally generates character portraits and per-chapter scene illustrations via Replicate.
 - Writes all outputs to a markdown file in your chosen output directory.
 
@@ -24,9 +24,8 @@ python main.py
 - `world_bible_modules.py` — world bible question + generation modules.
 - `image_gen.py` — Replicate-based image generation helpers.
 - `logging_config.py` — centralized logging configuration.
-- `alternate_story_modules.py` — alternate Architect→Director→Scripter→Writer pipeline modules.
 - `scripts/fetch_langfuse_traces.py` — utility to fetch/summarize Langfuse traces.
-- `test_story.py`, `test_alternate.py` — pytest coverage for main and alternate pipelines.
+- `test_story.py` — pytest coverage for the primary pipeline.
 
 ## Requirements
 
@@ -155,7 +154,6 @@ The markdown includes:
 - Core Premise
 - Spine Template
 - World Bible
-- Arc Outline
 - Chapter Plan
 - Enhancers Guide
 - Final Story

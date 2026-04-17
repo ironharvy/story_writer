@@ -313,11 +313,8 @@ def main():
     Confirm.ask("Press Enter to continue to Story generation...", default=True, show_default=False)
 
     # 8. Generate Story
-    console.print("\n[italic]Generating Story (Arc Outline, Chapter Plan, Final Story)...[/italic]")
+    console.print("\n[italic]Generating Story (Chapter Plan, Final Story)...[/italic]")
     story_result = story_gen(core_premise=core_premise, spine_template=spine_template, world_bible=world_bible)
-
-    console.print("\n[bold red]--- Level 1: Arc Outline ---[/bold red]")
-    console.print(story_result.arc_outline)
 
     console.print("\n[bold red]--- Level 2: Chapter Plan ---[/bold red]")
     console.print(story_result.chapter_plan)
@@ -428,8 +425,6 @@ def main():
                 if portrait:
                     f.write(f"![{cv.name} portrait]({portrait})\n\n")
 
-        f.write("## Arc Outline\n")
-        f.write(f"{story_result.arc_outline}\n\n")
         f.write("## Chapter Plan\n")
         f.write(f"{story_result.chapter_plan}\n\n")
         f.write("## Enhancers Guide\n")
