@@ -14,17 +14,20 @@ python main.py
 
 - Guides you through an interactive ideation flow (questions, premise refinement, spine, world bible).
 - Generates structured story artifacts (arc outline, chapter plan, enhancers guide, full story).
-- Optionally generates character portraits and per-chapter scene illustrations via Replicate.
-- Writes all outputs to a markdown file in your chosen output directory.
+- Optionally generates character portraits and per-chapter scene illustrations via Replicate, either inline during a run or after the fact via `scripts/generate_images.py`.
+- Writes outputs as a human-readable markdown file plus a structured JSON sidecar.
 
 ## Project Layout
 
 - `main.py` — primary interactive CLI for story generation.
 - `story_modules.py` — core story generation modules/signatures.
 - `world_bible_modules.py` — world bible question + generation modules.
-- `image_gen.py` — Replicate-based image generation helpers.
+- `image_gen.py` — Replicate-based image backend (portraits + scenes).
+- `image_pipeline.py` — shared image pipeline (describe characters, generate portraits/scenes) consumed by both `main.py` and the standalone script.
+- `story_artifacts.py` — `StoryArtifacts` dataclass + JSON sidecar I/O + markdown rendering.
 - `logging_config.py` — centralized logging configuration.
 - `alternate_story_modules.py` — alternate Architect→Director→Scripter→Writer pipeline modules.
+- `scripts/generate_images.py` — standalone CLI that adds/refreshes images on an existing story JSON.
 - `scripts/fetch_langfuse_traces.py` — utility to fetch/summarize Langfuse traces.
 - `test_story.py`, `test_alternate.py` — pytest coverage for main and alternate pipelines.
 
@@ -146,9 +149,10 @@ python scripts/optimize_text_pipeline.py \
 
 ## Output
 
-By default, output is written to:
+By default, every run writes two files to the output directory (default `.tmp`):
 
-- `.tmp/story_output.md`
+- `story_output.md` — human-readable markdown view.
+- `story_output.json` — structured sidecar with all text artifacts plus any image paths. This is the input format consumed by `scripts/generate_images.py`.
 
 The markdown includes:
 
@@ -160,6 +164,26 @@ The markdown includes:
 - Enhancers Guide
 - Final Story
 - Optional character portraits / scene image embeds when images are enabled
+
+## Generating Images After the Fact
+
+If you generated a story without `--enable-images` and want images later, feed the saved JSON to the standalone script:
+
+```bash
+python scripts/generate_images.py \
+  --story-json .tmp/story_output.json \
+  --output-markdown .tmp/story_output.with_images.md
+```
+
+By default it writes updated image paths back into the same JSON. Useful flags:
+
+- `--skip-portraits`, `--skip-scenes` — do only one kind of image.
+- `--regenerate-portraits`, `--regenerate-scenes` — replace images already recorded in the JSON.
+- `--output-json`, `--output-markdown` — write to new files instead of mutating in place.
+- `--images-dir` — where to save image files (default `images/`).
+- `--model` / `--api-key` / `--llm-url` — the text LLM used to derive image prompts from the world bible and chapters.
+
+You still need `REPLICATE_API_TOKEN` (or `--replicate-api-token`).
 
 ## Logging Behavior
 

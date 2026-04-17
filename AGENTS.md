@@ -42,11 +42,25 @@ ruff format --check .                 # Check formatting without changes
 ### Running the Application
 ```bash
 python main.py                        # Basic run with default model
-python main.py --enable-images       # With image generation
+python main.py --enable-images       # With inline image generation
 python main.py -v                    # Verbose (INFO)
 python main.py -vv                   # LLM debug logging
 python main.py -vvv                  # Full HTTP+LLM firehose
 ```
+
+Every run writes `story_output.md` plus a `story_output.json` sidecar in
+`--output-dir` (default `.tmp`). The JSON is consumed by the standalone
+image script below.
+
+### Generating Images After the Fact
+```bash
+python scripts/generate_images.py \
+  --story-json .tmp/story_output.json \
+  --output-markdown .tmp/story_output.with_images.md
+```
+Flags: `--skip-portraits`, `--skip-scenes`, `--regenerate-portraits`,
+`--regenerate-scenes`, `--images-dir`, plus the usual DSPy model args
+(`--model`, `--api-key`, `--llm-url`).
 
 ### DSPy Pipeline Optimization
 ```bash
@@ -196,7 +210,10 @@ def test_specific_function():
 - `world_bible_modules.py` - World bible generation
 - `alternate_story_modules.py` - 3-phase alternative pipeline
 - `postprocessing.py` - Post-generation utilities
-- `image_gen.py` - Replicate image generation
+- `image_gen.py` - Replicate image backend (portraits + scenes)
+- `image_pipeline.py` - Shared image pipeline consuming `StoryArtifacts`
+- `story_artifacts.py` - Artifacts dataclass, JSON sidecar I/O, markdown renderer
+- `scripts/generate_images.py` - Standalone CLI to add images to an existing run
 - `logging_config.py` - Centralized logging setup
 - `dspy_optimization.py` - Module loading/optimization
 - `test_*.py` - Test files (mirror module structure)
