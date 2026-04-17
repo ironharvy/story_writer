@@ -20,6 +20,20 @@ _RANDOM_DETAIL_TYPES = [
 
 _chapter_heading_re = re.compile(r"^###\s+Chapter\s+\d+:.*$", re.MULTILINE)
 
+_spine_label_pattern = re.compile(
+    r"(once upon a time|every day|one day|because of that|until finally|ever since then)\s*[:,-]?",
+    re.IGNORECASE,
+)
+
+_SPINE_BEAT_ORDER = [
+    "once upon a time",
+    "every day",
+    "one day",
+    "because of that",
+    "because of that",
+    "until finally",
+]
+
 logger = logging.getLogger(__name__)
 
 # Regex to strip leading "Chapter <number>:" / "Chapter <number> -" from LLM-generated titles
@@ -104,6 +118,83 @@ def _compose_story_from_chapters(chapters: list[tuple[str, str]]) -> str:
     ]
     return "\n\n".join(chapter_blocks).strip()
 
+
+def _fallback_spine_beats(core_premise: str) -> list[str]:
+    premise = " ".join((core_premise or "").split())
+    if not premise:
+        premise = "a protagonist is pushed into a difficult change"
+    return [
+        f"Once upon a time, {premise}.",
+        "Every day, the protagonist tries to maintain normal life while pressure builds.",
+        "One day, a disruptive event forces a point-of-no-return decision.",
+        "Because of that, the protagonist takes action and faces escalating consequences.",
+        "Because of that, the conflict deepens and demands a costly sacrifice.",
+        "Until finally, the protagonist resolves the central conflict and emerges changed.",
+    ]
+
+
+def _normalize_spine_template_with_status(
+    spine_template: str,
+    core_premise: str,
+) -> tuple[str, bool]:
+    text = (spine_template or "").replace("```", " ").strip()
+    fallback_text = "\n".join(_fallback_spine_beats(core_premise))
+    if not text:
+        return fallback_text, True
+
+    matches = list(_spine_label_pattern.finditer(text))
+    if not matches:
+        return fallback_text, True
+
+    extracted_beats: list[tuple[str, str]] = []
+    for index, match in enumerate(matches):
+        label = match.group(1).lower()
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        body = text[start:end].strip(" .:\n\t-—")
+        if not body:
+            continue
+        extracted_beats.append((label, body))
+
+    beat_values: dict[str, list[str]] = {label: [] for label in set(_SPINE_BEAT_ORDER)}
+    for label, body in extracted_beats:
+        if label in beat_values:
+            beat_values[label].append(body)
+
+    if len(extracted_beats) < 4:
+        return fallback_text, True
+
+    normalized_lines: list[str] = []
+    because_index = 0
+    fallback_lines = _fallback_spine_beats(core_premise)
+    fallback_idx = 0
+    for label in _SPINE_BEAT_ORDER:
+        if label == "because of that":
+            values = beat_values[label]
+            if because_index < len(values):
+                content = values[because_index]
+                normalized_lines.append(f"Because of that, {content}.")
+            else:
+                normalized_lines.append(fallback_lines[3 + min(because_index, 1)])
+            because_index += 1
+        else:
+            values = beat_values[label]
+            if values:
+                content = values[0]
+                prefix = label[0].upper() + label[1:]
+                normalized_lines.append(f"{prefix}, {content}.")
+            else:
+                normalized_lines.append(fallback_lines[fallback_idx])
+        fallback_idx += 1
+
+    return "\n".join(normalized_lines), False
+
+
+def _normalize_spine_template(spine_template: str, core_premise: str) -> str:
+    normalized, _ = _normalize_spine_template_with_status(spine_template, core_premise)
+    return normalized
+
+
 class QuestionWithAnswer(BaseModel):
     question: str = Field(description="The interrogative question.")
     proposed_answer: str = Field(description="A proposed answer for the user to potentially accept.")
@@ -187,7 +278,16 @@ class SpineTemplateGenerator(dspy.Module):
 
     @observe()
     def forward(self, core_premise: str):
-        return self.generate(core_premise=core_premise)
+        result = self.generate(core_premise=core_premise)
+        normalized_spine, used_fallback = _normalize_spine_template_with_status(
+            spine_template=getattr(result, "spine_template", ""),
+            core_premise=core_premise,
+        )
+        if used_fallback:
+            logger.warning(
+                "Spine template fallback applied due to empty or unstructured model output."
+            )
+        return dspy.Prediction(spine_template=normalized_spine)
 
 
 class CharacterVisual(BaseModel):

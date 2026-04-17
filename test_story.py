@@ -377,6 +377,48 @@ def test_deduplicate_chapter_plan_entries_removes_duplicate_titles():
     ]
 
 
+def test_normalize_spine_template_preserves_labeled_sequence():
+    from story_modules import _normalize_spine_template
+
+    raw_spine = (
+        "Once upon a time: a foundling was raised by zealots. "
+        "Every day: he hunted demons in their name. "
+        "One day: he discovered the church was breeding demons. "
+        "Because of that: he began collecting proof in secret. "
+        "Because of that: he became a target of the institution. "
+        "Until finally: he exposed the conspiracy and shattered its power."
+    )
+
+    normalized = _normalize_spine_template(
+        spine_template=raw_spine,
+        core_premise="A church weapon turns against corruption.",
+    )
+    lines = normalized.splitlines()
+
+    assert len(lines) == 6
+    assert lines[0].startswith("Once upon a time,")
+    assert lines[1].startswith("Every day,")
+    assert lines[2].startswith("One day,")
+    assert lines[3].startswith("Because of that,")
+    assert lines[4].startswith("Because of that,")
+    assert lines[5].startswith("Until finally,")
+
+
+def test_normalize_spine_template_uses_fallback_for_unstructured_text():
+    from story_modules import _normalize_spine_template
+
+    normalized = _normalize_spine_template(
+        spine_template="This is a cool setup but not in spine form.",
+        core_premise="A child weapon discovers church corruption and revolts.",
+    )
+    lines = normalized.splitlines()
+
+    assert len(lines) == 6
+    assert lines[0].startswith("Once upon a time,")
+    assert "A child weapon discovers church corruption and revolts." in lines[0]
+    assert lines[5].startswith("Until finally,")
+
+
 def test_normalize_plot_timeline_deduplicates_contiguous_act_headings():
     from world_bible_modules import _normalize_plot_timeline
 
