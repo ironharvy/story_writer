@@ -244,15 +244,22 @@ def main():
             break
 
     # 4. Generate Spine Template
-    console.print("\n[italic]Generating Spine Template...[/italic]")
-    st_result = st_gen(core_premise=core_premise)
-    spine_template = st_result.spine_template
+    spine_template = ""
+    while True:
+        console.print("\n[italic]Generating Spine Template...[/italic]")
+        st_result = st_gen(idea=idea, qa_pairs=qa_text, core_premise=core_premise)
+        spine_template = st_result.spine_template
 
-    console.print("\n[bold blue]--- Spine Template ---[/bold blue]")
-    console.print(spine_template)
-    console.print("[bold blue]--------------------[/bold blue]")
+        console.print("\n[bold blue]--- Spine Template ---[/bold blue]")
+        console.print(spine_template)
+        console.print("[bold blue]--------------------[/bold blue]")
 
-    Confirm.ask("Press Enter to continue to World Bible generation...", default=True, show_default=False)
+        refine = Confirm.ask("Do you want to refine this spine template? (Choosing 'Yes' will let you provide more details and regenerate, 'No' proceeds)", default=False)
+        if refine:
+            refinement_details = Prompt.ask("Provide more details or changes")
+            idea = f"Original idea: {idea}\nRefinements for Spine Template: {refinement_details}\nCurrent Spine Template: {spine_template}"
+        else:
+            break
 
     # 5. Ask World Bible Questions
     console.print("\n[italic]Generating follow-up questions to help flesh out the World Bible...[/italic]")
