@@ -7,8 +7,6 @@ from story_modules import (
     SpineTemplateGenerator,
     StoryGenerator,
     ChapterInpaintingGenerator,
-    CharacterVisualDescriber,
-    SceneImagePromptGenerator,
 )
 from world_bible_modules import (
     WorldBibleGenerator,
@@ -21,6 +19,13 @@ from dotenv import load_dotenv
 from logging_config import setup_logging
 from dspy_optimization import try_load_optimized_module
 from postprocessing import find_similar_sentences, format_report
+from story_artifacts import StoryArtifacts, save_artifacts, save_markdown
+from image_pipeline import (
+    describe_characters,
+    build_character_visuals_summary,
+    generate_character_portraits,
+    generate_scene_illustrations,
+)
 
 load_dotenv()
 
@@ -286,29 +291,18 @@ def main():
         image_gen = ImageGenerator(api_token=args.replicate_api_token)
 
         console.print("\n[italic]Generating character visual descriptions...[/italic]")
-        cv_describer = CharacterVisualDescriber()
-        cv_result = cv_describer(world_bible=world_bible)
-        character_visuals = cv_result.character_visuals
-
-        lines = []
+        character_visuals = describe_characters(world_bible)
         for cv in character_visuals:
             console.print(f"\n[bold cyan]{cv.name}:[/bold cyan] {cv.reference_mix}")
             console.print(f"  [dim]{cv.distinguishing_features}[/dim]")
-            lines.append(
-                f"- {cv.name}: {cv.reference_mix}. {cv.distinguishing_features}"
-            )
-        character_visuals_summary = "\n".join(lines)
+        character_visuals_summary = build_character_visuals_summary(character_visuals)
 
         console.print("\n[italic]Generating character portraits...[/italic]")
-        for cv in character_visuals:
-            try:
-                path = image_gen.generate_character_portrait(
-                    prompt=cv.full_prompt, character_name=cv.name
-                )
-                character_portrait_paths[cv.name] = path
-                console.print(f"  [green]Saved portrait:[/green] {path}")
-            except Exception as e:
-                console.print(f"  [red]Failed to generate portrait for {cv.name}: {e}[/red]")
+        character_portrait_paths = generate_character_portraits(
+            character_visuals, image_gen
+        )
+        for name, path in character_portrait_paths.items():
+            console.print(f"  [green]Saved portrait for {name}:[/green] {path}")
 
     Confirm.ask("Press Enter to continue to Story generation...", default=True, show_default=False)
 
@@ -353,28 +347,14 @@ def main():
     scene_image_paths = {}
     if args.enable_images and image_gen:
         console.print("\n[italic]Generating scene illustrations for each chapter...[/italic]")
-        scene_prompt_gen = SceneImagePromptGenerator()
-
-        chapters = final_story_text.split("### Chapter ")
-        chapters = [c for c in chapters if c.strip()]
-
-        reference_paths = list(character_portrait_paths.values())
-
-        for i, chapter_text in enumerate(chapters, start=1):
-            try:
-                prompt_result = scene_prompt_gen(
-                    chapter_text=chapter_text,
-                    character_visuals_summary=character_visuals_summary,
-                )
-                path = image_gen.generate_scene_illustration(
-                    prompt=prompt_result.image_prompt,
-                    reference_image_paths=reference_paths,
-                    chapter_index=i,
-                )
-                scene_image_paths[i] = path
-                console.print(f"  [green]Chapter {i} scene:[/green] {path}")
-            except Exception as e:
-                console.print(f"  [red]Failed to generate scene for chapter {i}: {e}[/red]")
+        scene_image_paths = generate_scene_illustrations(
+            final_story_text,
+            character_visuals_summary,
+            list(character_portrait_paths.values()),
+            image_gen,
+        )
+        for i, path in sorted(scene_image_paths.items()):
+            console.print(f"  [green]Chapter {i} scene:[/green] {path}")
 
     # 10. Post-processing: detect similar sentences
     if args.check_similar:
@@ -390,49 +370,30 @@ def main():
                 len(similar_pairs),
             )
 
-    # 11. Save output to markdown
+    # 11. Save output (JSON sidecar + human-readable markdown)
     os.makedirs(args.output_dir, exist_ok=True)
-    output_filename = os.path.join(args.output_dir, "story_output.md")
-    logger.info(f"Saving story output to {output_filename}...")
-    with open(output_filename, "w", encoding="utf-8") as f:
-        f.write("# Story Output\n\n")
-        f.write("## Core Premise\n")
-        f.write(f"{core_premise}\n\n")
-        f.write("## Spine Template\n")
-        f.write(f"{spine_template}\n\n")
-        f.write("## World Bible\n")
-        f.write(f"{world_bible}\n\n")
+    artifacts = StoryArtifacts(
+        core_premise=core_premise,
+        spine_template=spine_template,
+        world_bible=world_bible,
+        arc_outline=story_result.arc_outline,
+        chapter_plan=story_result.chapter_plan,
+        enhancers_guide=story_result.enhancers_guide,
+        final_story=final_story_text,
+        character_visuals=character_visuals,
+        character_portrait_paths=character_portrait_paths,
+        scene_image_paths=scene_image_paths,
+    )
+    markdown_path = os.path.join(args.output_dir, "story_output.md")
+    json_path = os.path.join(args.output_dir, "story_output.json")
+    save_markdown(markdown_path, artifacts)
+    save_artifacts(json_path, artifacts)
 
-        if character_visuals:
-            f.write("## Character Visuals\n\n")
-            for cv in character_visuals:
-                f.write(f"### {cv.name}\n")
-                f.write(f"**Reference:** {cv.reference_mix}\n\n")
-                f.write(f"**Features:** {cv.distinguishing_features}\n\n")
-                portrait = character_portrait_paths.get(cv.name)
-                if portrait:
-                    f.write(f"![{cv.name} portrait]({portrait})\n\n")
-
-        f.write("## Arc Outline\n")
-        f.write(f"{story_result.arc_outline}\n\n")
-        f.write("## Chapter Plan\n")
-        f.write(f"{story_result.chapter_plan}\n\n")
-        f.write("## Enhancers Guide\n")
-        f.write(f"{story_result.enhancers_guide}\n\n")
-        f.write("## Final Story\n")
-
-        if scene_image_paths:
-            chapters = final_story_text.split("### Chapter ")
-            chapters = [c for c in chapters if c.strip()]
-            for i, chapter_text in enumerate(chapters, start=1):
-                f.write(f"\n\n### Chapter {chapter_text}")
-                scene = scene_image_paths.get(i)
-                if scene:
-                    f.write(f"\n\n![Chapter {i} scene]({scene})\n")
-        else:
-            f.write(f"{final_story_text}\n")
-
-    console.print(f"\n[bold magenta]Story generation complete! Results saved to {output_filename}[/bold magenta]")
+    console.print(
+        f"\n[bold magenta]Story generation complete! Results saved to "
+        f"{markdown_path} (markdown) and {json_path} (artifacts)."
+        "[/bold magenta]"
+    )
 
 if __name__ == "__main__":
     main()
