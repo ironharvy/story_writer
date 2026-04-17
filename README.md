@@ -27,6 +27,7 @@ python main.py
 - `alternate_story_modules.py` — alternate Architect→Director→Scripter→Writer pipeline modules.
 - `scripts/fetch_langfuse_traces.py` — utility to fetch/summarize Langfuse traces.
 - `test_story.py`, `test_alternate.py` — pytest coverage for main and alternate pipelines.
+- `audiobook.py` — standalone TTS script that turns `story_output.md` into per-chapter audio (local or remote providers).
 
 ## Requirements
 
@@ -183,6 +184,39 @@ Summarize traces:
 ```bash
 python scripts/fetch_langfuse_traces.py --mode summarize --input .tmp/langfuse_traces.json --output .tmp/langfuse_summary.json --summary-hours 24
 ```
+
+## Audiobook (TTS)
+
+`audiobook.py` is a standalone script that reads a generated story markdown
+and renders one audio file per chapter. It supports both local and remote TTS
+providers; install only the SDK for the provider you use.
+
+```bash
+# Local
+pip install kokoro soundfile      # Kokoro (default)
+pip install piper-tts             # Piper
+
+# Remote
+pip install requests              # NVIDIA Magpie TTS NIM (self-hosted or hosted)
+pip install openai                # OpenAI
+pip install elevenlabs            # ElevenLabs
+```
+
+Examples:
+
+```bash
+python audiobook.py --provider kokoro
+python audiobook.py --provider piper --voice-model en_US-lessac-medium.onnx
+python audiobook.py --provider nvidia \
+  --nvidia-url http://localhost:9000 \
+  --voice Magpie-Multilingual.EN-US.Aria
+python audiobook.py --provider openai --voice nova
+python audiobook.py --provider elevenlabs --voice Rachel
+```
+
+Keys come from `--api-key` or the env vars `NVIDIA_API_KEY`, `OPENAI_API_KEY`,
+`ELEVENLABS_API_KEY`. Input defaults to `.tmp/story_output.md`; output goes to
+`.tmp/audiobook/chXX_<slug>.<ext>`. Use `--only N` to re-render a single chapter.
 
 ## Running Tests
 
