@@ -359,6 +359,24 @@ def test_clean_chapter_title_strips_markdown_and_prefixes(raw_title, expected_cl
     assert _clean_chapter_title(raw_title) == expected_clean
 
 
+def test_deduplicate_chapter_plan_entries_removes_duplicate_titles():
+    from story_modules import _deduplicate_chapter_plan_entries, _normalize_chapter_plan_entries
+
+    raw_chapters = [
+        "Chapter 1: The Breach of Embers",
+        "The Breach of Embers",
+        "Chapter 3: The Sky of Scars",
+    ]
+
+    deduplicated = _deduplicate_chapter_plan_entries(raw_chapters)
+    normalized = _normalize_chapter_plan_entries(deduplicated)
+
+    assert normalized == [
+        "Chapter 1: The Breach of Embers",
+        "Chapter 2: The Sky of Scars",
+    ]
+
+
 def test_normalize_plot_timeline_deduplicates_contiguous_act_headings():
     from world_bible_modules import _normalize_plot_timeline
 

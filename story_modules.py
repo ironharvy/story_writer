@@ -58,6 +58,25 @@ def _normalize_chapter_plan_entries(chapters: list[str]) -> list[str]:
     return normalized
 
 
+def _deduplicate_chapter_plan_entries(chapters: list[str]) -> list[str]:
+    deduplicated: list[str] = []
+    seen_keys: set[str] = set()
+    for chapter in chapters:
+        chapter_text = _clean_chapter_title((chapter or "").strip())
+        if not chapter_text:
+            continue
+
+        dedupe_key = re.sub(r"[^a-z0-9]+", " ", chapter_text.lower()).strip()
+        if dedupe_key in seen_keys:
+            logger.debug("Skipping duplicate chapter plan entry: %s", chapter_text)
+            continue
+
+        seen_keys.add(dedupe_key)
+        deduplicated.append(chapter)
+
+    return deduplicated
+
+
 def _split_story_into_chapters(story_text: str) -> list[tuple[str, str]]:
     chapter_matches = list(_chapter_heading_re.finditer(story_text or ""))
     if not chapter_matches:
@@ -273,6 +292,12 @@ class GenerateChapterPlanSignature(dspy.Signature):
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
     act: str = dspy.InputField(desc="The act of the story.")
+    chapters_so_far: str = dspy.InputField(
+        desc=(
+            "A newline-separated list of chapters already planned. Do not repeat titles or "
+            "major beats from this list. Continue escalating the story from prior chapters."
+        ),
+    )
     #arc: str = dspy.InputField(desc="The arc of the story.")
     chapter_plan: list[str] = dspy.OutputField(desc="Chapter Plan for the arc (5-10 major events of the act)")
 
@@ -429,18 +454,22 @@ class StoryGenerator(dspy.Module):
 
     @observe()
     def forward(self, core_premise: str, spine_template: str, world_bible: str):
-        chapters_to_write = []
+        chapters_to_write: list[str] = []
         for act in ["Act 1 - Setup", "Act 2 - Confrontation", "Act 3 - Resolution"]:
             logger.debug("Generating chapter plan for %s...", act)
+            chapters_so_far = "\n".join(
+                _normalize_chapter_plan_entries(chapters_to_write)
+            )
             chapter_plan_result = self.generate_chapter_plan(
                 core_premise=core_premise,
                 world_bible=world_bible,
                 act=act,
+                chapters_so_far=chapters_so_far,
             )
             chapters_to_write.extend(chapter_plan_result.chapter_plan)
             logger.debug("Added chapters: %s", chapter_plan_result.chapter_plan)
 
-
+        chapters_to_write = _deduplicate_chapter_plan_entries(chapters_to_write)
         chapters_to_write = _normalize_chapter_plan_entries(chapters_to_write)
 
         chapter_plan_text = "\n".join(chapters_to_write)
