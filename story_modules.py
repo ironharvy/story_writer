@@ -158,6 +158,8 @@ class CorePremiseGenerator(dspy.Module):
 
 class GenerateSpineTemplateSignature(dspy.Signature):
     """Creates a narrative spine template based on the Core Premise."""
+    idea: str = dspy.InputField(desc="The original story idea.")
+    qa_pairs: str = dspy.InputField(desc="Questions and answers to flesh out the story.")
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     spine_template: str = dspy.OutputField(desc="A narrative spine template (e.g., Once upon a time... Every day... One day... Because of that... Because of that... Until finally...).")
 
@@ -167,8 +169,8 @@ class SpineTemplateGenerator(dspy.Module):
         self.generate = dspy.Predict(GenerateSpineTemplateSignature)
 
     @observe()
-    def forward(self, core_premise: str):
-        return self.generate(core_premise=core_premise)
+    def forward(self, idea: str, qa_pairs: str, core_premise: str):
+        return self.generate(idea=idea, qa_pairs=qa_pairs, core_premise=core_premise)
 
 
 class CharacterVisual(BaseModel):
