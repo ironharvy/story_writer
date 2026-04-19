@@ -256,7 +256,7 @@ def test_pipeline(
     )
 
     # 6. Mock image generation (no real API calls)
-    with patch.object(ImageGenerator, "__init__", lambda self, **kw: None):
+    with patch.object(ImageGenerator, "__init__", lambda self, **_kw: None):
         img_gen = ImageGenerator()
         img_gen.api_token = "mock_token"
         img_gen.output_dir = MagicMock()

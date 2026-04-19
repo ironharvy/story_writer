@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Generate and persist DSPy text-pipeline optimization artifacts."""
 
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ import dspy
 from dotenv import load_dotenv
 
 from dspy_optimization import TEXT_OPTIMIZATION_MODULES, save_manifest
-from main import configure_dspy, initialize_text_generators
+from main import configure_dspy, dspy_config_from_namespace, initialize_text_generators
 
 
 logger = logging.getLogger(__name__)
@@ -42,9 +43,12 @@ def _optimize_or_snapshot_module(module_name: str, module: dspy.Module, output_d
 
 
 def main() -> int:
+    """Parse CLI args and save selected optimized module artifacts."""
     load_dotenv()
 
-    parser = argparse.ArgumentParser(description="Compile/save DSPy text pipeline module artifacts.")
+    parser = argparse.ArgumentParser(
+        description="Compile/save DSPy text pipeline module artifacts.",
+    )
     parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "openai/gpt-4o-mini"))
     parser.add_argument("--llm-url", type=str, default=os.environ.get("LLM_URL"))
     parser.add_argument("--api-key", type=str, default=os.environ.get("API_KEY"))
@@ -79,15 +83,7 @@ def main() -> int:
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
 
-    configure_dspy(
-        model_name=args.model,
-        api_base=args.llm_url,
-        api_key=args.api_key,
-        max_tokens=args.max_tokens,
-        cache=args.cache,
-        memory_cache=args.memory_cache,
-        cache_dir=args.cache_dir,
-    )
+    configure_dspy(dspy_config_from_namespace(args))
 
     selected_modules = _parse_modules(args.modules)
     generators = initialize_text_generators(use_optimized=False)
