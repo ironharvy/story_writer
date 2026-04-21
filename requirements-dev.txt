@@ -1,4 +1,7 @@
 -r requirements.txt
 pytest
 ruff
+pylint
+radon
+vulture
 coloredlogs

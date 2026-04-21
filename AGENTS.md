@@ -13,7 +13,7 @@ Story Writer is an interactive DSPy-based story generation pipeline with optiona
 ### Installation
 ```bash
 pip install -r requirements.txt      # Core dependencies
-pip install -r requirements-dev.txt  # Dev dependencies (pytest, ruff)
+pip install -r requirements-dev.txt  # Dev dependencies (pytest, ruff, pylint, radon, vulture)
 ```
 
 ### Running Tests
@@ -48,6 +48,14 @@ python main.py -vv                   # LLM debug logging
 python main.py -vvv                  # Full HTTP+LLM firehose
 ```
 
+### Code Quality Checks
+```bash
+pylint main.py story_modules.py        # Design smell detection
+radon cc main.py -s -n C               # Cyclomatic complexity (flag C and worse)
+radon mi main.py -s                     # Maintainability index
+vulture . --min-confidence 80           # Dead code detection
+```
+
 ### DSPy Pipeline Optimization
 ```bash
 python scripts/optimize_text_pipeline.py \
@@ -55,24 +63,59 @@ python scripts/optimize_text_pipeline.py \
   --manifest .tmp/dspy_optimized/text_pipeline_manifest.json
 ```
 
+## Architecture & Design Rules
+
+These rules are **mandatory**. AI agents must follow them for all new code and
+refactor violations when touching existing code.
+
+### Function Size & Responsibility
+- **Hard limit: 50 lines per function.** If a function exceeds 50 lines, it must be decomposed. No exceptions for "entry points" or "main functions."
+- **One job per function.** A function that parses arguments must not also initialize services, run a pipeline, or write files. Name each function after its single responsibility.
+- **CLI entry points are thin.** `main()` should parse args, call a handful of orchestration functions, and return. Target: ≤ 20 lines of logic (excluding the argparse block, which should be extracted to `build_arg_parser() -> argparse.ArgumentParser`).
+
+### Data Flow & State
+- **Use dataclasses for pipeline state.** When ≥ 3 related values are threaded through multiple functions, define a `@dataclass` to hold them. Never pass 5+ loose locals between pipeline phases.
+- **Functions take explicit inputs and return explicit outputs.** Avoid relying on mutable shared state. Each pipeline phase should be a pure-ish function: `def generate_spine(...) -> SpineResult`.
+
+### Indirection Must Earn Its Keep
+- **No dict-of-instances when a dataclass works.** If you create a dict and immediately destructure it into named variables, use a dataclass or NamedTuple instead. String keys for typed objects are a code smell.
+- **No wrapper functions that just forward arguments.** If a function's body is a single call to another function with the same arguments, delete the wrapper.
+
+### Separation of Concerns
+- **UI code must not live inside business logic.** `console.print()`, `Prompt.ask()`, `Confirm.ask()` belong in a UI/interaction layer. Pipeline functions must not import `rich`. Pass callbacks or return data and let the caller handle presentation.
+- **File I/O gets its own function.** Any block of ≥ 5 lines writing to a file must be a dedicated `save_*()` function with a clear signature.
+
+### Dead Code & Commented-Out Code
+- **Delete commented-out code.** Version control exists. Never leave `#old_function_call()` or `field="[REMOVED]"` in the codebase. If a feature is removed, remove all traces.
+- **Delete unused definitions.** If a class, function, or constant has no callers, delete it.
+
+### Error Reporting
+- **Use `logger` for all errors and warnings.** Never use `console.print("[bold red]Error:...")` for error handling. `console.print` is for user-facing output only; `logger.error/warning` is for error handling. User-visible errors should use `logger` and optionally `sys.exit(1)`.
+
+### Module Size
+- **One module, one domain.** If a file exceeds ~300 lines or contains more than one conceptual domain (e.g., Pydantic models + DSPy modules + text utilities), split it. A file named `story_modules.py` should not also be the home of generic text-cleaning utilities.
+
 ## Code Style Guidelines
 
 ### General Principles
-- Use type hints for all function parameters and return values
+- Use type hints for all function parameters and return values, **including return types (even `-> None`)**
 - Keep functions focused and small (prefer < 50 lines)
 - Use descriptive variable names; avoid single letters except in short loops
 - Add docstrings to public functions and classes
+- **Avoid `Any` in type hints.** If the real type is known, use it
 
-### Imports
+### Imports (strict ordering — violations must be fixed before commit)
 ```python
-# Standard library first, then third-party, then local
+# 1. Standard library
 import logging
 import re
 from typing import List, Optional
 
+# 2. Third-party
 import dspy
 from pydantic import BaseModel, Field
 
+# 3. Local
 from story_modules import QuestionGenerator
 ```
 

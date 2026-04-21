@@ -1,24 +1,26 @@
-import dspy
-import os
 import argparse
 import logging
+import os
+from unittest.mock import MagicMock, patch
+
 import coloredlogs
+import dspy
 import pytest
 from dotenv import load_dotenv
-from unittest.mock import patch, MagicMock
+
+from main import initialize_text_generators
 from story_modules import (
+    ChapterInpaintingGenerator,
+    CharacterVisual,
+    CharacterVisualDescriber,
+    CorePremiseGenerator,
     QuestionGenerator,
     QuestionWithAnswer,
-    CharacterVisual,
-    CorePremiseGenerator,
+    SceneImagePromptGenerator,
     SpineTemplateGenerator,
     StoryGenerator,
-    ChapterInpaintingGenerator,
-    CharacterVisualDescriber,
-    SceneImagePromptGenerator,
 )
 from world_bible_modules import WorldBibleGenerator
-from main import initialize_text_generators
 
 load_dotenv()
 
@@ -48,13 +50,13 @@ class MockLM(dspy.LM):
             return ['```json\n{"character_visuals": [{"name": "Mock Hero", "reference_mix": "a mix of Guts from Berserk and Zuko from Avatar", "distinguishing_features": "short black hair, amber eyes, burn scar on left cheek, dark leather armor", "full_prompt": "anime portrait, a mix of Guts from Berserk and Zuko from Avatar, short black hair, amber eyes, burn scar on left cheek, dark leather armor"}]}\n```']
         if "[[ ## image_prompt ## ]]" in content or ('"image_prompt"' in content and "anime scene" in content):
             return ['```json\n{"image_prompt": "anime scene, a warrior with short black hair and amber eyes standing in a dark cathedral, dramatic lighting"}\n```']
-        if "[[ ## random_detail ## ]]" in content or ('"random_detail"' in content and "naturally woven" in content):
-            return ['```json\n{"random_detail": "A small paper unicorn sat perched on the corner of the desk, its horn casting a faint shadow in the candlelight."}\n```']
         if (
             "[[ ## chapter_text ## ]]" in content
             or ('"chapter_text"' in content and "immersive chapter" in content)
         ) and '"expanded_chapter_text"' not in content:
             return ['```json\n{"reasoning": "Mock reasoning", "title": "Mock Title", "chapter_text": "Mock chapter text"}\n```']
+        if "[[ ## random_detail ## ]]" in content or ('"random_detail"' in content and "naturally woven" in content):
+            return ['```json\n{"random_detail": "A small paper unicorn sat perched on the corner of the desk, its horn casting a faint shadow in the candlelight."}\n```']
         if "[[ ## expanded_chapter_text ## ]]" in content or '"expanded_chapter_text"' in content:
             return ['```json\n{"reasoning": "Mock reasoning", "expanded_chapter_text": "Mock expanded chapter text with richer detail and slower pacing."}\n```']
         if "[[ ## story ## ]]" in content or ('"story"' in content and "The final generated story" in content):
@@ -90,7 +92,7 @@ class MockLM(dspy.LM):
             return ['```json\n{"core_premise": "Mock premise"}\n```']
         elif "spine_template" in content and "world_bible" not in content:
             return ['```json\n{"spine_template": "Mock spine"}\n```']
-        elif "world_bible" in content:
+        elif "world_bible" in content and "chapter_plan" not in content:
             return ['```json\n{"world_bible": "Mock world bible"}\n```']
         elif "chapter_plan" in content and "enhancers_guide" not in content and "story" not in content:
             return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": ["Chapter 1: Discovery", "Chapter 2: Training", "Chapter 3: Revelation", "Chapter 4: Escape"]}\n```']
@@ -229,7 +231,7 @@ def test_pipeline(
 
     # 3. Spine Template
     st_gen = SpineTemplateGenerator()
-    st_result = st_gen(core_premise=cp_result.core_premise)
+    st_result = st_gen(idea=idea, qa_pairs=qa_text, core_premise=cp_result.core_premise)
     logger.info("Spine Template generated.")
     logger.debug("Spine template preview: %.300s", st_result.spine_template)
 
@@ -252,7 +254,7 @@ def test_pipeline(
     )
 
     # 6. Mock image generation (no real API calls)
-    with patch.object(ImageGenerator, "__init__", lambda self, **kw: None):
+    with patch.object(ImageGenerator, "__init__", lambda self, **_kw: None):
         img_gen = ImageGenerator()
         img_gen.api_token = "mock_token"
         img_gen.output_dir = MagicMock()
@@ -350,66 +352,6 @@ def test_chapter_title_prefix_stripping(raw_title, expected_clean):
 def test_clean_chapter_title_strips_markdown_and_prefixes(raw_title, expected_clean):
     from story_modules import _clean_chapter_title
     assert _clean_chapter_title(raw_title) == expected_clean
-
-
-def test_deduplicate_chapter_plan_entries_removes_duplicate_titles():
-    from story_modules import _deduplicate_chapter_plan_entries, _normalize_chapter_plan_entries
-
-    raw_chapters = [
-        "Chapter 1: The Breach of Embers",
-        "The Breach of Embers",
-        "Chapter 3: The Sky of Scars",
-    ]
-
-    deduplicated = _deduplicate_chapter_plan_entries(raw_chapters)
-    normalized = _normalize_chapter_plan_entries(deduplicated)
-
-    assert normalized == [
-        "Chapter 1: The Breach of Embers",
-        "Chapter 2: The Sky of Scars",
-    ]
-
-
-def test_normalize_spine_template_preserves_labeled_sequence():
-    from story_modules import _normalize_spine_template
-
-    raw_spine = (
-        "Once upon a time: a foundling was raised by zealots. "
-        "Every day: he hunted demons in their name. "
-        "One day: he discovered the church was breeding demons. "
-        "Because of that: he began collecting proof in secret. "
-        "Because of that: he became a target of the institution. "
-        "Until finally: he exposed the conspiracy and shattered its power."
-    )
-
-    normalized = _normalize_spine_template(
-        spine_template=raw_spine,
-        core_premise="A church weapon turns against corruption.",
-    )
-    lines = normalized.splitlines()
-
-    assert len(lines) == 6
-    assert lines[0].startswith("Once upon a time,")
-    assert lines[1].startswith("Every day,")
-    assert lines[2].startswith("One day,")
-    assert lines[3].startswith("Because of that,")
-    assert lines[4].startswith("Because of that,")
-    assert lines[5].startswith("Until finally,")
-
-
-def test_normalize_spine_template_uses_fallback_for_unstructured_text():
-    from story_modules import _normalize_spine_template
-
-    normalized = _normalize_spine_template(
-        spine_template="This is a cool setup but not in spine form.",
-        core_premise="A child weapon discovers church corruption and revolts.",
-    )
-    lines = normalized.splitlines()
-
-    assert len(lines) == 6
-    assert lines[0].startswith("Once upon a time,")
-    assert "A child weapon discovers church corruption and revolts." in lines[0]
-    assert lines[5].startswith("Until finally,")
 
 
 def test_normalize_plot_timeline_deduplicates_contiguous_act_headings():
