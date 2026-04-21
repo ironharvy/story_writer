@@ -44,6 +44,9 @@ _RECOVERABLE_RUNTIME_EXCEPTIONS = (
     TypeError,
     ValueError,
     RuntimeError,
+    KeyError,
+    IndexError,
+    OSError,
 )
 
 
@@ -280,6 +283,13 @@ def _add_runtime_arguments(parser: argparse.ArgumentParser) -> None:
             ".tmp/test_debug.log)."
         ),
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Logging verbosity: -v INFO, -vv LLM debug, -vvv full firehose.",
+    )
 
 
 def _add_output_and_quality_arguments(parser: argparse.ArgumentParser) -> None:
@@ -322,7 +332,7 @@ def _add_output_and_quality_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_arg_parser() -> argparse.ArgumentParser:
     """Build and return the CLI argument parser."""
     parser = argparse.ArgumentParser(description="AI DSPy Story Writer")
     _add_model_arguments(parser)
@@ -518,9 +528,7 @@ def maybe_generate_character_assets(args: Namespace, world_bible: str) -> ImageA
 
 def _print_story_sections(story_result: Any) -> None:
     """Print generated story planning artifacts and final story."""
-    console.print("\n[bold red]--- Level 1: Arc Outline ---[/bold red]")
-    console.print(story_result.arc_outline)
-    console.print("\n[bold red]--- Level 2: Chapter Plan ---[/bold red]")
+    console.print("\n[bold red]--- Chapter Plan ---[/bold red]")
     console.print(story_result.chapter_plan)
     console.print("\n[bold red]--- Enhancers Guide ---[/bold red]")
     console.print(story_result.enhancers_guide)
@@ -577,7 +585,7 @@ def generate_story_text(
 ) -> tuple[Any, str]:
     """Generate story and optionally run chapter inpainting."""
     console.print(
-        "\n[italic]Generating Story (Arc Outline, Chapter Plan, Final Story)...[/italic]"
+        "\n[italic]Generating Story (Chapter Plan, Final Story)...[/italic]"
     )
     story_result = generators["StoryGenerator"](
         core_premise=foundation.core_premise,
@@ -668,8 +676,6 @@ def _write_character_visuals_section(
 
 def _write_story_metadata_section(file_handle: Any, story_result: Any) -> None:
     """Write story metadata sections to output file."""
-    file_handle.write("## Arc Outline\n")
-    file_handle.write(f"{story_result.arc_outline}\n\n")
     file_handle.write("## Chapter Plan\n")
     file_handle.write(f"{story_result.chapter_plan}\n\n")
     file_handle.write("## Enhancers Guide\n")
@@ -833,7 +839,7 @@ def _print_completion(output_filename: str) -> None:
 
 def main() -> None:
     """Run the interactive Story Writer CLI."""
-    parser = build_parser()
+    parser = build_arg_parser()
     args = parser.parse_args()
 
     setup_runtime(args)
