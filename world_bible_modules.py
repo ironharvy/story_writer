@@ -1,8 +1,12 @@
-import dspy
+"""DSPy modules for generating world-bible components."""
+
 import re
 from typing import List
-from story_modules import QuestionWithAnswer
+
+import dspy
+
 from _compat import observe
+from story_modules import QuestionWithAnswer
 
 
 _act_heading_re = re.compile(
@@ -34,40 +38,60 @@ def _normalize_plot_timeline(plot_timeline: str) -> str:
     return "\n".join(normalized_lines).strip()
 
 class GenerateWorldBibleQuestionsSignature(dspy.Signature):
-    """Generates a few follow-up questions to ask the user to help flesh out the world bible before generating the final version."""
+    """Generate follow-up questions that enrich world-bible inputs."""
+
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     spine_template: str = dspy.InputField(desc="The narrative spine template.")
-    questions_with_answers: List[QuestionWithAnswer] = dspy.OutputField(desc="Up to 3 follow-up interrogative questions with proposed answers to help flesh out the World Bible.")
+    questions_with_answers: List[QuestionWithAnswer] = dspy.OutputField(
+        desc=(
+            "Up to 3 follow-up interrogative questions with proposed answers "
+            "to help flesh out the World Bible."
+        ),
+    )
 
 class WorldBibleQuestionGenerator(dspy.Module):
+    """Generate world-bible clarification questions from premise and spine."""
+
     def __init__(self):
         super().__init__()
         self.generate = dspy.Predict(GenerateWorldBibleQuestionsSignature)
 
     @observe()
     def forward(self, core_premise: str, spine_template: str):
+        """Generate clarification questions and proposed answers."""
         return self.generate(core_premise=core_premise, spine_template=spine_template)
 
 class GenerateWorldRulesSignature(dspy.Signature):
-    """Rules of the world. Magic or a highly specialized science? What about highly involved rules of etiquette or law? If so, how does one use said magic or science? What are the intricacies of the rules or laws, including any loopholes your characters might avail themselves of?"""
+    """Generate rules governing the world and its systems."""
+
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     spine_template: str = dspy.InputField(desc="The narrative spine template.")
-    user_additions: str = dspy.InputField(desc="Additional answers or details provided by the user.")
-    world_rules: str = dspy.OutputField(desc="Rules of the world, including magic, science, etiquette, and law.")
+    user_additions: str = dspy.InputField(
+        desc="Additional answers or details provided by the user.",
+    )
+    world_rules: str = dspy.OutputField(
+        desc="Rules of the world, including magic, science, etiquette, and law.",
+    )
 
 class GenerateCharactersSignature(dspy.Signature):
-    """Character descriptions and biographies. List of characters’ full names and any facts about them that are relevant (e.g., physical description, relationships to other characters, job titles, aspirations). Note that entries for main characters are likely to be longer than for minor characters."""
+    """Generate character bios and relevant relationship details."""
+
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     spine_template: str = dspy.InputField(desc="The narrative spine template.")
-    user_additions: str = dspy.InputField(desc="Additional answers or details provided by the user.")
+    user_additions: str = dspy.InputField(
+        desc="Additional answers or details provided by the user.",
+    )
     world_rules: str = dspy.InputField(desc="Rules of the world.")
     characters: str = dspy.OutputField(desc="Character descriptions and biographies.")
 
 class GenerateLocationsSignature(dspy.Signature):
-    """Places and locations in the world. What is their usual climate? Who lives there generally? Where are they in relation to one another?"""
+    """Generate key places and location context for the setting."""
+
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     spine_template: str = dspy.InputField(desc="The narrative spine template.")
-    user_additions: str = dspy.InputField(desc="Additional answers or details provided by the user.")
+    user_additions: str = dspy.InputField(
+        desc="Additional answers or details provided by the user.",
+    )
     world_rules: str = dspy.InputField(desc="Rules of the world.")
     characters: str = dspy.InputField(desc="Character descriptions and biographies.")
     locations: str = dspy.OutputField(desc="Places and locations in the world.")
@@ -76,13 +100,17 @@ class GeneratePlotTimelineSignature(dspy.Signature):
     """A plot timeline."""
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     spine_template: str = dspy.InputField(desc="The narrative spine template.")
-    user_additions: str = dspy.InputField(desc="Additional answers or details provided by the user.")
+    user_additions: str = dspy.InputField(
+        desc="Additional answers or details provided by the user.",
+    )
     world_rules: str = dspy.InputField(desc="Rules of the world.")
     characters: str = dspy.InputField(desc="Character descriptions and biographies.")
     locations: str = dspy.InputField(desc="Places and locations in the world.")
     plot_timeline: str = dspy.OutputField(desc="A plot timeline.")
 
 class WorldBibleGenerator(dspy.Module):
+    """Compose world rules, characters, locations, and timeline into one bible."""
+
     def __init__(self):
         super().__init__()
         self.generate_rules = dspy.ChainOfThought(GenerateWorldRulesSignature)
@@ -92,17 +120,18 @@ class WorldBibleGenerator(dspy.Module):
 
     @observe()
     def forward(self, core_premise: str, spine_template: str, user_additions: str = ""):
+        """Generate all world-bible sections and return a consolidated prediction."""
         rules_result = self.generate_rules(
             core_premise=core_premise,
             spine_template=spine_template,
-            user_additions=user_additions
+            user_additions=user_additions,
         )
 
         characters_result = self.generate_characters(
             core_premise=core_premise,
             spine_template=spine_template,
             user_additions=user_additions,
-            world_rules=rules_result.world_rules
+            world_rules=rules_result.world_rules,
         )
 
         locations_result = self.generate_locations(
@@ -110,7 +139,7 @@ class WorldBibleGenerator(dspy.Module):
             spine_template=spine_template,
             user_additions=user_additions,
             world_rules=rules_result.world_rules,
-            characters=characters_result.characters
+            characters=characters_result.characters,
         )
 
         timeline_result = self.generate_timeline(
@@ -119,7 +148,7 @@ class WorldBibleGenerator(dspy.Module):
             user_additions=user_additions,
             world_rules=rules_result.world_rules,
             characters=characters_result.characters,
-            locations=locations_result.locations
+            locations=locations_result.locations,
         )
 
         normalized_plot_timeline = _normalize_plot_timeline(timeline_result.plot_timeline)
@@ -136,5 +165,5 @@ class WorldBibleGenerator(dspy.Module):
             world_rules=rules_result.world_rules,
             characters=characters_result.characters,
             locations=locations_result.locations,
-            plot_timeline=normalized_plot_timeline
+            plot_timeline=normalized_plot_timeline,
         )

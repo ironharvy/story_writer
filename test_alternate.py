@@ -408,6 +408,7 @@ def mock_lm_configured():
 
 
 def test_architect_produces_foundation(mock_lm_configured):
+    _ = mock_lm_configured
     architect = Architect()
     result = architect(idea="A student finds a notebook that can kill people.")
     assert result.foundation.logline
@@ -418,6 +419,7 @@ def test_architect_produces_foundation(mock_lm_configured):
 
 
 def test_director_produces_three_acts(mock_lm_configured):
+    _ = mock_lm_configured
     director = Director()
     result = director(
         foundation="Logline: A student finds a deadly notebook.\n"
@@ -430,6 +432,7 @@ def test_director_produces_three_acts(mock_lm_configured):
 
 
 def test_scripter_produces_sequences(mock_lm_configured):
+    _ = mock_lm_configured
     scripter = Scripter()
     result = scripter(
         foundation="Mock foundation text.",
@@ -441,6 +444,7 @@ def test_scripter_produces_sequences(mock_lm_configured):
 
 
 def test_scripter_produces_scenes_with_beats(mock_lm_configured):
+    _ = mock_lm_configured
     scripter = Scripter()
     result = scripter.generate_scene_beats(
         foundation="Mock foundation text.",
@@ -461,6 +465,7 @@ def test_scripter_produces_scenes_with_beats(mock_lm_configured):
 
 
 def test_writer_produces_prose(mock_lm_configured):
+    _ = mock_lm_configured
     writer = Writer()
     result = writer(
         foundation="Mock foundation text.",

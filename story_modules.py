@@ -1,9 +1,13 @@
-import dspy
+"""Core DSPy modules for story generation and chapter post-processing."""
+
 import logging
 import random
 import re
 from typing import Any, List
+
+import dspy
 from pydantic import BaseModel, Field, model_validator
+
 from _compat import observe
 
 # Probability that a chapter receives a random creative flourish (0.0 – 1.0).
@@ -12,15 +16,31 @@ RANDOM_DETAIL_PROBABILITY = 0.35
 # The kinds of random detail the LLM can be asked to invent.
 _RANDOM_DETAIL_TYPES = [
     "an unusually long and vivid description of a piece of scenery or environment",
-    "a quirky or unexpected object placed naturally in the scene (e.g. a paper unicorn on a desk, a rusted music-box on a windowsill)",
+    (
+        "a quirky or unexpected object placed naturally in the scene "
+        "(e.g. a paper unicorn on a desk, a rusted music-box on a windowsill)"
+    ),
     "a strange but fitting atmospheric detail involving sounds, smells, or textures",
     "an unusual yet revealing character habit, nervous tic, or physical detail",
     "a brief, surprising background element that enriches the world without derailing the plot",
 ]
 
+_ACT_SEQUENCE = [
+    "Act 1 - Setup",
+    "Act 2 - Confrontation",
+    "Act 3 - Resolution",
+]
+
 _chapter_heading_re = re.compile(r"^###\s+Chapter\s+\d+:.*$", re.MULTILINE)
 
 logger = logging.getLogger(__name__)
+
+_RECOVERABLE_MODEL_EXCEPTIONS = (
+    AttributeError,
+    TypeError,
+    ValueError,
+    RuntimeError,
+)
 
 # Regex to strip leading "Chapter <number>:" / "Chapter <number> -" from LLM-generated titles
 _chapter_prefix_re = re.compile(
@@ -86,12 +106,18 @@ def _compose_story_from_chapters(chapters: list[tuple[str, str]]) -> str:
     return "\n\n".join(chapter_blocks).strip()
 
 class QuestionWithAnswer(BaseModel):
+    """A generated follow-up question paired with a suggested answer."""
+
     question: str = Field(description="The interrogative question.")
-    proposed_answer: str = Field(description="A proposed answer for the user to potentially accept.")
+    proposed_answer: str = Field(
+        description="A proposed answer for the user to potentially accept.",
+    )
 
     @model_validator(mode='before')
     @classmethod
     def fix_keys(cls, data: Any) -> Any:
+        """Normalize loosely-structured model output keys to canonical fields."""
+        _ = cls
         if not isinstance(data, dict):
             return data
 
@@ -126,33 +152,49 @@ class QuestionWithAnswer(BaseModel):
         return normalized
 
 class GenerateQuestionsSignature(dspy.Signature):
-    """Generates 5 interrogative questions to interrogate the user's idea to generate a 'Core Premise'. Each question must include a proposed answer."""
+    """Generate 5 interrogative questions for premise clarification.
+
+    Each question includes a proposed answer.
+    """
+
     idea: str = dspy.InputField(desc="The initial idea or prompt for the story.")
-    questions_with_answers: List[QuestionWithAnswer] = dspy.OutputField(desc="5 interrogative questions with proposed answers.")
+    questions_with_answers: List[QuestionWithAnswer] = dspy.OutputField(
+        desc="5 interrogative questions with proposed answers.",
+    )
 
 class QuestionGenerator(dspy.Module):
+    """Generate interactive clarification questions for the user's idea."""
+
     def __init__(self):
         super().__init__()
         self.generate = dspy.Predict(GenerateQuestionsSignature)
 
     @observe()
     def forward(self, idea: str):
+        """Generate question/answer suggestions from the initial idea."""
         return self.generate(idea=idea)
 
 
 class GenerateCorePremiseSignature(dspy.Signature):
     """Synthesizes the user's idea, the questions, and the user's answers into a Core Premise."""
     idea: str = dspy.InputField(desc="The initial idea or prompt for the story.")
-    qa_pairs: str = dspy.InputField(desc="The interrogative questions and the user's accepted or provided answers.")
-    core_premise: str = dspy.OutputField(desc="A detailed Core Premise summarizing the foundation of the story.")
+    qa_pairs: str = dspy.InputField(
+        desc="The interrogative questions and the user's accepted or provided answers.",
+    )
+    core_premise: str = dspy.OutputField(
+        desc="A detailed Core Premise summarizing the foundation of the story.",
+    )
 
 class CorePremiseGenerator(dspy.Module):
+    """Synthesize idea context into a single core premise statement."""
+
     def __init__(self):
         super().__init__()
         self.generate = dspy.Predict(GenerateCorePremiseSignature)
 
     @observe()
     def forward(self, idea: str, qa_pairs: str):
+        """Build the core premise from the idea and Q/A refinements."""
         return self.generate(idea=idea, qa_pairs=qa_pairs)
 
 
@@ -161,19 +203,29 @@ class GenerateSpineTemplateSignature(dspy.Signature):
     idea: str = dspy.InputField(desc="The original story idea.")
     qa_pairs: str = dspy.InputField(desc="Questions and answers to flesh out the story.")
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
-    spine_template: str = dspy.OutputField(desc="A narrative spine template (e.g., Once upon a time... Every day... One day... Because of that... Because of that... Until finally...).")
+    spine_template: str = dspy.OutputField(
+        desc=(
+            "A narrative spine template (e.g., Once upon a time... Every day... "
+            "One day... Because of that... Because of that... Until finally...)."
+        ),
+    )
 
 class SpineTemplateGenerator(dspy.Module):
+    """Generate a narrative spine scaffold for downstream planning."""
+
     def __init__(self):
         super().__init__()
         self.generate = dspy.Predict(GenerateSpineTemplateSignature)
 
     @observe()
     def forward(self, idea: str, qa_pairs: str, core_premise: str):
+        """Create a spine template from ideation and premise context."""
         return self.generate(idea=idea, qa_pairs=qa_pairs, core_premise=core_premise)
 
 
 class CharacterVisual(BaseModel):
+    """Structured visual profile used for character portrait generation."""
+
     name: str = Field(description="The character's name.")
     reference_mix: str = Field(
         description="A visual anchor describing who the character looks like, "
@@ -193,6 +245,8 @@ class CharacterVisual(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def normalize_shape(cls, data: Any) -> Any:
+        """Backfill legacy fields into the current character-visual schema."""
+        _ = cls
         if not isinstance(data, dict):
             return data
 
@@ -224,12 +278,15 @@ class GenerateCharacterVisualsSignature(dspy.Signature):
 
 
 class CharacterVisualDescriber(dspy.Module):
+    """Extract and describe the story's major character visuals."""
+
     def __init__(self):
         super().__init__()
         self.generate = dspy.Predict(GenerateCharacterVisualsSignature)
 
     @observe()
     def forward(self, world_bible: str):
+        """Generate normalized visual descriptors from a world bible."""
         return self.generate(world_bible=world_bible)
 
 
@@ -250,12 +307,15 @@ class GenerateSceneImagePromptSignature(dspy.Signature):
 
 
 class SceneImagePromptGenerator(dspy.Module):
+    """Produce chapter-level scene prompts for image generation."""
+
     def __init__(self):
         super().__init__()
         self.generate = dspy.Predict(GenerateSceneImagePromptSignature)
 
     @observe()
     def forward(self, chapter_text: str, character_visuals_summary: str):
+        """Generate an image prompt for a chapter's most salient scene."""
         return self.generate(
             chapter_text=chapter_text,
             character_visuals_summary=character_visuals_summary,
@@ -276,35 +336,78 @@ class GenerateChapterPlanSignature(dspy.Signature):
     world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
     act: str = dspy.InputField(desc="The act of the story.")
     #arc: str = dspy.InputField(desc="The arc of the story.")
-    chapter_plan: list[str] = dspy.OutputField(desc="Chapter Plan for the arc (5-10 major events of the act)")
+    chapter_plan: list[str] = dspy.OutputField(
+        desc="Chapter Plan for the arc (5-10 major events of the act)",
+    )
 
 class GenerateEnhancersSignature(dspy.Signature):
-    """Evaluates the chapter plan and determines which story enhancers are needed for specific scenes/chapters.
-    Story Enhancers include: Tension Module, Mystery Module, Theme Alignment, Setup/Payoff Tracker, Emotional Curve, Twist Generator, Easter Egg Injector."""
+    """Evaluate chapter plan needs for story-enhancer techniques.
+
+    Story enhancers include tension, mystery, theme alignment,
+    setup/payoff tracking, emotional curve shaping, twists, and easter eggs.
+    """
+
     world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
     chapter_plan: str = dspy.InputField(desc="Chapter Plan (Each arc broken into chapters).")
-    enhancers_guide: str = dspy.OutputField(desc="A guide evaluating which story enhancers (e.g., Tension, Mystery, Twists) are needed for specific scenes or chapters and how to apply them.")
+    enhancers_guide: str = dspy.OutputField(
+        desc=(
+            "A guide evaluating which story enhancers (e.g., Tension, Mystery, "
+            "Twists) are needed for specific scenes or chapters and how to apply "
+            "them."
+        ),
+    )
 
 class GenerateRandomDetailSignature(dspy.Signature):
-    """Invents a single concrete, contextually-appropriate creative flourish to be woven into a chapter.
-    The detail must fit the story's world and genre—no anachronisms or setting violations.
-    Output only the detail itself as a short, vivid description (2-5 sentences)."""
-    world_bible: str = dspy.InputField(desc="The comprehensive World Bible describing the story's setting, rules, and characters.")
-    current_chapter_description: str = dspy.InputField(desc="The specific chapter event that the detail should fit into.")
+    """Invent a concrete, contextual creative flourish for a chapter.
+
+    The detail must fit the story's world and genre.
+    """
+
+    world_bible: str = dspy.InputField(
+        desc=(
+            "The comprehensive World Bible describing the story's setting, "
+            "rules, and characters."
+        ),
+    )
+    current_chapter_description: str = dspy.InputField(
+        desc="The specific chapter event that the detail should fit into.",
+    )
     detail_type: str = dspy.InputField(desc="The category of creative flourish to invent.")
-    random_detail: str = dspy.OutputField(desc="A concrete, vivid creative detail (2-5 sentences) that fits the world and can be naturally woven into the chapter.")
+    random_detail: str = dspy.OutputField(
+        desc=(
+            "A concrete, vivid creative detail (2-5 sentences) that fits the "
+            "world and can be naturally woven into the chapter."
+        ),
+    )
 
 
 class GenerateSingleChapterSignature(dspy.Signature):
     """Writes a full, detailed chapter based on the world bible and the specific chapter goal."""
     world_bible: str = dspy.InputField()
     chapter_plan: str = dspy.InputField(desc="The full plan for context.")
-    current_chapter_description: str = dspy.InputField(desc="The specific event to write now.")
-    previous_chapters_summary: str = dspy.InputField(desc="Brief summary of what happened so far.")
-    enhancers_guide: str = dspy.InputField(desc="A guide evaluating which story enhancers (e.g., Tension, Mystery, Twists) are needed for specific scenes or chapters and how to apply them.")
-    random_detail: str = dspy.InputField(desc="An optional creative flourish to weave naturally into the chapter. Empty string means no special detail is required.")
+    current_chapter_description: str = dspy.InputField(
+        desc="The specific event to write now.",
+    )
+    previous_chapters_summary: str = dspy.InputField(
+        desc="Brief summary of what happened so far.",
+    )
+    enhancers_guide: str = dspy.InputField(
+        desc=(
+            "A guide evaluating which story enhancers (e.g., Tension, Mystery, "
+            "Twists) are needed for specific scenes or chapters and how to apply "
+            "them."
+        ),
+    )
+    random_detail: str = dspy.InputField(
+        desc=(
+            "An optional creative flourish to weave naturally into the chapter. "
+            "Empty string means no special detail is required."
+        ),
+    )
     title: str = dspy.OutputField(desc="The title of the chapter.")
-    chapter_text: str = dspy.OutputField(desc="A long, immersive chapter with dialogue and description.")
+    chapter_text: str = dspy.OutputField(
+        desc="A long, immersive chapter with dialogue and description.",
+    )
 
 
 class GenerateChapterInpaintingSignature(dspy.Signature):
@@ -334,6 +437,8 @@ class GenerateChapterInpaintingSignature(dspy.Signature):
 
 
 class ChapterInpaintingGenerator(dspy.Module):
+    """Expand existing chapter drafts with richer narrative detail."""
+
     def __init__(self):
         super().__init__()
         self.expand_chapter = dspy.ChainOfThought(GenerateChapterInpaintingSignature)
@@ -346,6 +451,7 @@ class ChapterInpaintingGenerator(dspy.Module):
         chapter_plan: str,
         expansion_ratio: float = 1.35,
     ):
+        """Expand each chapter while preserving chapter order and story facts."""
         if expansion_ratio <= 1.0:
             raise ValueError(f"expansion_ratio must be > 1.0, got {expansion_ratio}")
 
@@ -375,7 +481,7 @@ class ChapterInpaintingGenerator(dspy.Module):
                     expanded_chapters.append((chapter_header, expanded_chapter_text))
                 else:
                     expanded_chapters.append((chapter_header, chapter_text))
-            except Exception as exc:
+            except _RECOVERABLE_MODEL_EXCEPTIONS as exc:
                 logger.warning(
                     "Chapter inpainting failed for %s: %s",
                     chapter_header,
@@ -390,14 +496,15 @@ class ChapterInpaintingGenerator(dspy.Module):
         )
 
 class StoryGenerator(dspy.Module):
+    """Generate chapter plans, enhancer guidance, and full story chapters."""
+
     def __init__(self, random_detail_probability: float = RANDOM_DETAIL_PROBABILITY):
-        if not (0.0 <= random_detail_probability <= 1.0):
+        if not 0.0 <= random_detail_probability <= 1.0:
             raise ValueError(
                 f"random_detail_probability must be in [0.0, 1.0], got {random_detail_probability}"
             )
         super().__init__()
         self.random_detail_probability = random_detail_probability
-        #self.generate_arc_outline = dspy.ChainOfThought(GenerateArcOutlineSignature)
         self.generate_chapter_plan = dspy.ChainOfThought(GenerateChapterPlanSignature)
         self.generate_enhancers = dspy.ChainOfThought(GenerateEnhancersSignature)
         self.generate_random_detail = dspy.Predict(GenerateRandomDetailSignature)
@@ -425,74 +532,113 @@ class StoryGenerator(dspy.Module):
                 detail_type=detail_type,
             )
             return result.random_detail
-        except Exception as e:
-            logger.warning("Failed to generate random detail: %s", e)
+        except _RECOVERABLE_MODEL_EXCEPTIONS as exc:
+            logger.warning("Failed to generate random detail: %s", exc)
             return ""
 
-    @observe()
-    def forward(self, core_premise: str, spine_template: str, world_bible: str):
-        chapters_to_write = []
-        for act in ["Act 1 - Setup", "Act 2 - Confrontation", "Act 3 - Resolution"]:
+    def _generate_chapter_plan_entries(
+        self,
+        core_premise: str,
+        world_bible: str,
+    ) -> list[str]:
+        chapter_entries: list[str] = []
+        for act in _ACT_SEQUENCE:
             logger.debug("Generating chapter plan for %s...", act)
             chapter_plan_result = self.generate_chapter_plan(
                 core_premise=core_premise,
                 world_bible=world_bible,
                 act=act,
             )
-            chapters_to_write.extend(chapter_plan_result.chapter_plan)
+            chapter_entries.extend(chapter_plan_result.chapter_plan)
             logger.debug("Added chapters: %s", chapter_plan_result.chapter_plan)
 
+        return _normalize_chapter_plan_entries(chapter_entries)
 
-        chapters_to_write = _normalize_chapter_plan_entries(chapters_to_write)
-
-        chapter_plan_text = "\n".join(chapters_to_write)
-
+    def _generate_enhancers_guide(
+        self,
+        world_bible: str,
+        chapter_plan_text: str,
+    ) -> str:
         enhancers_result = self.generate_enhancers(
             world_bible=world_bible,
-            chapter_plan=chapter_plan_text
+            chapter_plan=chapter_plan_text,
         )
+        return enhancers_result.enhancers_guide
 
+    def _write_story_chapters(
+        self,
+        world_bible: str,
+        chapter_plan_text: str,
+        chapters_to_write: list[str],
+        enhancers_guide: str,
+    ) -> str:
         full_story = ""
         previous_chapters_summary = ""
 
-        for i, chapter_desc in enumerate(chapters_to_write):
+        for index, chapter_desc in enumerate(chapters_to_write, start=1):
             try:
                 random_detail = self._maybe_generate_random_detail(world_bible, chapter_desc)
                 if random_detail:
-                    logger.info("Chapter %d: injecting probabilistic detail: %.300s", i + 1, random_detail)
+                    logger.info(
+                        "Chapter %d: injecting probabilistic detail: %.300s",
+                        index,
+                        random_detail,
+                    )
 
                 result = self.write_chapter(
                     world_bible=world_bible,
                     chapter_plan=chapter_plan_text,
                     current_chapter_description=chapter_desc,
                     previous_chapters_summary=previous_chapters_summary,
-                    enhancers_guide=enhancers_result.enhancers_guide,
+                    enhancers_guide=enhancers_guide,
                     random_detail=random_detail,
                 )
 
-                logger.debug("Chapter %d written: %.300s", i + 1, result.chapter_text)
-                chapter_text = result.chapter_text
-                # Strip markdown wrappers and redundant "Chapter N:" prefixes.
+                logger.debug("Chapter %d written: %.300s", index, result.chapter_text)
                 clean_title = _clean_chapter_title(result.title)
                 if not clean_title:
                     clean_title = _clean_chapter_title(chapter_desc)
-                full_story += f"\n\n### Chapter {i+1}: {clean_title}\n\n" + chapter_text
-                previous_chapters_summary += f"Chapter {i+1}: {chapter_desc}\n"
-            except Exception as e:
-                logger.error(f"Error writing chapter {i+1}: {e}", exc_info=True)
+
+                full_story += f"\n\n### Chapter {index}: {clean_title}\n\n{result.chapter_text}"
+                previous_chapters_summary += f"Chapter {index}: {chapter_desc}\n"
+            except _RECOVERABLE_MODEL_EXCEPTIONS as exc:
+                logger.error("Error writing chapter %d: %s", index, exc, exc_info=True)
                 break
+
+        return full_story
+
+    @observe()
+    def forward(self, core_premise: str, spine_template: str, world_bible: str):
+        """Run the end-to-end chapter planning and drafting workflow."""
+        logger.debug("StoryGenerator received spine template of %d chars", len(spine_template))
+        chapters_to_write = self._generate_chapter_plan_entries(
+            core_premise=core_premise,
+            world_bible=world_bible,
+        )
+        chapter_plan_text = "\n".join(chapters_to_write)
+
+        enhancers_guide = self._generate_enhancers_guide(
+            world_bible=world_bible,
+            chapter_plan_text=chapter_plan_text,
+        )
+        full_story = self._write_story_chapters(
+            world_bible=world_bible,
+            chapter_plan_text=chapter_plan_text,
+            chapters_to_write=chapters_to_write,
+            enhancers_guide=enhancers_guide,
+        )
 
         if not full_story.strip():
             logger.warning(
                 "Story generation produced no chapter content. "
                 "chapters_to_write=%d, chapter_plan excerpt=%.500s",
                 len(chapters_to_write),
-                chapter_plan_result.chapter_plan,
+                chapter_plan_text,
             )
 
         return dspy.Prediction(
-            arc_outline="[REMOVED]",#arc_outline=arc_outline_result.arc_outline,
+            arc_outline="[REMOVED]",
             chapter_plan=chapter_plan_text,
-            enhancers_guide=enhancers_result.enhancers_guide,
-            story=full_story.strip()
+            enhancers_guide=enhancers_guide,
+            story=full_story.strip(),
         )
