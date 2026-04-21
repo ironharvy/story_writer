@@ -29,6 +29,15 @@ jobs:
       - name: Run Ruff lint
         run: ruff check .
 
+      - name: Pylint (design smells)
+        run: pylint main.py story_modules.py world_bible_modules.py postprocessing.py
+
+      - name: Radon (cyclomatic complexity)
+        run: radon cc . -s -n C --exclude ".venv/*" --no-assert
+
+      - name: Vulture (dead code)
+        run: vulture . --min-confidence 80 --exclude .venv
+
   test:
     runs-on: ubuntu-latest
 
