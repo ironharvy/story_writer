@@ -151,6 +151,15 @@ def strip_comments(text: str) -> str:
     return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
 
 
+def _isolate_headings(text: str) -> str:
+    """Ensure ATX headings are surrounded by blank lines so block splitting
+    treats them as standalone blocks. Real-world LLM output often skips one
+    or both of these separators."""
+    text = re.sub(r"(?<!\n\n)(\n)(#{1,3} )", r"\n\n\2", text)
+    text = re.sub(r"(^|\n)(#{1,3} [^\n]+)\n(?!\n)", r"\1\2\n\n", text)
+    return text
+
+
 def render_inline(s: str) -> str:
     s = html.escape(s)
     s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
@@ -199,7 +208,7 @@ def parse_document(text: str) -> tuple[str, list[tuple[str, str, str]]]:
     before the first H2 (after the title) is grouped under an implicit
     "Overview" section so nothing is lost.
     """
-    text = strip_comments(text).strip()
+    text = _isolate_headings(strip_comments(text)).strip()
     blocks = [b for b in re.split(r"\n\s*\n", text) if b.strip()]
 
     title = ""
