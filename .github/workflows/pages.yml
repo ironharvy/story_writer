@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - "season_1/**"
-      - "tools/build_book.py"
+      - "scripts/build_book.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: "3.x"
       - name: Build book
-        run: python3 tools/build_book.py season_1 site/index.html
+        run: python3 scripts/build_book.py season_1 site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
