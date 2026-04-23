@@ -18,6 +18,7 @@ from image_gen import ImageGenerator
 from logging_config import setup_logging
 from postprocessing import find_similar_sentences, format_report
 from story_modules import (
+    _RECOVERABLE_MODEL_EXCEPTIONS,
     ChapterInpaintingGenerator,
     CharacterVisualDescriber,
     CorePremiseGenerator,
@@ -39,15 +40,7 @@ logger = logging.getLogger(__name__)
 
 console = Console()
 
-_RECOVERABLE_RUNTIME_EXCEPTIONS = (
-    AttributeError,
-    TypeError,
-    ValueError,
-    RuntimeError,
-    KeyError,
-    IndexError,
-    OSError,
-)
+_RECOVERABLE_RUNTIME_EXCEPTIONS = _RECOVERABLE_MODEL_EXCEPTIONS + (OSError,)
 
 
 @dataclass
