@@ -3,6 +3,7 @@
 import logging
 import random
 import re
+from dataclasses import dataclass
 from typing import Any, List
 
 import dspy
@@ -11,6 +12,16 @@ from pydantic import BaseModel, Field, model_validator
 from _compat import observe
 from exceptions import RECOVERABLE_MODEL_EXCEPTIONS
 from world_bible import WorldBible
+
+
+@dataclass(frozen=True)
+class ChapterWritingContext:
+    """Story-level context that is constant across every chapter draft."""
+
+    world_bible: WorldBible
+    chapter_plan_text: str
+    enhancers_guide: str
+
 
 # Probability that a chapter receives a random creative flourish (0.0 – 1.0).
 RANDOM_DETAIL_PROBABILITY = 0.35
@@ -760,6 +771,68 @@ class StoryGenerator(dspy.Module):
         )
         return enhancers_result.enhancers_guide
 
+    def _write_single_chapter(
+        self,
+        index: int,
+        chapter_desc: str,
+        context: ChapterWritingContext,
+        previous_chapters_summary: str,
+    ) -> tuple[str, str]:
+        """Write one chapter and return (chapter_markdown, chapter_text)."""
+        world_bible = context.world_bible
+        random_detail = self._maybe_generate_random_detail(
+            world_bible.full_text,
+            chapter_desc,
+        )
+        if random_detail:
+            logger.info(
+                "Chapter %d: injecting probabilistic detail: %.300s",
+                index,
+                random_detail,
+            )
+
+        result = self.write_chapter(
+            characters=world_bible.characters,
+            rules=world_bible.rules,
+            locations=world_bible.locations,
+            chapter_plan=context.chapter_plan_text,
+            current_chapter_description=chapter_desc,
+            previous_chapters_summary=previous_chapters_summary,
+            enhancers_guide=context.enhancers_guide,
+            random_detail=random_detail,
+        )
+
+        logger.debug("Chapter %d written: %.300s", index, result.chapter_text)
+        clean_title = _clean_chapter_title(result.title)
+        if not clean_title:
+            clean_title = _clean_chapter_title(chapter_desc)
+
+        chapter_markdown = (
+            f"\n\n### Chapter {index}: {clean_title}\n\n{result.chapter_text}"
+        )
+        return chapter_markdown, result.chapter_text
+
+    def _update_rolling_summary(
+        self,
+        index: int,
+        chapter_desc: str,
+        chapter_text: str,
+        previous_summary_entries: list[str],
+    ) -> str:
+        """Summarize the just-written chapter and return the new rolling summary text."""
+        chapter_summary = self._summarize_written_chapter(
+            current_chapter_description=chapter_desc,
+            chapter_text=chapter_text,
+        )
+        summary_block = f"Chapter {index} ({chapter_desc}): {chapter_summary}".rstrip()
+        rolling = self._compose_rolling_summary(
+            previous_summary_entries=previous_summary_entries,
+            latest_entry=summary_block,
+            latest_chapter_text=chapter_text,
+        )
+        previous_summary_entries.append(summary_block)
+        return rolling
+
     def _write_story_chapters(
         self,
         world_bible: WorldBible,
@@ -767,56 +840,30 @@ class StoryGenerator(dspy.Module):
         chapters_to_write: list[str],
         enhancers_guide: str,
     ) -> str:
+        context = ChapterWritingContext(
+            world_bible=world_bible,
+            chapter_plan_text=chapter_plan_text,
+            enhancers_guide=enhancers_guide,
+        )
         full_story = ""
         previous_chapters_summary = ""
         previous_summary_entries: list[str] = []
 
         for index, chapter_desc in enumerate(chapters_to_write, start=1):
             try:
-                random_detail = self._maybe_generate_random_detail(
-                    world_bible.full_text,
-                    chapter_desc,
-                )
-                if random_detail:
-                    logger.info(
-                        "Chapter %d: injecting probabilistic detail: %.300s",
-                        index,
-                        random_detail,
-                    )
-
-                result = self.write_chapter(
-                    characters=world_bible.characters,
-                    rules=world_bible.rules,
-                    locations=world_bible.locations,
-                    chapter_plan=chapter_plan_text,
-                    current_chapter_description=chapter_desc,
+                chapter_markdown, chapter_text = self._write_single_chapter(
+                    index=index,
+                    chapter_desc=chapter_desc,
+                    context=context,
                     previous_chapters_summary=previous_chapters_summary,
-                    enhancers_guide=enhancers_guide,
-                    random_detail=random_detail,
                 )
-
-                logger.debug("Chapter %d written: %.300s", index, result.chapter_text)
-                clean_title = _clean_chapter_title(result.title)
-                if not clean_title:
-                    clean_title = _clean_chapter_title(chapter_desc)
-
-                full_story += (
-                    f"\n\n### Chapter {index}: {clean_title}\n\n{result.chapter_text}"
-                )
-
-                chapter_summary = self._summarize_written_chapter(
-                    current_chapter_description=chapter_desc,
-                    chapter_text=result.chapter_text,
-                )
-                summary_block = (
-                    f"Chapter {index} ({chapter_desc}): {chapter_summary}".rstrip()
-                )
-                previous_chapters_summary = self._compose_rolling_summary(
+                full_story += chapter_markdown
+                previous_chapters_summary = self._update_rolling_summary(
+                    index=index,
+                    chapter_desc=chapter_desc,
+                    chapter_text=chapter_text,
                     previous_summary_entries=previous_summary_entries,
-                    latest_entry=summary_block,
-                    latest_chapter_text=result.chapter_text,
                 )
-                previous_summary_entries.append(summary_block)
             except RECOVERABLE_MODEL_EXCEPTIONS as exc:
                 logger.error("Error writing chapter %d: %s", index, exc, exc_info=True)
                 break
