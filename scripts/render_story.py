@@ -234,7 +234,9 @@ def parse_document(text: str) -> tuple[str, list[tuple[str, str, str]]]:
         heading = current_heading or "Overview"
         sections.append((slugify(heading), heading, current_blocks))
 
-    rendered = [(slug, heading, render_blocks(body)) for slug, heading, body in sections]
+    rendered = [
+        (slug, heading, render_blocks(body)) for slug, heading, body in sections
+    ]
     return title or "Story Output", rendered
 
 

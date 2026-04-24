@@ -1,4 +1,9 @@
-from postprocessing import _normalize, extract_sentences, find_similar_sentences, format_report
+from postprocessing import (
+    _normalize,
+    extract_sentences,
+    find_similar_sentences,
+    format_report,
+)
 
 
 SAMPLE_STORY = (
@@ -10,11 +15,15 @@ SAMPLE_STORY = (
 
 
 def test_normalize_preserves_leading_quote():
-    assert _normalize('"Hello there," she said warmly') == '"hello there," she said warmly'
+    assert (
+        _normalize('"Hello there," she said warmly') == '"hello there," she said warmly'
+    )
 
 
 def test_normalize_preserves_leading_parenthesis():
-    assert _normalize("(Whispering) she crept forward") == "(whispering) she crept forward"
+    assert (
+        _normalize("(Whispering) she crept forward") == "(whispering) she crept forward"
+    )
 
 
 def test_normalize_strips_markdown_heading():
@@ -53,8 +62,7 @@ def test_find_similar_sentences_detects_near_duplicates():
 
     # The knight sentences should be flagged
     knight_found = any(
-        "knight rode" in a.lower() and "knight rode" in b.lower()
-        for a, b, _ in pairs
+        "knight rode" in a.lower() and "knight rode" in b.lower() for a, b, _ in pairs
     )
     assert knight_found, f"Expected knight sentences to be paired, got: {pairs}"
 

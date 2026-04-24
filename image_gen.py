@@ -55,7 +55,9 @@ class ImageGenerator:
         """
         import replicate
 
-        full_prompt = f"1girl/1boy, portrait, upper body, {prompt}, {ANIME_STYLE_SUFFIX}"
+        full_prompt = (
+            f"1girl/1boy, portrait, upper body, {prompt}, {ANIME_STYLE_SUFFIX}"
+        )
 
         output = replicate.run(
             ANIMAGINE_MODEL,

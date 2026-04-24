@@ -230,7 +230,9 @@ def count_words(
     words = [word for word in words if len(word) >= min_length]
     counts = Counter(words)
     if min_count > 1:
-        counts = Counter({word: count for word, count in counts.items() if count >= min_count})
+        counts = Counter(
+            {word: count for word, count in counts.items() if count >= min_count}
+        )
     return counts
 
 
