@@ -8,6 +8,7 @@ import dspy
 import pytest
 from dotenv import load_dotenv
 
+from logging_config import TokenUsageCallback
 from main import initialize_text_generators
 from story_modules import (
     ChapterInpaintingGenerator,
@@ -198,9 +199,10 @@ def test_pipeline(
     # For testing in an environment where no actual LLM API is reachable, use the MockLM.
     # To run actual integration tests, you'd provide an active OPENAI_API_KEY or local Ollama running.
     # If the user requested the mock model, or if we want to ensure tests always pass in CI, use MockLM.
+    callbacks = [TokenUsageCallback()] if TokenUsageCallback is not None else []
     if model_name == "mock" or model_name == "test_mock":
         lm = MockLM()
-        dspy.configure(lm=lm)
+        dspy.configure(lm=lm, callbacks=callbacks)
     else:
         # We assume OPENAI_API_KEY is available in the run_in_bash_session, if not, we skip the actual test
         if "openai" in model_name.lower() and not kwargs.get("api_key"):
@@ -208,7 +210,7 @@ def test_pipeline(
             return
 
         lm = dspy.LM(model_name, cache=cache, **kwargs)
-        dspy.configure(lm=lm)
+        dspy.configure(lm=lm, callbacks=callbacks)
 
     idea = "An unnamed child is raised by the Church as the ultimate weapon against demons. As child grows he learns that the church itself is corrupt and breeds demons for controlled chaos. The church recieves funding for protection and as such decides who should recieve help. The child eventually becomes overpowered and turns back on the Church"
 

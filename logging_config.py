@@ -29,7 +29,9 @@ See ADR-003 in think_tank for the full standard.
 import logging
 import os
 import sys
+import time
 from datetime import datetime, timezone
+from typing import Any
 
 
 # ---------------------------------------------------------------------------
@@ -260,3 +262,76 @@ def log_llm_call(
             "latency_ms": latency_ms,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# DSPy callback: automatic token-usage logging for every LM call
+# ---------------------------------------------------------------------------
+
+try:
+    from dspy.utils.callback import BaseCallback
+except ImportError:
+    BaseCallback = None
+
+
+if BaseCallback is not None:
+
+    class TokenUsageCallback(BaseCallback):
+        """Log token usage after every DSPy LM call.
+
+        Register via ``dspy.configure(callbacks=[TokenUsageCallback()])``.
+        Works with any real LM backend (litellm/Ollama/OpenAI). MockLM
+        bypasses the ``@with_callbacks`` decorator so this callback will
+        not fire during mock-only test runs — that is expected.
+        """
+
+        def __init__(self) -> None:
+            self._calls: dict[str, dict[str, Any]] = {}
+            self._logger = logging.getLogger("token_usage")
+
+        def on_lm_start(
+            self,
+            call_id: str,
+            instance: Any,
+            inputs: dict[str, Any],
+        ) -> None:
+            self._calls[call_id] = {
+                "instance": instance,
+                "t0": time.perf_counter(),
+            }
+
+        def on_lm_end(
+            self,
+            call_id: str,
+            outputs: dict[str, Any] | None,
+            exception: Exception | None = None,
+        ) -> None:
+            call_info = self._calls.pop(call_id, None)
+            if exception or call_info is None:
+                return
+
+            instance = call_info["instance"]
+            elapsed_ms = (time.perf_counter() - call_info["t0"]) * 1000
+
+            if not getattr(instance, "history", None):
+                return
+
+            entry = instance.history[-1]
+            usage = entry.get("usage") or {}
+            model = entry.get("model", getattr(instance, "model", "unknown"))
+
+            tokens_in = usage.get("prompt_tokens", 0)
+            tokens_out = usage.get("completion_tokens", 0)
+            cost = entry.get("cost")
+
+            log_llm_call(
+                self._logger,
+                model=model,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                cost=cost,
+                latency_ms=elapsed_ms,
+            )
+
+else:
+    TokenUsageCallback = None  # type: ignore[assignment,misc]

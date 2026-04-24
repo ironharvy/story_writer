@@ -15,7 +15,7 @@ from rich.prompt import Confirm, Prompt
 
 from dspy_optimization import try_load_optimized_module
 from image_gen import ImageGenerator
-from logging_config import setup_logging
+from logging_config import TokenUsageCallback, setup_logging
 from postprocessing import find_similar_sentences, format_report
 from story_modules import (
     ChapterInpaintingGenerator,
@@ -131,7 +131,8 @@ def configure_dspy(config: DSPyConfig) -> None:
         except _RECOVERABLE_RUNTIME_EXCEPTIONS as exc:
             logger.warning("Langfuse DSPy callback handler unavailable: %s", exc)
 
-    dspy.configure(lm=lm)
+    callbacks = [TokenUsageCallback()] if TokenUsageCallback is not None else []
+    dspy.configure(lm=lm, callbacks=callbacks)
 
 
 def initialize_text_generators(
