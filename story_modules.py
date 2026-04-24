@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from _compat import observe
 from exceptions import RECOVERABLE_MODEL_EXCEPTIONS
+from world_bible import WorldBible
 
 # Probability that a chapter receives a random creative flourish (0.0 – 1.0).
 RANDOM_DETAIL_PROBABILITY = 0.35
