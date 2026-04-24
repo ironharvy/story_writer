@@ -8,6 +8,7 @@ import dspy
 import pytest
 from dotenv import load_dotenv
 
+from logging_config import TokenUsageCallback
 from main import initialize_text_generators
 from story_modules import (
     ChapterInpaintingGenerator,
@@ -63,7 +64,7 @@ class MockLM(dspy.LM):
             return ['```json\n{"story": "Mock final story"}\n```']
         if "[[ ## enhancers_guide ## ]]" in content or ('"enhancers_guide"' in content and "evaluating which story enhancers" in content):
             return ['```json\n{"reasoning": "Mock reasoning", "enhancers_guide": "Mock enhancers guide"}\n```']
-        if "[[ ## chapter_plan ## ]]" in content or ('"chapter_plan"' in content and "Each arc broken into chapters" in content):
+        if "[[ ## chapter_plan ## ]]" in content or ('"chapter_plan"' in content and "Chapter Plan for this act" in content):
             return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": ["Chapter 1: Discovery", "Chapter 2: Training", "Chapter 3: Revelation", "Chapter 4: Escape"]}\n```']
         if "[[ ## world_bible ## ]]" in content or ('"world_bible"' in content and "setting, lore, and characters" in content):
             return ['```json\n{"world_bible": "Mock world bible"}\n```']
@@ -198,9 +199,10 @@ def test_pipeline(
     # For testing in an environment where no actual LLM API is reachable, use the MockLM.
     # To run actual integration tests, you'd provide an active OPENAI_API_KEY or local Ollama running.
     # If the user requested the mock model, or if we want to ensure tests always pass in CI, use MockLM.
+    callbacks = [TokenUsageCallback()] if TokenUsageCallback is not None else []
     if model_name == "mock" or model_name == "test_mock":
         lm = MockLM()
-        dspy.configure(lm=lm)
+        dspy.configure(lm=lm, callbacks=callbacks)
     else:
         # We assume OPENAI_API_KEY is available in the run_in_bash_session, if not, we skip the actual test
         if "openai" in model_name.lower() and not kwargs.get("api_key"):
@@ -208,7 +210,7 @@ def test_pipeline(
             return
 
         lm = dspy.LM(model_name, cache=cache, **kwargs)
-        dspy.configure(lm=lm)
+        dspy.configure(lm=lm, callbacks=callbacks)
 
     idea = "An unnamed child is raised by the Church as the ultimate weapon against demons. As child grows he learns that the church itself is corrupt and breeds demons for controlled chaos. The church recieves funding for protection and as such decides who should recieve help. The child eventually becomes overpowered and turns back on the Church"
 
@@ -477,6 +479,80 @@ def test_chapter_inpainting_generator_rejects_invalid_ratio():
             chapter_plan="Chapter 1: Start",
             expansion_ratio=1.0,
         )
+
+class TestTokenUsageCallback:
+    """Tests for the TokenUsageCallback DSPy callback."""
+
+    def test_instantiation(self):
+        assert TokenUsageCallback is not None
+        cb = TokenUsageCallback()
+        assert cb._calls == {}
+
+    def test_on_lm_start_stores_call_info(self):
+        cb = TokenUsageCallback()
+        mock_instance = MagicMock()
+        cb.on_lm_start(call_id="abc", instance=mock_instance, inputs={"prompt": "hi"})
+        assert "abc" in cb._calls
+        assert cb._calls["abc"]["instance"] is mock_instance
+        assert "t0" in cb._calls["abc"]
+
+    def test_on_lm_end_logs_usage_from_history(self):
+        cb = TokenUsageCallback()
+        mock_instance = MagicMock()
+        mock_instance.model = "ollama/gemma2:27b"
+        mock_instance.history = [
+            {
+                "model": "ollama/gemma2:27b",
+                "usage": {"prompt_tokens": 1200, "completion_tokens": 350, "total_tokens": 1550},
+                "cost": None,
+            }
+        ]
+        cb.on_lm_start(call_id="abc", instance=mock_instance, inputs={})
+        with patch.object(cb._logger, "info") as mock_log:
+            cb.on_lm_end(call_id="abc", outputs={"text": "response"})
+            mock_log.assert_called_once()
+            extra = mock_log.call_args[1]["extra"]
+            assert extra["tokens_in"] == 1200
+            assert extra["tokens_out"] == 350
+            assert extra["model"] == "ollama/gemma2:27b"
+
+    def test_on_lm_end_skips_on_exception(self):
+        cb = TokenUsageCallback()
+        mock_instance = MagicMock()
+        cb.on_lm_start(call_id="abc", instance=mock_instance, inputs={})
+        with patch.object(cb._logger, "info") as mock_log:
+            cb.on_lm_end(call_id="abc", outputs=None, exception=RuntimeError("fail"))
+            mock_log.assert_not_called()
+        assert "abc" not in cb._calls
+
+    def test_on_lm_end_handles_empty_history(self):
+        cb = TokenUsageCallback()
+        mock_instance = MagicMock()
+        mock_instance.history = []
+        cb.on_lm_start(call_id="abc", instance=mock_instance, inputs={})
+        with patch.object(cb._logger, "info") as mock_log:
+            cb.on_lm_end(call_id="abc", outputs={"text": "response"})
+            mock_log.assert_not_called()
+
+    def test_on_lm_end_handles_missing_usage(self):
+        cb = TokenUsageCallback()
+        mock_instance = MagicMock()
+        mock_instance.model = "mock"
+        mock_instance.history = [{"model": "mock", "usage": {}, "cost": None}]
+        cb.on_lm_start(call_id="abc", instance=mock_instance, inputs={})
+        with patch.object(cb._logger, "info") as mock_log:
+            cb.on_lm_end(call_id="abc", outputs={"text": "response"})
+            mock_log.assert_called_once()
+            extra = mock_log.call_args[1]["extra"]
+            assert extra["tokens_in"] == 0
+            assert extra["tokens_out"] == 0
+
+    def test_on_lm_end_unknown_call_id_is_noop(self):
+        cb = TokenUsageCallback()
+        with patch.object(cb._logger, "info") as mock_log:
+            cb.on_lm_end(call_id="unknown", outputs={"text": "response"})
+            mock_log.assert_not_called()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test AI DSPy Story Writer")
