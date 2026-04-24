@@ -27,6 +27,7 @@ from story_modules import (
     SpineTemplateGenerator,
     StoryGenerator,
 )
+from world_bible import WorldBible
 from world_bible_modules import WorldBibleGenerator, WorldBibleQuestionGenerator
 
 try:
@@ -423,7 +424,7 @@ def generate_world_bible(
     spine_template: str,
     world_bible_question_generator: Any,
     world_bible_generator: Any,
-) -> str:
+) -> WorldBible:
     """Generate world-bible follow-up QA and final world bible."""
     console.print(
         "\n[italic]Generating follow-up questions to help flesh out "
@@ -441,10 +442,10 @@ def generate_world_bible(
         spine_template=spine_template,
         user_additions=wb_qa_text,
     )
-    world_bible = wb_result.world_bible
+    world_bible = wb_result.world_bible_structured
 
     console.print("\n[bold green]--- World Bible ---[/bold green]")
-    console.print(world_bible)
+    console.print(world_bible.full_text)
     console.print("[bold green]-------------------[/bold green]")
     return world_bible
 
@@ -485,7 +486,10 @@ def _generate_character_portraits(
     return portrait_paths
 
 
-def maybe_generate_character_assets(args: Namespace, world_bible: str) -> ImageArtifacts:
+def maybe_generate_character_assets(
+    args: Namespace,
+    world_bible: WorldBible,
+) -> ImageArtifacts:
     """Generate character descriptions and portraits when image mode is enabled."""
     if not args.enable_images:
         return ImageArtifacts([], {}, "", None)
@@ -501,7 +505,7 @@ def maybe_generate_character_assets(args: Namespace, world_bible: str) -> ImageA
 
     console.print("\n[italic]Generating character visual descriptions...[/italic]")
     cv_describer = CharacterVisualDescriber()
-    cv_result = cv_describer(world_bible=world_bible)
+    cv_result = cv_describer(world_bible=world_bible.full_text)
     character_visuals = cv_result.character_visuals
     character_visuals_summary = _summarize_character_visuals(character_visuals)
     character_portrait_paths = _generate_character_portraits(
@@ -565,7 +569,7 @@ class StoryFoundation:
 
     core_premise: str
     spine_template: str
-    world_bible: str
+    world_bible: WorldBible
 
 
 def generate_story_text(
@@ -589,7 +593,7 @@ def generate_story_text(
         parser=parser,
         chapter_inpainting_generator=generators["ChapterInpaintingGenerator"],
         story_result=story_result,
-        world_bible=foundation.world_bible,
+        world_bible=foundation.world_bible.full_text,
     )
     return story_result, final_story_text
 
@@ -705,7 +709,7 @@ def save_story_output(output_dir: str, artifacts: "StoryRunArtifacts") -> str:
         file_handle.write("## Spine Template\n")
         file_handle.write(f"{artifacts.spine_template}\n\n")
         file_handle.write("## World Bible\n")
-        file_handle.write(f"{artifacts.world_bible}\n\n")
+        file_handle.write(f"{artifacts.world_bible.full_text}\n\n")
         _write_character_visuals_section(file_handle, artifacts.image_artifacts)
         _write_story_metadata_section(file_handle, artifacts.story_result)
         _write_final_story_section(
@@ -723,7 +727,7 @@ class StoryRunArtifacts:
 
     core_premise: str
     spine_template: str
-    world_bible: str
+    world_bible: WorldBible
     image_artifacts: ImageArtifacts
     story_result: Any
     final_story_text: str
@@ -733,7 +737,7 @@ class StoryRunArtifacts:
 def _build_story_foundation(
     generators: dict[str, Any],
     idea: str,
-) -> tuple[str, str, str]:
+) -> StoryFoundation:
     """Run premise, spine, and world bible stages."""
     idea, core_premise, qa_text = run_core_premise_flow(
         idea=idea,
