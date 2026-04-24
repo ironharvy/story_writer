@@ -14,6 +14,7 @@ from rich.console import Console
 from rich.prompt import Confirm, Prompt
 
 from dspy_optimization import try_load_optimized_module
+from exceptions import RECOVERABLE_RUNTIME_EXCEPTIONS
 from image_gen import ImageGenerator
 from logging_config import TokenUsageCallback, setup_logging
 from postprocessing import find_similar_sentences, format_report
@@ -39,17 +40,6 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 console = Console()
-
-_RECOVERABLE_RUNTIME_EXCEPTIONS = (
-    AttributeError,
-    TypeError,
-    ValueError,
-    RuntimeError,
-    KeyError,
-    IndexError,
-    OSError,
-)
-
 
 @dataclass
 class DSPyConfig:
@@ -129,7 +119,7 @@ def configure_dspy(config: DSPyConfig) -> None:
     if os.environ.get("LANGFUSE_PUBLIC_KEY") and DSPyInstrumentor is not None:
         try:
             DSPyInstrumentor().instrument()
-        except _RECOVERABLE_RUNTIME_EXCEPTIONS as exc:
+        except RECOVERABLE_RUNTIME_EXCEPTIONS as exc:
             logger.warning("Langfuse DSPy callback handler unavailable: %s", exc)
 
     callbacks = [TokenUsageCallback()] if TokenUsageCallback is not None else []
@@ -488,7 +478,7 @@ def _generate_character_portraits(
             )
             portrait_paths[visual.name] = path
             console.print(f"  [green]Saved portrait:[/green] {path}")
-        except _RECOVERABLE_RUNTIME_EXCEPTIONS as exc:
+        except RECOVERABLE_RUNTIME_EXCEPTIONS as exc:
             logger.warning("Failed to generate portrait for %s: %s", visual.name, exc)
             console.print(
                 f"  [red]Failed to generate portrait for {visual.name}: {exc}[/red]"
@@ -637,7 +627,7 @@ def maybe_generate_scene_images(
             )
             scene_image_paths[i] = path
             console.print(f"  [green]Chapter {i} scene:[/green] {path}")
-        except _RECOVERABLE_RUNTIME_EXCEPTIONS as exc:
+        except RECOVERABLE_RUNTIME_EXCEPTIONS as exc:
             console.print(f"  [red]Failed to generate scene for chapter {i}: {exc}[/red]")
     return scene_image_paths
 

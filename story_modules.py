@@ -9,7 +9,7 @@ import dspy
 from pydantic import BaseModel, Field, model_validator
 
 from _compat import observe
-from world_bible import WorldBible
+from exceptions import RECOVERABLE_MODEL_EXCEPTIONS
 
 # Probability that a chapter receives a random creative flourish (0.0 – 1.0).
 RANDOM_DETAIL_PROBABILITY = 0.35
@@ -35,15 +35,6 @@ _ACT_SEQUENCE = [
 _chapter_heading_re = re.compile(r"^###\s+Chapter\s+\d+:.*$", re.MULTILINE)
 
 logger = logging.getLogger(__name__)
-
-_RECOVERABLE_MODEL_EXCEPTIONS = (
-    AttributeError,
-    TypeError,
-    ValueError,
-    RuntimeError,
-    KeyError,
-    IndexError,
-)
 
 # Regex to strip leading "Chapter <number>:" / "Chapter <number> -" from LLM-generated titles
 _chapter_prefix_re = re.compile(
@@ -514,7 +505,7 @@ class ChapterInpaintingGenerator(dspy.Module):
                     expanded_chapters.append((chapter_header, expanded_chapter_text))
                 else:
                     expanded_chapters.append((chapter_header, chapter_text))
-            except _RECOVERABLE_MODEL_EXCEPTIONS as exc:
+            except RECOVERABLE_MODEL_EXCEPTIONS as exc:
                 logger.warning(
                     "Chapter inpainting failed for %s: %s",
                     chapter_header,
@@ -565,7 +556,7 @@ class StoryGenerator(dspy.Module):
                 detail_type=detail_type,
             )
             return result.random_detail
-        except _RECOVERABLE_MODEL_EXCEPTIONS as exc:
+        except RECOVERABLE_MODEL_EXCEPTIONS as exc:
             logger.warning("Failed to generate random detail: %s", exc)
             return ""
 
@@ -649,7 +640,7 @@ class StoryGenerator(dspy.Module):
 
                 full_story += f"\n\n### Chapter {index}: {clean_title}\n\n{result.chapter_text}"
                 previous_chapters_summary += f"Chapter {index}: {chapter_desc}\n"
-            except _RECOVERABLE_MODEL_EXCEPTIONS as exc:
+            except RECOVERABLE_MODEL_EXCEPTIONS as exc:
                 logger.error("Error writing chapter %d: %s", index, exc, exc_info=True)
                 break
 
