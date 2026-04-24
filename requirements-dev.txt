@@ -4,4 +4,3 @@ ruff
 pylint
 radon
 vulture
-coloredlogs
