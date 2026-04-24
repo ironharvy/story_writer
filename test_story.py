@@ -4,12 +4,11 @@ import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import coloredlogs
 import dspy
 import pytest
 from dotenv import load_dotenv
 
-from logging_config import TokenUsageCallback
+from logging_config import TokenUsageCallback, setup_logging
 from main import initialize_text_generators
 from story_modules import (
     ChapterInpaintingGenerator,
@@ -113,40 +112,7 @@ logger = logging.getLogger(__name__)
 
 
 def configure_logging(verbosity: int = 0, log_file: str | None = None):
-    level_map = {0: logging.WARNING, 1: logging.INFO, 2: logging.DEBUG, 3: logging.DEBUG}
-    level = level_map.get(verbosity, logging.DEBUG)
-    log_format = "%(asctime)s.%(msecs)03d %(levelname)s [%(name)s] %(message)s"
-    date_format = "%Y-%m-%d %H:%M:%S"
-    coloredlogs.install(
-        level=level,
-        fmt=log_format,
-        datefmt=date_format,
-    )
-
-    if log_file:
-        log_dir = os.path.dirname(os.path.abspath(log_file))
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
-        file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
-        logging.getLogger().addHandler(file_handler)
-
-    logger.setLevel(level)
-    _http_loggers = ("httpx", "httpcore", "urllib3", "requests", "langfuse")
-    _llm_loggers = ("litellm", "dspy", "langfuse", "openai", "anthropic")
-
-    if verbosity <= 1:
-        for name in _http_loggers + _llm_loggers:
-            logging.getLogger(name).setLevel(logging.WARNING)
-    elif verbosity == 2:
-        for name in _llm_loggers:
-            logging.getLogger(name).setLevel(logging.DEBUG)
-        for name in _http_loggers:
-            logging.getLogger(name).setLevel(logging.WARNING)
-    else:
-        for name in _llm_loggers + _http_loggers:
-            logging.getLogger(name).setLevel(logging.DEBUG)
+    setup_logging(verbosity=verbosity, log_file=log_file)
 
 
 def test_pipeline(

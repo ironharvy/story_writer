@@ -48,7 +48,7 @@ class DSPyConfig:
     model_name: str
     api_base: str | None = None
     api_key: str | None = None
-    max_tokens: int = 2000
+    max_tokens: int = 8000
     cache: bool = True
     memory_cache: bool = True
     cache_dir: str | None = None
