@@ -480,6 +480,80 @@ def test_chapter_inpainting_generator_rejects_invalid_ratio():
             expansion_ratio=1.0,
         )
 
+class TestTokenUsageCallback:
+    """Tests for the TokenUsageCallback DSPy callback."""
+
+    def test_instantiation(self):
+        assert TokenUsageCallback is not None
+        cb = TokenUsageCallback()
+        assert cb._calls == {}
+
+    def test_on_lm_start_stores_call_info(self):
+        cb = TokenUsageCallback()
+        mock_instance = MagicMock()
+        cb.on_lm_start(call_id="abc", instance=mock_instance, inputs={"prompt": "hi"})
+        assert "abc" in cb._calls
+        assert cb._calls["abc"]["instance"] is mock_instance
+        assert "t0" in cb._calls["abc"]
+
+    def test_on_lm_end_logs_usage_from_history(self):
+        cb = TokenUsageCallback()
+        mock_instance = MagicMock()
+        mock_instance.model = "ollama/gemma2:27b"
+        mock_instance.history = [
+            {
+                "model": "ollama/gemma2:27b",
+                "usage": {"prompt_tokens": 1200, "completion_tokens": 350, "total_tokens": 1550},
+                "cost": None,
+            }
+        ]
+        cb.on_lm_start(call_id="abc", instance=mock_instance, inputs={})
+        with patch.object(cb._logger, "info") as mock_log:
+            cb.on_lm_end(call_id="abc", outputs={"text": "response"})
+            mock_log.assert_called_once()
+            extra = mock_log.call_args[1]["extra"]
+            assert extra["tokens_in"] == 1200
+            assert extra["tokens_out"] == 350
+            assert extra["model"] == "ollama/gemma2:27b"
+
+    def test_on_lm_end_skips_on_exception(self):
+        cb = TokenUsageCallback()
+        mock_instance = MagicMock()
+        cb.on_lm_start(call_id="abc", instance=mock_instance, inputs={})
+        with patch.object(cb._logger, "info") as mock_log:
+            cb.on_lm_end(call_id="abc", outputs=None, exception=RuntimeError("fail"))
+            mock_log.assert_not_called()
+        assert "abc" not in cb._calls
+
+    def test_on_lm_end_handles_empty_history(self):
+        cb = TokenUsageCallback()
+        mock_instance = MagicMock()
+        mock_instance.history = []
+        cb.on_lm_start(call_id="abc", instance=mock_instance, inputs={})
+        with patch.object(cb._logger, "info") as mock_log:
+            cb.on_lm_end(call_id="abc", outputs={"text": "response"})
+            mock_log.assert_not_called()
+
+    def test_on_lm_end_handles_missing_usage(self):
+        cb = TokenUsageCallback()
+        mock_instance = MagicMock()
+        mock_instance.model = "mock"
+        mock_instance.history = [{"model": "mock", "usage": {}, "cost": None}]
+        cb.on_lm_start(call_id="abc", instance=mock_instance, inputs={})
+        with patch.object(cb._logger, "info") as mock_log:
+            cb.on_lm_end(call_id="abc", outputs={"text": "response"})
+            mock_log.assert_called_once()
+            extra = mock_log.call_args[1]["extra"]
+            assert extra["tokens_in"] == 0
+            assert extra["tokens_out"] == 0
+
+    def test_on_lm_end_unknown_call_id_is_noop(self):
+        cb = TokenUsageCallback()
+        with patch.object(cb._logger, "info") as mock_log:
+            cb.on_lm_end(call_id="unknown", outputs={"text": "response"})
+            mock_log.assert_not_called()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test AI DSPy Story Writer")
     parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "mock"), help="The language model to use (e.g., openai/gpt-4o-mini, ollama_chat/llama3). Defaults to MODEL env var or mock.")
