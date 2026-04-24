@@ -34,7 +34,9 @@ def _parse_modules(raw: str | None) -> list[str]:
     return requested
 
 
-def _optimize_or_snapshot_module(module_name: str, module: dspy.Module, output_dir: Path) -> Path:
+def _optimize_or_snapshot_module(
+    module_name: str, module: dspy.Module, output_dir: Path
+) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     artifact_path = output_dir / f"{module_name}.json"
     module.save(str(artifact_path))
@@ -49,13 +51,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Compile/save DSPy text pipeline module artifacts.",
     )
-    parser.add_argument("--model", type=str, default=os.environ.get("MODEL", "openai/gpt-4o-mini"))
+    parser.add_argument(
+        "--model", type=str, default=os.environ.get("MODEL", "openai/gpt-4o-mini")
+    )
     parser.add_argument("--llm-url", type=str, default=os.environ.get("LLM_URL"))
     parser.add_argument("--api-key", type=str, default=os.environ.get("API_KEY"))
     parser.add_argument("--max-tokens", type=int, default=4000)
     parser.add_argument("--cache", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--memory-cache", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--cache-dir", type=str, default=os.environ.get("DSPY_CACHE_DIR"))
+    parser.add_argument(
+        "--memory-cache", action=argparse.BooleanOptionalAction, default=True
+    )
+    parser.add_argument(
+        "--cache-dir", type=str, default=os.environ.get("DSPY_CACHE_DIR")
+    )
     parser.add_argument(
         "--modules",
         type=str,

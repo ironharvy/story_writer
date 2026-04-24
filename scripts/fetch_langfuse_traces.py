@@ -14,7 +14,12 @@ from dotenv import load_dotenv
 
 
 def _iso_utc(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        dt.astimezone(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def _build_auth_header(public_key: str, secret_key: str) -> str:
@@ -72,7 +77,11 @@ def _extract_error_hints(obj) -> list[str]:
             key_l = str(key).lower()
             if key_l in {"error", "errormessage", "statusmessage"} and value:
                 hints.append(f"{key}: {value}")
-            elif key_l == "level" and isinstance(value, str) and value.lower() in {"error", "fatal"}:
+            elif (
+                key_l == "level"
+                and isinstance(value, str)
+                and value.lower() in {"error", "fatal"}
+            ):
                 hints.append(f"level: {value}")
             else:
                 hints.extend(_extract_error_hints(value))
@@ -82,7 +91,13 @@ def _extract_error_hints(obj) -> list[str]:
     return hints
 
 
-def _summarize(input_path: Path, output_path: Path | None, since: datetime | None, until: datetime | None, limit: int | None) -> int:
+def _summarize(
+    input_path: Path,
+    output_path: Path | None,
+    since: datetime | None,
+    until: datetime | None,
+    limit: int | None,
+) -> int:
     try:
         payload = json.loads(input_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -94,7 +109,10 @@ def _summarize(input_path: Path, output_path: Path | None, since: datetime | Non
 
     details = payload.get("details") if isinstance(payload, dict) else None
     if not isinstance(details, list):
-        print("Input JSON has no `details` list. Re-run fetch with --include-details.", file=sys.stderr)
+        print(
+            "Input JSON has no `details` list. Re-run fetch with --include-details.",
+            file=sys.stderr,
+        )
         return 2
 
     summaries: list[dict] = []
@@ -108,7 +126,11 @@ def _summarize(input_path: Path, output_path: Path | None, since: datetime | Non
         if until and (ts is None or ts > until):
             continue
 
-        observations = trace.get("observations") if isinstance(trace.get("observations"), list) else []
+        observations = (
+            trace.get("observations")
+            if isinstance(trace.get("observations"), list)
+            else []
+        )
         obs_items = []
         for obs in observations:
             if not isinstance(obs, dict):
@@ -184,22 +206,58 @@ def _summarize(input_path: Path, output_path: Path | None, since: datetime | Non
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Fetch or summarize Langfuse traces.")
-    parser.add_argument("--mode", choices=["fetch", "summarize"], default="fetch", help="Operation mode")
-    parser.add_argument("--host", default=None, help="Langfuse host (e.g. https://cloud.langfuse.com)")
+    parser.add_argument(
+        "--mode", choices=["fetch", "summarize"], default="fetch", help="Operation mode"
+    )
+    parser.add_argument(
+        "--host", default=None, help="Langfuse host (e.g. https://cloud.langfuse.com)"
+    )
     parser.add_argument("--public-key", default=None, help="Langfuse public key")
     parser.add_argument("--secret-key", default=None, help="Langfuse secret key")
-    parser.add_argument("--limit", type=int, default=50, help="Number of traces to fetch")
-    parser.add_argument("--hours", type=int, default=24, help="Fetch traces from the last N hours")
+    parser.add_argument(
+        "--limit", type=int, default=50, help="Number of traces to fetch"
+    )
+    parser.add_argument(
+        "--hours", type=int, default=24, help="Fetch traces from the last N hours"
+    )
     parser.add_argument("--name", default=None, help="Optional trace name filter")
     parser.add_argument("--user-id", default=None, help="Optional user id filter")
-    parser.add_argument("--include-details", action="store_true", help="Fetch per-trace detail payloads")
-    parser.add_argument("--timeout", type=int, default=30, help="HTTP timeout in seconds")
-    parser.add_argument("--output", default=".tmp/langfuse_traces.json", help="Path to output JSON file")
-    parser.add_argument("--input", default=".tmp/langfuse_traces.json", help="Input JSON path for summarize mode")
-    parser.add_argument("--since", default=None, help="Summarize only traces at/after this ISO timestamp")
-    parser.add_argument("--until", default=None, help="Summarize only traces at/before this ISO timestamp")
-    parser.add_argument("--summary-hours", type=int, default=None, help="Summarize only traces from the last N hours")
-    parser.add_argument("--summary-limit", type=int, default=None, help="Max summarized traces to include")
+    parser.add_argument(
+        "--include-details", action="store_true", help="Fetch per-trace detail payloads"
+    )
+    parser.add_argument(
+        "--timeout", type=int, default=30, help="HTTP timeout in seconds"
+    )
+    parser.add_argument(
+        "--output", default=".tmp/langfuse_traces.json", help="Path to output JSON file"
+    )
+    parser.add_argument(
+        "--input",
+        default=".tmp/langfuse_traces.json",
+        help="Input JSON path for summarize mode",
+    )
+    parser.add_argument(
+        "--since",
+        default=None,
+        help="Summarize only traces at/after this ISO timestamp",
+    )
+    parser.add_argument(
+        "--until",
+        default=None,
+        help="Summarize only traces at/before this ISO timestamp",
+    )
+    parser.add_argument(
+        "--summary-hours",
+        type=int,
+        default=None,
+        help="Summarize only traces from the last N hours",
+    )
+    parser.add_argument(
+        "--summary-limit",
+        type=int,
+        default=None,
+        help="Max summarized traces to include",
+    )
     args = parser.parse_args()
 
     load_dotenv()
@@ -208,7 +266,9 @@ def main() -> int:
         since = _parse_iso8601(args.since) if args.since else None
         until = _parse_iso8601(args.until) if args.until else None
         if args.summary_hours is not None:
-            since = datetime.now(timezone.utc) - timedelta(hours=max(args.summary_hours, 1))
+            since = datetime.now(timezone.utc) - timedelta(
+                hours=max(args.summary_hours, 1)
+            )
         summary_output = Path(args.output) if args.output else None
         return _summarize(
             input_path=Path(args.input),
@@ -276,7 +336,9 @@ def main() -> int:
                 continue
             detail_url = f"{host}/api/public/traces/{trace_id}"
             try:
-                details.append(_fetch_json(detail_url, auth_header, timeout=args.timeout))
+                details.append(
+                    _fetch_json(detail_url, auth_header, timeout=args.timeout)
+                )
             except Exception as exc:
                 details.append({"trace_id": trace_id, "error": str(exc)})
 
@@ -292,7 +354,9 @@ def main() -> int:
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     print(f"Fetched {len(traces)} traces -> {output_path}")
     if not traces:

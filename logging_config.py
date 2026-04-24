@@ -38,14 +38,15 @@ from typing import Any
 # Formatters
 # ---------------------------------------------------------------------------
 
+
 class HumanFormatter(logging.Formatter):
     """Concise, readable format for terminal output."""
 
     LEVEL_COLORS = {
-        "DEBUG": "\033[36m",     # cyan
-        "INFO": "\033[32m",      # green
-        "WARNING": "\033[33m",   # yellow
-        "ERROR": "\033[31m",     # red
+        "DEBUG": "\033[36m",  # cyan
+        "INFO": "\033[32m",  # green
+        "WARNING": "\033[33m",  # yellow
+        "ERROR": "\033[31m",  # red
         "CRITICAL": "\033[1;31m",  # bold red
     }
     RESET = "\033[0m"
@@ -125,6 +126,7 @@ class JSONFormatter(logging.Formatter):
 # Setup
 # ---------------------------------------------------------------------------
 
+
 def setup_logging(
     verbosity: int = 0,
     log_level: str | None = None,
@@ -150,7 +152,12 @@ def setup_logging(
     if level_str:
         level = getattr(logging, level_str.upper(), logging.WARNING)
     else:
-        level_map = {0: logging.WARNING, 1: logging.INFO, 2: logging.DEBUG, 3: logging.DEBUG}
+        level_map = {
+            0: logging.WARNING,
+            1: logging.INFO,
+            2: logging.DEBUG,
+            3: logging.DEBUG,
+        }
         level = level_map.get(verbosity, logging.DEBUG)
 
     # Resolve format
@@ -234,6 +241,7 @@ def setup_logging(
 # ---------------------------------------------------------------------------
 # Convenience: LLM call logging helper
 # ---------------------------------------------------------------------------
+
 
 def log_llm_call(
     logger: logging.Logger,

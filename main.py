@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 console = Console()
 
+
 @dataclass
 class DSPyConfig:
     """Runtime configuration for DSPy language model setup."""
@@ -93,7 +94,7 @@ def configure_dspy(config: DSPyConfig) -> None:
             kwargs["api_key"] = env_key
     elif "ollama" in model_name.lower():
         pass
-        #kwargs["api_key"] = "" # Ollama typically doesn't need an API key
+        # kwargs["api_key"] = "" # Ollama typically doesn't need an API key
 
     dspy.configure_cache(
         enable_disk_cache=config.cache,
@@ -157,11 +158,12 @@ def initialize_text_generators(
 
     return generators
 
+
 def get_answers_for_questions(questions_with_answers: Sequence[Any]) -> str:
     """Collect accepted or user-edited answers for generated questions."""
     qa_pairs = []
     for i, qa in enumerate(questions_with_answers):
-        console.print(f"\n[bold cyan]Question {i+1}:[/bold cyan] {qa.question}")
+        console.print(f"\n[bold cyan]Question {i + 1}:[/bold cyan] {qa.question}")
         console.print(f"[bold green]Proposed Answer:[/bold green] {qa.proposed_answer}")
 
         accept = Confirm.ask("Accept this proposed answer?")
@@ -349,7 +351,9 @@ def run_core_premise_flow(
     qa_text = ""
 
     while True:
-        console.print("\n[italic]Generating questions to interrogate your idea...[/italic]")
+        console.print(
+            "\n[italic]Generating questions to interrogate your idea...[/italic]"
+        )
         q_result = question_generator(idea=idea)
         qa_text = get_answers_for_questions(q_result.questions_with_answers)
 
@@ -457,8 +461,7 @@ def _summarize_character_visuals(character_visuals: list[Any]) -> str:
         console.print(f"\n[bold cyan]{visual.name}:[/bold cyan] {visual.reference_mix}")
         console.print(f"  [dim]{visual.distinguishing_features}[/dim]")
         lines.append(
-            f"- {visual.name}: {visual.reference_mix}. "
-            f"{visual.distinguishing_features}"
+            f"- {visual.name}: {visual.reference_mix}. {visual.distinguishing_features}"
         )
     return "\n".join(lines)
 
@@ -579,9 +582,7 @@ def generate_story_text(
     foundation: StoryFoundation,
 ) -> tuple[Any, str]:
     """Generate story and optionally run chapter inpainting."""
-    console.print(
-        "\n[italic]Generating Story (Chapter Plan, Final Story)...[/italic]"
-    )
+    console.print("\n[italic]Generating Story (Chapter Plan, Final Story)...[/italic]")
     story_result = generators["StoryGenerator"](
         core_premise=foundation.core_premise,
         spine_template=foundation.spine_template,
@@ -607,7 +608,9 @@ def maybe_generate_scene_images(
     if not args.enable_images or image_artifacts.image_generator is None:
         return {}
 
-    console.print("\n[italic]Generating scene illustrations for each chapter...[/italic]")
+    console.print(
+        "\n[italic]Generating scene illustrations for each chapter...[/italic]"
+    )
     scene_prompt_gen = SceneImagePromptGenerator()
 
     chapters = [c for c in final_story_text.split("### Chapter ") if c.strip()]
@@ -628,7 +631,9 @@ def maybe_generate_scene_images(
             scene_image_paths[i] = path
             console.print(f"  [green]Chapter {i} scene:[/green] {path}")
         except RECOVERABLE_RUNTIME_EXCEPTIONS as exc:
-            console.print(f"  [red]Failed to generate scene for chapter {i}: {exc}[/red]")
+            console.print(
+                f"  [red]Failed to generate scene for chapter {i}: {exc}[/red]"
+            )
     return scene_image_paths
 
 
@@ -840,7 +845,9 @@ def main() -> None:
     setup_runtime(args)
     console.print("[bold magenta]Welcome to the AI DSPy Story Writer![/bold magenta]")
 
-    idea = Prompt.ask("\n[bold yellow]What is your initial story idea/prompt?[/bold yellow]")
+    idea = Prompt.ask(
+        "\n[bold yellow]What is your initial story idea/prompt?[/bold yellow]"
+    )
     generators = initialize_text_generators(
         use_optimized=args.use_optimized,
         optimized_manifest=args.optimized_manifest,
@@ -857,6 +864,7 @@ def main() -> None:
         artifacts=artifacts,
     )
     _print_completion(output_filename)
+
 
 if __name__ == "__main__":
     main()

@@ -38,6 +38,7 @@ def _normalize_plot_timeline(plot_timeline: str) -> str:
 
     return "\n".join(normalized_lines).strip()
 
+
 class GenerateWorldBibleQuestionsSignature(dspy.Signature):
     """Generate follow-up questions that enrich world-bible inputs."""
 
@@ -49,6 +50,7 @@ class GenerateWorldBibleQuestionsSignature(dspy.Signature):
             "to help flesh out the World Bible."
         ),
     )
+
 
 class WorldBibleQuestionGenerator(dspy.Module):
     """Generate world-bible clarification questions from premise and spine."""
@@ -62,6 +64,7 @@ class WorldBibleQuestionGenerator(dspy.Module):
         """Generate clarification questions and proposed answers."""
         return self.generate(core_premise=core_premise, spine_template=spine_template)
 
+
 class GenerateWorldRulesSignature(dspy.Signature):
     """Generate rules governing the world and its systems."""
 
@@ -74,6 +77,7 @@ class GenerateWorldRulesSignature(dspy.Signature):
         desc="Rules of the world, including magic, science, etiquette, and law.",
     )
 
+
 class GenerateCharactersSignature(dspy.Signature):
     """Generate character bios and relevant relationship details."""
 
@@ -84,6 +88,7 @@ class GenerateCharactersSignature(dspy.Signature):
     )
     world_rules: str = dspy.InputField(desc="Rules of the world.")
     characters: str = dspy.OutputField(desc="Character descriptions and biographies.")
+
 
 class GenerateLocationsSignature(dspy.Signature):
     """Generate key places and location context for the setting."""
@@ -97,8 +102,10 @@ class GenerateLocationsSignature(dspy.Signature):
     characters: str = dspy.InputField(desc="Character descriptions and biographies.")
     locations: str = dspy.OutputField(desc="Places and locations in the world.")
 
+
 class GeneratePlotTimelineSignature(dspy.Signature):
     """A plot timeline."""
+
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     spine_template: str = dspy.InputField(desc="The narrative spine template.")
     user_additions: str = dspy.InputField(
@@ -108,6 +115,7 @@ class GeneratePlotTimelineSignature(dspy.Signature):
     characters: str = dspy.InputField(desc="Character descriptions and biographies.")
     locations: str = dspy.InputField(desc="Places and locations in the world.")
     plot_timeline: str = dspy.OutputField(desc="A plot timeline.")
+
 
 class WorldBibleGenerator(dspy.Module):
     """Compose world rules, characters, locations, and timeline into one bible."""

@@ -88,12 +88,17 @@ def try_load_optimized_module(
 
     artifact_path = _resolve_module_artifact_path(path, artifact_ref)
     if not artifact_path.exists():
-        logger.warning("Optimized artifact for %s missing: %s", module_name, artifact_path)
+        logger.warning(
+            "Optimized artifact for %s missing: %s", module_name, artifact_path
+        )
         return False
 
     load_fn = getattr(module, "load", None)
     if not callable(load_fn):
-        logger.warning("Module %s does not support load(); skipping optimized artifact", module_name)
+        logger.warning(
+            "Module %s does not support load(); skipping optimized artifact",
+            module_name,
+        )
         return False
 
     try:
