@@ -12,6 +12,7 @@ from logging_config import TokenUsageCallback, setup_logging
 from main import initialize_text_generators
 from story_modules import (
     ChapterInpaintingGenerator,
+    ChapterSummarizer,
     CharacterVisual,
     CharacterVisualDescriber,
     CorePremiseGenerator,
@@ -20,6 +21,8 @@ from story_modules import (
     SceneImagePromptGenerator,
     SpineTemplateGenerator,
     StoryGenerator,
+    _extract_trailing_paragraphs,
+    _truncate_chapter_for_summary,
 )
 from world_bible import WorldBible
 from world_bible_modules import WorldBibleGenerator
@@ -52,6 +55,12 @@ class MockLM(dspy.LM):
             return ['```json\n{"character_visuals": [{"name": "Mock Hero", "reference_mix": "a mix of Guts from Berserk and Zuko from Avatar", "distinguishing_features": "short black hair, amber eyes, burn scar on left cheek, dark leather armor", "full_prompt": "anime portrait, a mix of Guts from Berserk and Zuko from Avatar, short black hair, amber eyes, burn scar on left cheek, dark leather armor"}]}\n```']
         if "[[ ## image_prompt ## ]]" in content or ('"image_prompt"' in content and "anime scene" in content):
             return ['```json\n{"image_prompt": "anime scene, a warrior with short black hair and amber eyes standing in a dark cathedral, dramatic lighting"}\n```']
+        if "[[ ## chapter_summary ## ]]" in content or (
+            '"chapter_summary"' in content and "factual summary" in content
+        ):
+            return [
+                '```json\n{"chapter_summary": "Mock chapter summary covering events and named characters."}\n```'
+            ]
         if (
             "[[ ## chapter_text ## ]]" in content
             or ('"chapter_text"' in content and "immersive chapter" in content)
@@ -432,6 +441,13 @@ def test_story_generator_uses_structured_world_bible_fields():
             SimpleNamespace(title="Return", chapter_text="Chapter three text."),
         ],
     )
+    story_generator.summarize_chapter = MagicMock(
+        side_effect=[
+            SimpleNamespace(chapter_summary="Discovery summary."),
+            SimpleNamespace(chapter_summary="Pursuit summary."),
+            SimpleNamespace(chapter_summary="Return summary."),
+        ],
+    )
 
     result = story_generator(
         core_premise="A courier steals a crown of weather.",
@@ -458,6 +474,195 @@ def test_story_generator_uses_structured_world_bible_fields():
     assert enhancer_call["world_bible"] == world_bible.full_text
     assert "### Chapter 1: Discovery" in result.story
     assert "### Chapter 3: Return" in result.story
+
+
+def test_chapter_summarizer_instantiates():
+    summarizer = ChapterSummarizer()
+    assert summarizer is not None
+
+
+def test_chapter_summarizer_forward_returns_chapter_summary():
+    dspy.configure(lm=MockLM())
+    summarizer = ChapterSummarizer()
+
+    result = summarizer(
+        current_chapter_description="Chapter 7: Kael infiltrates the cathedral archive.",
+        chapter_text=(
+            "Kael entered the cathedral archive before dawn and found the reliquary key. "
+            "Sister Mara confronted him and admitted the Church orchestrated the recent attacks. "
+            "After a fight in the nave, Mara escaped with a fragment while Kael kept the key."
+        ),
+    )
+
+    assert hasattr(result, "chapter_summary")
+    assert isinstance(result.chapter_summary, str)
+    assert result.chapter_summary.strip()
+
+
+def test_truncate_chapter_for_summary_word_boundary():
+    text = "alpha bravo charlie delta echo foxtrot golf hotel india juliet"
+    out = _truncate_chapter_for_summary(text, max_chars=20)
+    assert out.endswith("…")
+    assert " " not in out[-2:]
+    assert len(out) <= 21
+
+
+def test_truncate_chapter_for_summary_short_text_unchanged():
+    assert _truncate_chapter_for_summary("short text", max_chars=100) == "short text"
+
+
+def test_extract_trailing_paragraphs_returns_last_n():
+    text = "Para one line.\n\nPara two line.\n\nPara three line."
+    out = _extract_trailing_paragraphs(text, 2)
+    assert out == "Para two line.\n\nPara three line."
+
+
+def test_extract_trailing_paragraphs_zero_disables():
+    assert _extract_trailing_paragraphs("anything here", 0) == ""
+
+
+def test_story_generator_wires_summarizer_into_previous_chapters_summary():
+    world_bible = WorldBible(
+        rules="Rules.",
+        characters="Tarin; Sel.",
+        locations="Moonwell; observatory.",
+        plot_timeline="Act 1 - Theft",
+    )
+    story_generator = StoryGenerator(random_detail_probability=0.0)
+    story_generator.generate_chapter_plan = MagicMock(
+        side_effect=[
+            SimpleNamespace(chapter_plan=["Discovery"]),
+            SimpleNamespace(chapter_plan=["Pursuit"]),
+            SimpleNamespace(chapter_plan=[]),
+        ],
+    )
+    story_generator.generate_enhancers = MagicMock(
+        return_value=SimpleNamespace(enhancers_guide="guide"),
+    )
+    story_generator.write_chapter = MagicMock(
+        side_effect=[
+            SimpleNamespace(title="Discovery", chapter_text="Chapter one prose."),
+            SimpleNamespace(title="Pursuit", chapter_text="Chapter two prose."),
+        ],
+    )
+    story_generator.summarize_chapter = MagicMock(
+        side_effect=[
+            SimpleNamespace(chapter_summary="Tarin finds the reliquary."),
+            SimpleNamespace(chapter_summary="Sel pursues Tarin across the dunes."),
+        ],
+    )
+
+    story_generator(
+        core_premise="premise",
+        spine_template="spine",
+        world_bible=world_bible,
+    )
+
+    assert story_generator.summarize_chapter.call_count == 2
+    first_summary_call = story_generator.summarize_chapter.call_args_list[0].kwargs
+    assert first_summary_call["chapter_text"] == "Chapter one prose."
+
+    second_write_call = story_generator.write_chapter.call_args_list[1].kwargs
+    prior = second_write_call["previous_chapters_summary"]
+    assert "Tarin finds the reliquary." in prior
+    assert "Chapter one prose." not in prior
+
+
+def test_story_generator_summary_falls_back_on_recoverable_error():
+    world_bible = WorldBible(
+        rules="Rules.",
+        characters="Tarin.",
+        locations="Moonwell.",
+        plot_timeline="Act 1 - Theft",
+    )
+    story_generator = StoryGenerator(random_detail_probability=0.0)
+    story_generator.generate_chapter_plan = MagicMock(
+        side_effect=[
+            SimpleNamespace(chapter_plan=["Discovery"]),
+            SimpleNamespace(chapter_plan=[]),
+            SimpleNamespace(chapter_plan=[]),
+        ],
+    )
+    story_generator.generate_enhancers = MagicMock(
+        return_value=SimpleNamespace(enhancers_guide="guide"),
+    )
+    long_text = "word " * 400
+    story_generator.write_chapter = MagicMock(
+        side_effect=[
+            SimpleNamespace(title="Discovery", chapter_text=long_text),
+            SimpleNamespace(title="Next", chapter_text="Second chapter prose."),
+        ],
+    )
+    story_generator.summarize_chapter = MagicMock(side_effect=RuntimeError("LM blew up"))
+
+    # Add a second chapter plan entry so we can inspect the next write_chapter call's
+    # previous_chapters_summary.
+    story_generator.generate_chapter_plan = MagicMock(
+        side_effect=[
+            SimpleNamespace(chapter_plan=["Discovery", "Next"]),
+            SimpleNamespace(chapter_plan=[]),
+            SimpleNamespace(chapter_plan=[]),
+        ],
+    )
+
+    story_generator(
+        core_premise="premise",
+        spine_template="spine",
+        world_bible=world_bible,
+    )
+
+    assert story_generator.summarize_chapter.call_count >= 1
+    second_write_call = story_generator.write_chapter.call_args_list[1].kwargs
+    prior = second_write_call["previous_chapters_summary"]
+    assert prior.strip()
+    assert prior.endswith("…\n") or prior.rstrip().endswith("…")
+
+
+def test_story_generator_verbatim_tail_prepends_previous_chapter_ending():
+    world_bible = WorldBible(
+        rules="Rules.",
+        characters="Tarin.",
+        locations="Moonwell.",
+        plot_timeline="Act 1",
+    )
+    story_generator = StoryGenerator(
+        random_detail_probability=0.0,
+        verbatim_tail_paragraphs=1,
+    )
+    story_generator.generate_chapter_plan = MagicMock(
+        side_effect=[
+            SimpleNamespace(chapter_plan=["Discovery", "Next"]),
+            SimpleNamespace(chapter_plan=[]),
+            SimpleNamespace(chapter_plan=[]),
+        ],
+    )
+    story_generator.generate_enhancers = MagicMock(
+        return_value=SimpleNamespace(enhancers_guide="guide"),
+    )
+    story_generator.write_chapter = MagicMock(
+        side_effect=[
+            SimpleNamespace(
+                title="Discovery",
+                chapter_text="First paragraph.\n\nSecond paragraph ends the chapter.",
+            ),
+            SimpleNamespace(title="Next", chapter_text="Second chapter prose."),
+        ],
+    )
+    story_generator.summarize_chapter = MagicMock(
+        return_value=SimpleNamespace(chapter_summary="Discovery summary."),
+    )
+
+    story_generator(
+        core_premise="premise",
+        spine_template="spine",
+        world_bible=world_bible,
+    )
+
+    second_write_call = story_generator.write_chapter.call_args_list[1].kwargs
+    prior = second_write_call["previous_chapters_summary"]
+    assert "Discovery summary." in prior
+    assert "Second paragraph ends the chapter." in prior
+    assert "First paragraph." not in prior
 
 
 def test_question_with_answer_does_not_promote_unrelated_fields():

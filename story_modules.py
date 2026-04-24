@@ -15,6 +15,14 @@ from world_bible import WorldBible
 # Probability that a chapter receives a random creative flourish (0.0 – 1.0).
 RANDOM_DETAIL_PROBABILITY = 0.35
 
+# Max characters kept when the chapter-summary LLM call fails and we fall back
+# to a simple truncation of the chapter text.
+SUMMARY_FALLBACK_MAX_CHARS = 600
+
+# Default number of paragraphs from the immediately prior chapter kept verbatim
+# in the rolling context. 0 disables the verbatim tail entirely.
+DEFAULT_VERBATIM_TAIL_PARAGRAPHS = 0
+
 # The kinds of random detail the LLM can be asked to invent.
 _RANDOM_DETAIL_TYPES = [
     "an unusually long and vivid description of a piece of scenery or environment",
@@ -91,6 +99,37 @@ def _split_story_into_chapters(story_text: str) -> list[tuple[str, str]]:
         chapters.append((header, body))
 
     return chapters
+
+
+def _truncate_chapter_for_summary(
+    chapter_text: str,
+    max_chars: int = SUMMARY_FALLBACK_MAX_CHARS,
+) -> str:
+    """Build a short fallback summary by truncating chapter prose at a word boundary."""
+    text = (chapter_text or "").strip()
+    if not text:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    snippet = text[:max_chars]
+    cut = snippet.rfind(" ")
+    if cut > 0:
+        snippet = snippet[:cut]
+    return snippet.rstrip() + "…"
+
+
+def _extract_trailing_paragraphs(chapter_text: str, paragraphs: int) -> str:
+    """Return the last ``paragraphs`` paragraphs of ``chapter_text`` verbatim."""
+    if paragraphs <= 0:
+        return ""
+    text = (chapter_text or "").strip()
+    if not text:
+        return ""
+    parts = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    if not parts:
+        return ""
+    tail = parts[-paragraphs:]
+    return "\n\n".join(tail)
 
 
 def _compose_story_from_chapters(chapters: list[tuple[str, str]]) -> str:
@@ -398,6 +437,40 @@ class GenerateRandomDetailSignature(dspy.Signature):
     )
 
 
+class GenerateChapterSummarySignature(dspy.Signature):
+    """Summarize a written chapter in 2-3 sentences for rolling context."""
+
+    current_chapter_description: str = dspy.InputField(
+        desc="The chapter plan bullet that the chapter was written from.",
+    )
+    chapter_text: str = dspy.InputField(
+        desc="The full prose of the chapter that was just written.",
+    )
+    chapter_summary: str = dspy.OutputField(
+        desc=(
+            "A 2-3 sentence factual summary of what actually happened in this "
+            "chapter. Prefer concrete events, named characters, and state "
+            "changes over theme or tone. No spoilers beyond this chapter."
+        ),
+    )
+
+
+class ChapterSummarizer(dspy.Module):
+    """Produce a short factual summary of a written chapter."""
+
+    def __init__(self):
+        super().__init__()
+        self.summarize = dspy.Predict(GenerateChapterSummarySignature)
+
+    @observe()
+    def forward(self, current_chapter_description: str, chapter_text: str):
+        """Summarize a written chapter in 2-3 sentences."""
+        return self.summarize(
+            current_chapter_description=current_chapter_description,
+            chapter_text=chapter_text,
+        )
+
+
 class GenerateSingleChapterSignature(dspy.Signature):
     """Writes a full, detailed chapter based on the world bible and the specific chapter goal."""
     characters: str = dspy.InputField(
@@ -523,17 +596,75 @@ class ChapterInpaintingGenerator(dspy.Module):
 class StoryGenerator(dspy.Module):
     """Generate chapter plans, enhancer guidance, and full story chapters."""
 
-    def __init__(self, random_detail_probability: float = RANDOM_DETAIL_PROBABILITY):
+    def __init__(
+        self,
+        random_detail_probability: float = RANDOM_DETAIL_PROBABILITY,
+        verbatim_tail_paragraphs: int = DEFAULT_VERBATIM_TAIL_PARAGRAPHS,
+    ):
         if not 0.0 <= random_detail_probability <= 1.0:
             raise ValueError(
                 f"random_detail_probability must be in [0.0, 1.0], got {random_detail_probability}"
             )
+        if verbatim_tail_paragraphs < 0:
+            raise ValueError(
+                f"verbatim_tail_paragraphs must be >= 0, got {verbatim_tail_paragraphs}"
+            )
         super().__init__()
         self.random_detail_probability = random_detail_probability
+        self.verbatim_tail_paragraphs = verbatim_tail_paragraphs
         self.generate_chapter_plan = dspy.ChainOfThought(GenerateChapterPlanSignature)
         self.generate_enhancers = dspy.ChainOfThought(GenerateEnhancersSignature)
         self.generate_random_detail = dspy.Predict(GenerateRandomDetailSignature)
         self.write_chapter = dspy.ChainOfThought(GenerateSingleChapterSignature)
+        self.summarize_chapter = ChapterSummarizer()
+
+    def _summarize_written_chapter(
+        self,
+        current_chapter_description: str,
+        chapter_text: str,
+    ) -> str:
+        """Summarize a written chapter; fall back to truncation on recoverable LLM errors."""
+        try:
+            result = self.summarize_chapter(
+                current_chapter_description=current_chapter_description,
+                chapter_text=chapter_text,
+            )
+            summary = (getattr(result, "chapter_summary", "") or "").strip()
+            if summary:
+                return summary
+            logger.warning(
+                "Chapter summarizer returned empty output; falling back to truncation."
+            )
+        except RECOVERABLE_MODEL_EXCEPTIONS as exc:
+            logger.warning(
+                "Chapter summarizer failed (%s); falling back to truncation.",
+                exc,
+            )
+        return _truncate_chapter_for_summary(chapter_text)
+
+    def _compose_rolling_summary(
+        self,
+        previous_summary_entries: list[str],
+        latest_entry: str,
+        latest_chapter_text: str,
+    ) -> str:
+        """Build the rolling previous-chapters summary, optionally with a verbatim tail."""
+        entries = [*previous_summary_entries, latest_entry]
+        summary_block = "\n".join(entry for entry in entries if entry).strip()
+
+        tail = _extract_trailing_paragraphs(
+            latest_chapter_text,
+            self.verbatim_tail_paragraphs,
+        )
+        if not tail:
+            return summary_block + ("\n" if summary_block else "")
+
+        verbatim_block = (
+            "Verbatim ending of previous chapter (for tone/continuity):\n"
+            f"{tail}"
+        )
+        combined = "\n\n".join(part for part in (summary_block, verbatim_block) if part)
+        return combined + "\n"
 
     def _maybe_generate_random_detail(self, world_bible: str, chapter_desc: str) -> str:
         """Roll the dice and, if triggered, generate a contextual creative flourish."""
@@ -609,6 +740,7 @@ class StoryGenerator(dspy.Module):
     ) -> str:
         full_story = ""
         previous_chapters_summary = ""
+        previous_summary_entries: list[str] = []
 
         for index, chapter_desc in enumerate(chapters_to_write, start=1):
             try:
@@ -640,7 +772,18 @@ class StoryGenerator(dspy.Module):
                     clean_title = _clean_chapter_title(chapter_desc)
 
                 full_story += f"\n\n### Chapter {index}: {clean_title}\n\n{result.chapter_text}"
-                previous_chapters_summary += f"Chapter {index}: {chapter_desc}\n"
+
+                chapter_summary = self._summarize_written_chapter(
+                    current_chapter_description=chapter_desc,
+                    chapter_text=result.chapter_text,
+                )
+                summary_block = f"Chapter {index} ({chapter_desc}): {chapter_summary}".rstrip()
+                previous_chapters_summary = self._compose_rolling_summary(
+                    previous_summary_entries=previous_summary_entries,
+                    latest_entry=summary_block,
+                    latest_chapter_text=result.chapter_text,
+                )
+                previous_summary_entries.append(summary_block)
             except RECOVERABLE_MODEL_EXCEPTIONS as exc:
                 logger.error("Error writing chapter %d: %s", index, exc, exc_info=True)
                 break
