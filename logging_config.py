@@ -295,6 +295,7 @@ if BaseCallback is not None:
             instance: Any,
             inputs: dict[str, Any],
         ) -> None:
+            del inputs
             self._calls[call_id] = {
                 "instance": instance,
                 "t0": time.perf_counter(),
@@ -306,6 +307,7 @@ if BaseCallback is not None:
             outputs: dict[str, Any] | None,
             exception: Exception | None = None,
         ) -> None:
+            del outputs
             call_info = self._calls.pop(call_id, None)
             if exception or call_info is None:
                 return
