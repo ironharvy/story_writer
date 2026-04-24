@@ -132,7 +132,9 @@ class QuestionWithAnswer(BaseModel):
                 for key in list(normalized.keys()):
                     if key in {"question", "proposed_answer"}:
                         continue
-                    if normalize_key(key) in question_aliases and isinstance(normalized[key], str):
+                    if normalize_key(key) in question_aliases and isinstance(
+                        normalized[key], str
+                    ):
                         normalized["question"] = normalized.pop(key)
                         break
 
@@ -140,11 +142,14 @@ class QuestionWithAnswer(BaseModel):
             for key in list(normalized.keys()):
                 if key in {"question", "proposed_answer"}:
                     continue
-                if normalize_key(key) in answer_aliases and isinstance(normalized[key], str):
+                if normalize_key(key) in answer_aliases and isinstance(
+                    normalized[key], str
+                ):
                     normalized["proposed_answer"] = normalized.pop(key)
                     break
 
         return normalized
+
 
 class GenerateQuestionsSignature(dspy.Signature):
     """Generate 5 interrogative questions for premise clarification.
@@ -156,6 +161,7 @@ class GenerateQuestionsSignature(dspy.Signature):
     questions_with_answers: List[QuestionWithAnswer] = dspy.OutputField(
         desc="5 interrogative questions with proposed answers.",
     )
+
 
 class QuestionGenerator(dspy.Module):
     """Generate interactive clarification questions for the user's idea."""
@@ -172,6 +178,7 @@ class QuestionGenerator(dspy.Module):
 
 class GenerateCorePremiseSignature(dspy.Signature):
     """Synthesizes the user's idea, the questions, and the user's answers into a Core Premise."""
+
     idea: str = dspy.InputField(desc="The initial idea or prompt for the story.")
     qa_pairs: str = dspy.InputField(
         desc="The interrogative questions and the user's accepted or provided answers.",
@@ -179,6 +186,7 @@ class GenerateCorePremiseSignature(dspy.Signature):
     core_premise: str = dspy.OutputField(
         desc="A detailed Core Premise summarizing the foundation of the story.",
     )
+
 
 class CorePremiseGenerator(dspy.Module):
     """Synthesize idea context into a single core premise statement."""
@@ -195,8 +203,11 @@ class CorePremiseGenerator(dspy.Module):
 
 class GenerateSpineTemplateSignature(dspy.Signature):
     """Creates a narrative spine template based on the Core Premise."""
+
     idea: str = dspy.InputField(desc="The original story idea.")
-    qa_pairs: str = dspy.InputField(desc="Questions and answers to flesh out the story.")
+    qa_pairs: str = dspy.InputField(
+        desc="Questions and answers to flesh out the story."
+    )
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     spine_template: str = dspy.OutputField(
         desc=(
@@ -204,6 +215,7 @@ class GenerateSpineTemplateSignature(dspy.Signature):
             "One day... Because of that... Because of that... Until finally...)."
         ),
     )
+
 
 class SpineTemplateGenerator(dspy.Module):
     """Generate a narrative spine scaffold for downstream planning."""
@@ -237,7 +249,7 @@ class CharacterVisual(BaseModel):
         "distinguishing features into a single descriptive paragraph."
     )
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def normalize_shape(cls, data: Any) -> Any:
         """Backfill legacy fields into the current character-visual schema."""
@@ -246,7 +258,9 @@ class CharacterVisual(BaseModel):
             return data
 
         normalized = dict(data)
-        description = normalized.get("description") or normalized.get("visual_description")
+        description = normalized.get("description") or normalized.get(
+            "visual_description"
+        )
 
         if isinstance(description, str):
             if "reference_mix" not in normalized:
@@ -255,7 +269,9 @@ class CharacterVisual(BaseModel):
                 normalized["distinguishing_features"] = description
             if "full_prompt" not in normalized:
                 subject = normalized.get("name", "character")
-                normalized["full_prompt"] = f"anime portrait of {subject}, {description}"
+                normalized["full_prompt"] = (
+                    f"anime portrait of {subject}, {description}"
+                )
 
         return normalized
 
@@ -266,6 +282,7 @@ class GenerateCharacterVisualsSignature(dspy.Signature):
     must be anchored to a mix of 2-3 well-known fictional or historical
     figures so that an anime image generator can produce consistent results.
     """
+
     world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
     character_visuals: List[CharacterVisual] = dspy.OutputField(
         desc="A list of visual descriptions, one per main character."
@@ -292,6 +309,7 @@ class GenerateSceneImagePromptSignature(dspy.Signature):
     distinguishing_features) so the image stays visually consistent with
     their portraits.  Output ONLY the image prompt, nothing else.
     """
+
     chapter_text: str = dspy.InputField(desc="The full text of the chapter.")
     character_visuals_summary: str = dspy.InputField(
         desc="A summary of all character visual descriptors to reference."
@@ -324,6 +342,7 @@ class GenerateChapterPlanSignature(dspy.Signature):
     provided as context — continue the narrative from where they leave off,
     without repeating beats, scenes, or chapter titles.
     """
+
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
     spine_template: str = dspy.InputField(
         desc=(
@@ -357,6 +376,7 @@ class GenerateChapterPlanSignature(dspy.Signature):
         ),
     )
 
+
 class GenerateEnhancersSignature(dspy.Signature):
     """Evaluate chapter plan needs for story-enhancer techniques.
 
@@ -365,7 +385,9 @@ class GenerateEnhancersSignature(dspy.Signature):
     """
 
     world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
-    chapter_plan: str = dspy.InputField(desc="Chapter Plan (Each arc broken into chapters).")
+    chapter_plan: str = dspy.InputField(
+        desc="Chapter Plan (Each arc broken into chapters)."
+    )
     enhancers_guide: str = dspy.OutputField(
         desc=(
             "A guide evaluating which story enhancers (e.g., Tension, Mystery, "
@@ -373,6 +395,7 @@ class GenerateEnhancersSignature(dspy.Signature):
             "them."
         ),
     )
+
 
 class GenerateRandomDetailSignature(dspy.Signature):
     """Invent a concrete, contextual creative flourish for a chapter.
@@ -389,7 +412,9 @@ class GenerateRandomDetailSignature(dspy.Signature):
     current_chapter_description: str = dspy.InputField(
         desc="The specific chapter event that the detail should fit into.",
     )
-    detail_type: str = dspy.InputField(desc="The category of creative flourish to invent.")
+    detail_type: str = dspy.InputField(
+        desc="The category of creative flourish to invent."
+    )
     random_detail: str = dspy.OutputField(
         desc=(
             "A concrete, vivid creative detail (2-5 sentences) that fits the "
@@ -400,6 +425,7 @@ class GenerateRandomDetailSignature(dspy.Signature):
 
 class GenerateSingleChapterSignature(dspy.Signature):
     """Writes a full, detailed chapter based on the world bible and the specific chapter goal."""
+
     characters: str = dspy.InputField(
         desc="Character bios and relationship context to keep names and motivations specific.",
     )
@@ -433,6 +459,40 @@ class GenerateSingleChapterSignature(dspy.Signature):
     chapter_text: str = dspy.OutputField(
         desc="A long, immersive chapter with dialogue and description.",
     )
+
+
+class GenerateChapterSummarySignature(dspy.Signature):
+    """Summarize a written chapter in 2-3 sentences for rolling context."""
+
+    current_chapter_description: str = dspy.InputField(
+        desc="The chapter plan bullet that the chapter was written from.",
+    )
+    chapter_text: str = dspy.InputField(
+        desc="The full prose of the chapter that was just written.",
+    )
+    chapter_summary: str = dspy.OutputField(
+        desc=(
+            "A 2-3 sentence factual summary of what actually happened in this "
+            "chapter. Prefer concrete events, named characters, and state "
+            "changes over theme or tone. No spoilers beyond this chapter."
+        ),
+    )
+
+
+class ChapterSummarizer(dspy.Module):
+    """Produce a short factual summary of a written chapter."""
+
+    def __init__(self):
+        super().__init__()
+        self.summarize = dspy.Predict(GenerateChapterSummarySignature)
+
+    @observe()
+    def forward(self, current_chapter_description: str, chapter_text: str):
+        """Summarize a written chapter in 2-3 sentences."""
+        return self.summarize(
+            current_chapter_description=current_chapter_description,
+            chapter_text=chapter_text,
+        )
 
 
 class GenerateChapterInpaintingSignature(dspy.Signature):
@@ -520,6 +580,7 @@ class ChapterInpaintingGenerator(dspy.Module):
             total_chapters=len(chapters),
         )
 
+
 class StoryGenerator(dspy.Module):
     """Generate chapter plans, enhancer guidance, and full story chapters."""
 
@@ -549,7 +610,9 @@ class StoryGenerator(dspy.Module):
             logger.debug("Random detail skipped for chapter.")
             return ""
         detail_type = random.choice(_RANDOM_DETAIL_TYPES)
-        logger.debug("Probabilistic detail triggered for chapter (type: %s)", detail_type)
+        logger.debug(
+            "Probabilistic detail triggered for chapter (type: %s)", detail_type
+        )
         try:
             result = self.generate_random_detail(
                 world_bible=world_bible,
@@ -639,7 +702,9 @@ class StoryGenerator(dspy.Module):
                 if not clean_title:
                     clean_title = _clean_chapter_title(chapter_desc)
 
-                full_story += f"\n\n### Chapter {index}: {clean_title}\n\n{result.chapter_text}"
+                full_story += (
+                    f"\n\n### Chapter {index}: {clean_title}\n\n{result.chapter_text}"
+                )
                 previous_chapters_summary += f"Chapter {index}: {chapter_desc}\n"
             except RECOVERABLE_MODEL_EXCEPTIONS as exc:
                 logger.error("Error writing chapter %d: %s", index, exc, exc_info=True)
@@ -655,7 +720,9 @@ class StoryGenerator(dspy.Module):
         world_bible: WorldBible,
     ):
         """Run the end-to-end chapter planning and drafting workflow."""
-        logger.debug("StoryGenerator received spine template of %d chars", len(spine_template))
+        logger.debug(
+            "StoryGenerator received spine template of %d chars", len(spine_template)
+        )
         chapters_to_write = self._generate_chapter_plan_entries(
             core_premise=core_premise,
             spine_template=spine_template,
