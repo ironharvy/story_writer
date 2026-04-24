@@ -7,6 +7,7 @@ import dspy
 
 from _compat import observe
 from story_modules import QuestionWithAnswer
+from world_bible import WorldBible
 
 
 _act_heading_re = re.compile(
@@ -151,19 +152,21 @@ class WorldBibleGenerator(dspy.Module):
             locations=locations_result.locations,
         )
 
-        normalized_plot_timeline = _normalize_plot_timeline(timeline_result.plot_timeline)
-
-        world_bible = (
-            f"### Rules of the World\n{rules_result.world_rules}\n\n"
-            f"### Characters\n{characters_result.characters}\n\n"
-            f"### Locations\n{locations_result.locations}\n\n"
-            f"### Plot Timeline\n{normalized_plot_timeline}"
+        normalized_plot_timeline = _normalize_plot_timeline(
+            timeline_result.plot_timeline,
         )
-
-        return dspy.Prediction(
-            world_bible=world_bible,
-            world_rules=rules_result.world_rules,
+        world_bible = WorldBible(
+            rules=rules_result.world_rules,
             characters=characters_result.characters,
             locations=locations_result.locations,
             plot_timeline=normalized_plot_timeline,
+        )
+
+        return dspy.Prediction(
+            world_bible=world_bible.full_text,
+            world_bible_structured=world_bible,
+            world_rules=world_bible.rules,
+            characters=world_bible.characters,
+            locations=world_bible.locations,
+            plot_timeline=world_bible.plot_timeline,
         )

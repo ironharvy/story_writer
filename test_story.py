@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import coloredlogs
@@ -21,6 +22,7 @@ from story_modules import (
     SpineTemplateGenerator,
     StoryGenerator,
 )
+from world_bible import WorldBible
 from world_bible_modules import WorldBibleGenerator
 
 load_dotenv()
@@ -242,10 +244,11 @@ def test_pipeline(
     wb_result = wb_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template)
     logger.info("World Bible generated.")
     logger.debug("World bible preview: %.300s", wb_result.world_bible)
+    world_bible = wb_result.world_bible_structured
 
     # 5. Character Visual Descriptions
     cv_describer = CharacterVisualDescriber()
-    cv_result = cv_describer(world_bible=wb_result.world_bible)
+    cv_result = cv_describer(world_bible=world_bible.full_text)
     print(f"Generated visuals for {len(cv_result.character_visuals)} characters.")
     for cv in cv_result.character_visuals:
         print(f"  - {cv.name}: {cv.reference_mix}")
@@ -268,7 +271,11 @@ def test_pipeline(
 
     # 7. Story — use real randomness so probabilistic detail behavior matches production.
     story_gen = StoryGenerator()
-    story_result = story_gen(core_premise=cp_result.core_premise, spine_template=st_result.spine_template, world_bible=wb_result.world_bible)
+    story_result = story_gen(
+        core_premise=cp_result.core_premise,
+        spine_template=st_result.spine_template,
+        world_bible=world_bible,
+    )
     logger.info("Story generated.")
     logger.debug("Chapter plan preview: %.500s", story_result.chapter_plan)
     logger.debug("Story preview: %.500s", story_result.story)
@@ -295,7 +302,7 @@ def test_pipeline(
         f.write("## Spine Template\n")
         f.write(f"{st_result.spine_template}\n\n")
         f.write("## World Bible\n")
-        f.write(f"{wb_result.world_bible}\n\n")
+        f.write(f"{world_bible.full_text}\n\n")
 
         if cv_result.character_visuals:
             f.write("## Character Visuals\n\n")
@@ -395,6 +402,96 @@ def test_normalize_plot_timeline_keeps_noncontiguous_repeated_act_headings():
 
     normalized = _normalize_plot_timeline(raw_timeline)
     assert normalized == raw_timeline
+
+
+def test_world_bible_full_text_matches_legacy_markdown():
+    world_bible = WorldBible(
+        rules="Magic exacts a memory toll.",
+        characters="Mira, a reluctant archivist.",
+        locations="The glass citadel above the dunes.",
+        plot_timeline="Act 1 - Discovery",
+    )
+
+    assert world_bible.full_text == (
+        "### Rules of the World\n"
+        "Magic exacts a memory toll.\n\n"
+        "### Characters\n"
+        "Mira, a reluctant archivist.\n\n"
+        "### Locations\n"
+        "The glass citadel above the dunes.\n\n"
+        "### Plot Timeline\n"
+        "Act 1 - Discovery"
+    )
+
+
+def test_world_bible_generator_returns_structured_world_bible():
+    dspy.configure(lm=MockLM())
+    generator = WorldBibleGenerator()
+
+    result = generator(
+        core_premise="Mock premise",
+        spine_template="Mock spine",
+    )
+
+    assert isinstance(result.world_bible_structured, WorldBible)
+    assert result.world_bible_structured.rules == "Mock rules"
+    assert result.world_bible_structured.characters == "Mock characters"
+    assert result.world_bible_structured.locations == "Mock locations"
+    assert result.world_bible_structured.plot_timeline == "Mock timeline"
+    assert result.world_bible == result.world_bible_structured.full_text
+
+
+def test_story_generator_uses_structured_world_bible_fields():
+    world_bible = WorldBible(
+        rules="No one may cross salt circles after dusk.",
+        characters="Tarin the courier; Sel the exiled prince.",
+        locations="Moonwell market; the ruined observatory.",
+        plot_timeline="Act 1 - Theft\nAct 2 - Exile",
+    )
+    story_generator = StoryGenerator(random_detail_probability=0.0)
+    story_generator.generate_chapter_plan = MagicMock(
+        side_effect=[
+            SimpleNamespace(chapter_plan=["Discovery"]),
+            SimpleNamespace(chapter_plan=["Pursuit"]),
+            SimpleNamespace(chapter_plan=["Return"]),
+        ],
+    )
+    story_generator.generate_enhancers = MagicMock(
+        return_value=SimpleNamespace(enhancers_guide="Use mounting dread."),
+    )
+    story_generator.write_chapter = MagicMock(
+        side_effect=[
+            SimpleNamespace(title="Discovery", chapter_text="Chapter one text."),
+            SimpleNamespace(title="Pursuit", chapter_text="Chapter two text."),
+            SimpleNamespace(title="Return", chapter_text="Chapter three text."),
+        ],
+    )
+
+    result = story_generator(
+        core_premise="A courier steals a crown of weather.",
+        spine_template="Once upon a time...",
+        world_bible=world_bible,
+    )
+
+    assert result.chapter_plan == (
+        "Chapter 1: Discovery\n"
+        "Chapter 2: Pursuit\n"
+        "Chapter 3: Return"
+    )
+    first_plan_call = story_generator.generate_chapter_plan.call_args_list[0].kwargs
+    assert first_plan_call["characters"] == world_bible.characters
+    assert first_plan_call["plot_timeline"] == world_bible.plot_timeline
+    assert first_plan_call["rules"] == world_bible.rules
+
+    first_write_call = story_generator.write_chapter.call_args_list[0].kwargs
+    assert first_write_call["characters"] == world_bible.characters
+    assert first_write_call["rules"] == world_bible.rules
+    assert first_write_call["locations"] == world_bible.locations
+
+    enhancer_call = story_generator.generate_enhancers.call_args.kwargs
+    assert enhancer_call["world_bible"] == world_bible.full_text
+    assert "### Chapter 1: Discovery" in result.story
+    assert "### Chapter 3: Return" in result.story
 
 
 def test_question_with_answer_does_not_promote_unrelated_fields():

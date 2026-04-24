@@ -9,6 +9,7 @@ import dspy
 from pydantic import BaseModel, Field, model_validator
 
 from _compat import observe
+from world_bible import WorldBible
 
 # Probability that a chapter receives a random creative flourish (0.0 – 1.0).
 RANDOM_DETAIL_PROBABILITY = 0.35
@@ -339,7 +340,15 @@ class GenerateChapterPlanSignature(dspy.Signature):
             "Until finally). Use it to anchor the act boundary."
         ),
     )
-    world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
+    characters: str = dspy.InputField(
+        desc="Character bios and relationship context most relevant to chapter planning.",
+    )
+    plot_timeline: str = dspy.InputField(
+        desc="Plot beats and act progression for the story.",
+    )
+    rules: str = dspy.InputField(
+        desc="Rules of the world that constrain or enable plot events.",
+    )
     previous_chapters: str = dspy.InputField(
         desc=(
             "Chapters already planned in earlier acts, one per line. "
@@ -399,7 +408,15 @@ class GenerateRandomDetailSignature(dspy.Signature):
 
 class GenerateSingleChapterSignature(dspy.Signature):
     """Writes a full, detailed chapter based on the world bible and the specific chapter goal."""
-    world_bible: str = dspy.InputField()
+    characters: str = dspy.InputField(
+        desc="Character bios and relationship context to keep names and motivations specific.",
+    )
+    rules: str = dspy.InputField(
+        desc="Rules of the world that govern what can happen in the chapter.",
+    )
+    locations: str = dspy.InputField(
+        desc="Relevant location details to ground setting and scene description.",
+    )
     chapter_plan: str = dspy.InputField(desc="The full plan for context.")
     current_chapter_description: str = dspy.InputField(
         desc="The specific event to write now.",
@@ -556,7 +573,7 @@ class StoryGenerator(dspy.Module):
         self,
         core_premise: str,
         spine_template: str,
-        world_bible: str,
+        world_bible: WorldBible,
     ) -> list[str]:
         chapter_entries: list[str] = []
         for act in _ACT_SEQUENCE:
@@ -569,7 +586,9 @@ class StoryGenerator(dspy.Module):
             chapter_plan_result = self.generate_chapter_plan(
                 core_premise=core_premise,
                 spine_template=spine_template,
-                world_bible=world_bible,
+                characters=world_bible.characters,
+                plot_timeline=world_bible.plot_timeline,
+                rules=world_bible.rules,
                 previous_chapters=previous_chapters_text,
                 act=act,
             )
@@ -580,18 +599,18 @@ class StoryGenerator(dspy.Module):
 
     def _generate_enhancers_guide(
         self,
-        world_bible: str,
+        world_bible: WorldBible,
         chapter_plan_text: str,
     ) -> str:
         enhancers_result = self.generate_enhancers(
-            world_bible=world_bible,
+            world_bible=world_bible.full_text,
             chapter_plan=chapter_plan_text,
         )
         return enhancers_result.enhancers_guide
 
     def _write_story_chapters(
         self,
-        world_bible: str,
+        world_bible: WorldBible,
         chapter_plan_text: str,
         chapters_to_write: list[str],
         enhancers_guide: str,
@@ -601,7 +620,10 @@ class StoryGenerator(dspy.Module):
 
         for index, chapter_desc in enumerate(chapters_to_write, start=1):
             try:
-                random_detail = self._maybe_generate_random_detail(world_bible, chapter_desc)
+                random_detail = self._maybe_generate_random_detail(
+                    world_bible.full_text,
+                    chapter_desc,
+                )
                 if random_detail:
                     logger.info(
                         "Chapter %d: injecting probabilistic detail: %.300s",
@@ -610,7 +632,9 @@ class StoryGenerator(dspy.Module):
                     )
 
                 result = self.write_chapter(
-                    world_bible=world_bible,
+                    characters=world_bible.characters,
+                    rules=world_bible.rules,
+                    locations=world_bible.locations,
                     chapter_plan=chapter_plan_text,
                     current_chapter_description=chapter_desc,
                     previous_chapters_summary=previous_chapters_summary,
@@ -632,7 +656,12 @@ class StoryGenerator(dspy.Module):
         return full_story
 
     @observe()
-    def forward(self, core_premise: str, spine_template: str, world_bible: str):
+    def forward(
+        self,
+        core_premise: str,
+        spine_template: str,
+        world_bible: WorldBible,
+    ):
         """Run the end-to-end chapter planning and drafting workflow."""
         logger.debug("StoryGenerator received spine template of %d chars", len(spine_template))
         chapters_to_write = self._generate_chapter_plan_entries(
