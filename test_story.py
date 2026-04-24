@@ -63,7 +63,7 @@ class MockLM(dspy.LM):
             return ['```json\n{"story": "Mock final story"}\n```']
         if "[[ ## enhancers_guide ## ]]" in content or ('"enhancers_guide"' in content and "evaluating which story enhancers" in content):
             return ['```json\n{"reasoning": "Mock reasoning", "enhancers_guide": "Mock enhancers guide"}\n```']
-        if "[[ ## chapter_plan ## ]]" in content or ('"chapter_plan"' in content and "Each arc broken into chapters" in content):
+        if "[[ ## chapter_plan ## ]]" in content or ('"chapter_plan"' in content and "Chapter Plan for this act" in content):
             return ['```json\n{"reasoning": "Mock reasoning", "chapter_plan": ["Chapter 1: Discovery", "Chapter 2: Training", "Chapter 3: Revelation", "Chapter 4: Escape"]}\n```']
         if "[[ ## world_bible ## ]]" in content or ('"world_bible"' in content and "setting, lore, and characters" in content):
             return ['```json\n{"world_bible": "Mock world bible"}\n```']

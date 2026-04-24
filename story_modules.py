@@ -325,13 +325,35 @@ class SceneImagePromptGenerator(dspy.Module):
 
 
 class GenerateChapterPlanSignature(dspy.Signature):
-    """Generates Level 2: Chapter Plan (Each arc broken into chapters)."""
+    """Generates Level 2: Chapter Plan for one act, continuing from prior acts.
+
+    Plan only the current act. Previously planned chapters from earlier acts are
+    provided as context — continue the narrative from where they leave off,
+    without repeating beats, scenes, or chapter titles.
+    """
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
+    spine_template: str = dspy.InputField(
+        desc=(
+            "The Spine Template describing the overall narrative shape "
+            "(Once upon a time / Every day / One day / Because of that / "
+            "Until finally). Use it to anchor the act boundary."
+        ),
+    )
     world_bible: str = dspy.InputField(desc="The comprehensive World Bible.")
-    act: str = dspy.InputField(desc="The act of the story.")
-    #arc: str = dspy.InputField(desc="The arc of the story.")
+    previous_chapters: str = dspy.InputField(
+        desc=(
+            "Chapters already planned in earlier acts, one per line. "
+            "Continue from these — do not repeat or restate any beat, scene, "
+            "or chapter title. Empty string means this is the first act."
+        ),
+    )
+    act: str = dspy.InputField(desc="The act of the story to plan chapters for.")
     chapter_plan: list[str] = dspy.OutputField(
-        desc="Chapter Plan for the arc (5-10 major events of the act)",
+        desc=(
+            "Chapter Plan for this act (5-10 major events). Each entry must "
+            "advance the story past previous_chapters and must not duplicate "
+            "any prior beat or chapter title."
+        ),
     )
 
 class GenerateEnhancersSignature(dspy.Signature):
@@ -533,14 +555,22 @@ class StoryGenerator(dspy.Module):
     def _generate_chapter_plan_entries(
         self,
         core_premise: str,
+        spine_template: str,
         world_bible: str,
     ) -> list[str]:
         chapter_entries: list[str] = []
         for act in _ACT_SEQUENCE:
-            logger.debug("Generating chapter plan for %s...", act)
+            previous_chapters_text = "\n".join(chapter_entries)
+            logger.debug(
+                "Generating chapter plan for %s (continuing from %d prior chapters)...",
+                act,
+                len(chapter_entries),
+            )
             chapter_plan_result = self.generate_chapter_plan(
                 core_premise=core_premise,
+                spine_template=spine_template,
                 world_bible=world_bible,
+                previous_chapters=previous_chapters_text,
                 act=act,
             )
             chapter_entries.extend(chapter_plan_result.chapter_plan)
@@ -607,6 +637,7 @@ class StoryGenerator(dspy.Module):
         logger.debug("StoryGenerator received spine template of %d chars", len(spine_template))
         chapters_to_write = self._generate_chapter_plan_entries(
             core_premise=core_premise,
+            spine_template=spine_template,
             world_bible=world_bible,
         )
         chapter_plan_text = "\n".join(chapters_to_write)
