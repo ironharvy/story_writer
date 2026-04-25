@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import logging
 import os
 from types import SimpleNamespace
@@ -261,6 +262,11 @@ def test_pipeline(
     # If the user requested the mock model, or if we want to ensure tests always pass in CI, use MockLM.
     callbacks = [TokenUsageCallback()] if TokenUsageCallback is not None else []
     if model_name == "mock" or model_name == "test_mock":
+        logger.warning(
+            "MOCK LM SELECTED (--model=%r) — no real LLM calls will be made; "
+            "story_output.md will contain hardcoded MockLM strings.",
+            model_name,
+        )
         lm = MockLM()
         dspy.configure(lm=lm, callbacks=callbacks)
     else:
@@ -273,6 +279,25 @@ def test_pipeline(
 
         lm = dspy.LM(model_name, cache=cache, **kwargs)
         dspy.configure(lm=lm, callbacks=callbacks)
+
+    # Prepare output directory and remove any stale output from a prior run so a
+    # crashed run cannot leave a misleading file behind.
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, "story_output.md")
+    if os.path.exists(output_path):
+        logger.info("Removing stale output file %s before run.", output_path)
+        os.remove(output_path)
+
+    started_at = datetime.datetime.now(datetime.timezone.utc)
+    generation_params = {
+        "model": model_name,
+        "api_base": api_base,
+        "max_tokens": max_tokens,
+        "cache": cache,
+        "memory_cache": memory_cache,
+        "cache_dir": cache_dir,
+        "started_at": started_at.isoformat(),
+    }
 
     idea = "An unnamed child is raised by the Church as the ultimate weapon against demons. As child grows he learns that the church itself is corrupt and breeds demons for controlled chaos. The church recieves funding for protection and as such decides who should recieve help. The child eventually becomes overpowered and turns back on the Church"
 
@@ -367,11 +392,21 @@ def test_pipeline(
 
     logger.info("Test passed successfully!")
 
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "story_output.md")
     logger.info(f"Saving story output to {output_path}...")
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("# Story Output\n\n")
+        f.write("## Generation Parameters\n")
+        for key in (
+            "model",
+            "api_base",
+            "max_tokens",
+            "cache",
+            "memory_cache",
+            "cache_dir",
+            "started_at",
+        ):
+            f.write(f"- **{key}**: {generation_params[key]}\n")
+        f.write("\n")
         f.write("## Core Premise\n")
         f.write(f"{cp_result.core_premise}\n\n")
         f.write("## Spine Template\n")
