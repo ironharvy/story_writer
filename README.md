@@ -89,6 +89,15 @@ Basic run:
 python main.py
 ```
 
+Alternate step-by-step pipeline:
+
+```bash
+python alternate_main.py
+```
+
+The alternate pipeline confirms each major artifact before continuing and writes
+approved outputs to `.tmp/alternate_story_output.md` by default.
+
 Example with explicit model endpoint:
 
 ```bash
