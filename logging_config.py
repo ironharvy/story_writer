@@ -56,15 +56,15 @@ class HumanFormatter(logging.Formatter):
         self.use_color = use_color
 
     def format(self, record: logging.LogRecord) -> str:
-        ts = datetime.fromtimestamp(record.created, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        dt = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        ts = dt.strftime("%Y-%m-%d %H:%M:%S")
+        ms = int(record.msecs)
+        ts = f"{ts}.{ms:03d}"
+
         level = record.levelname
         if self.use_color:
             color = self.LEVEL_COLORS.get(level, "")
-            level = f"{color}{level:<8}{self.RESET}"
-        else:
-            level = f"{level:<8}"
+            level = f"{color}{level}{self.RESET}"
 
         msg = record.getMessage()
 
@@ -73,7 +73,7 @@ class HumanFormatter(logging.Formatter):
         if extras:
             msg = f"{msg} {extras}"
 
-        base = f"{ts} [{level}] {record.name}: {msg}"
+        base = f"{ts} {level} [{record.name}] {msg}"
         if record.exc_info and not record.exc_text:
             record.exc_text = self.formatException(record.exc_info)
         if record.exc_text:
@@ -194,7 +194,7 @@ def setup_logging(
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
         file_handler = logging.FileHandler(file_path)
-        file_handler.setFormatter(JSONFormatter())  # always JSON for files
+        file_handler.setFormatter(HumanFormatter(use_color=False))
         root.addHandler(file_handler)
 
     # --- Verbosity-based logger tuning ---
