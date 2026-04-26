@@ -11,8 +11,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
 
-from logging_config import setup_logging
-from main import DSPyConfig, configure_dspy
+from story_sim.config import DSPyConfig, configure_dspy, setup_logging
 from story_sim.engine import SimulationEngine
 from story_sim.models import RoundRecord, SimulationState
 

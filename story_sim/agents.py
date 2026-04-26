@@ -5,7 +5,7 @@ from typing import List
 
 import dspy
 
-from _compat import observe
+from story_sim._compat import observe
 from story_sim.models import (
     CharacterAction,
     CharacterSheet,
