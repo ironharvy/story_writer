@@ -12,19 +12,30 @@ python main.py
 
 ## What It Does
 
-- Guides you through an interactive ideation flow (questions, premise refinement, spine, world bible).
+- Guides you through an interactive ideation flow with feedback loops at every stage (questions, premise, spine, world bible, chapter plan).
 - Generates structured story artifacts (chapter plan, enhancers guide, full story).
+- Saves progress incrementally — if the process crashes, you keep everything generated so far.
 - Optionally generates character portraits and per-chapter scene illustrations via Replicate.
 - Writes all outputs to a markdown file in your chosen output directory.
 
 ## Project Layout
 
-- `main.py` — primary interactive CLI for story generation.
-- `story_modules.py` — core story generation modules/signatures.
+- `main.py` — thin CLI entry point: parse args, setup runtime, run pipeline, save output.
+- `cli.py` — argument parsing (`build_arg_parser`, model/runtime/output flag groups).
+- `models.py` — pipeline dataclasses (`GenerationParams`, `ImageArtifacts`, `StoryFoundation`, `StoryRunArtifacts`).
+- `pipeline.py` — orchestration logic with `@observe()` tracing and user feedback loops.
+- `ui.py` — Rich-based interactive UI layer (all `console.print` / `Prompt.ask` / `Confirm.ask`).
+- `output.py` — file I/O helpers: incremental `update_artifact()` and final `save_story_output()`.
+- `qa.py` — post-generation quality checks (similar-sentence detection).
+- `story_modules.py` — core DSPy story generation modules/signatures.
 - `world_bible_modules.py` — world bible question + generation modules.
+- `world_bible.py` — structured `WorldBible` Pydantic model.
 - `image_gen.py` — Replicate-based image generation helpers.
-- `logging_config.py` — centralized logging configuration.
-- `scripts/fetch_langfuse_traces.py` — utility to fetch/summarize Langfuse traces.
+- `logging_config.py` — centralized logging configuration with token-usage callback.
+- `dspy_runtime.py` — shared DSPy LM configuration helpers.
+- `dspy_optimization.py` — optimized module loading.
+- `_compat.py` — compatibility shims (Langfuse `@observe()` fallback).
+- `scripts/` — utilities (Langfuse traces, text-pipeline optimization, word count).
 - `test_story.py` — pytest coverage for the primary pipeline.
 
 ## Requirements
@@ -110,7 +121,7 @@ python main.py --enable-images --replicate-api-token "$REPLICATE_API_TOKEN"
 - `--output-dir` (default: `.tmp`)
 - `--cache` / `--no-cache`
 - `--memory-cache` / `--no-memory-cache`
-- `--cache-dir`
+- `--cache-dir` (default: `.cache/dspy`)
 - `--use-optimized` / `--no-use-optimized`
 - `--optimized-manifest` (default: `.tmp/dspy_optimized/text_pipeline_manifest.json`)
 - `--enable-images`
@@ -151,6 +162,7 @@ By default, output is written to:
 
 The markdown includes:
 
+- Generation Parameters (model, max_tokens, cache settings)
 - Core Premise
 - Spine Template
 - World Bible
@@ -158,6 +170,8 @@ The markdown includes:
 - Enhancers Guide
 - Final Story
 - Optional character portraits / scene image embeds when images are enabled
+
+Sections are written incrementally as they are generated, so partial progress is preserved on interruption.
 
 ## Logging Behavior
 

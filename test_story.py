@@ -9,7 +9,7 @@ import pytest
 from dotenv import load_dotenv
 
 from logging_config import TokenUsageCallback, setup_logging
-from main import initialize_text_generators
+from pipeline import initialize_text_generators
 from story_modules import (
     ChapterInpaintingGenerator,
     ChapterSummarizer,
@@ -134,6 +134,20 @@ class MockLM(dspy.LM):
         ):
             return [
                 '```json\n{"reasoning": "Mock reasoning", "characters": "Mock characters"}\n```'
+            ]
+        if "[[ ## enhanced_character ## ]]" in content or (
+            '"enhanced_character"' in content
+            and "richly detailed character" in content
+        ):
+            return [
+                '```json\n{"reasoning": "Mock reasoning", "enhanced_character": "Mock enhanced character with rich detail."}\n```'
+            ]
+        if "[[ ## enhanced_location ## ]]" in content or (
+            '"enhanced_location"' in content
+            and "richly detailed location" in content
+        ):
+            return [
+                '```json\n{"reasoning": "Mock reasoning", "enhanced_location": "Mock enhanced location with vivid atmosphere."}\n```'
             ]
         if "[[ ## world_rules ## ]]" in content or (
             '"world_rules"' in content and "Rules of the world" in content
@@ -289,13 +303,14 @@ def test_pipeline(
 
     # 2. Core Premise
     cp_gen = CorePremiseGenerator()
-    cp_result = cp_gen(idea=idea, qa_pairs=qa_text)
+    enriched_idea = f"{idea}\n\nClarifying Q&A:\n{qa_text}"
+    cp_result = cp_gen(idea=enriched_idea)
     logger.info("Core Premise generated.")
     logger.debug("Core premise preview: %.300s", cp_result.core_premise)
 
     # 3. Spine Template
     st_gen = SpineTemplateGenerator()
-    st_result = st_gen(idea=idea, qa_pairs=qa_text, core_premise=cp_result.core_premise)
+    st_result = st_gen(idea=enriched_idea, core_premise=cp_result.core_premise)
     logger.info("Spine Template generated.")
     logger.debug("Spine template preview: %.300s", st_result.spine_template)
 
@@ -802,7 +817,7 @@ def test_character_visual_normalizes_description_only_shape():
 
 
 def test_initialize_text_generators_uses_loader_when_enabled():
-    with patch("main.try_load_optimized_module", return_value=True) as mocked_loader:
+    with patch("pipeline.try_load_optimized_module", return_value=True) as mocked_loader:
         generators = initialize_text_generators(
             use_optimized=True,
             optimized_manifest=".tmp/dspy_optimized/text_pipeline_manifest.json",
@@ -814,6 +829,8 @@ def test_initialize_text_generators_uses_loader_when_enabled():
         "SpineTemplateGenerator",
         "WorldBibleQuestionGenerator",
         "WorldBibleGenerator",
+        "CharacterEnhancer",
+        "LocationEnhancer",
         "StoryGenerator",
         "ChapterInpaintingGenerator",
     }
@@ -822,7 +839,7 @@ def test_initialize_text_generators_uses_loader_when_enabled():
 
 
 def test_initialize_text_generators_skips_loader_when_disabled():
-    with patch("main.try_load_optimized_module") as mocked_loader:
+    with patch("pipeline.try_load_optimized_module") as mocked_loader:
         generators = initialize_text_generators(use_optimized=False)
 
     assert "StoryGenerator" in generators
@@ -941,6 +958,211 @@ class TestTokenUsageCallback:
         with patch.object(cb._logger, "info") as mock_log:
             cb.on_lm_end(call_id="unknown", outputs={"text": "response"})
             mock_log.assert_not_called()
+
+
+class TestGenerationParams:
+    """Tests for GenerationParams dataclass."""
+
+    def test_as_markdown_renders_all_fields(self):
+        from models import GenerationParams
+
+        params = GenerationParams(
+            model="openai/gpt-4o-mini",
+            max_tokens=8000,
+            cache=True,
+            memory_cache=True,
+            cache_dir=".cache/dspy",
+        )
+        md = params.as_markdown()
+        assert "- model: `openai/gpt-4o-mini`" in md
+        assert "- max_tokens: `8000`" in md
+        assert "- cache: `True`" in md
+        assert "- memory_cache: `True`" in md
+        assert "- cache_dir: `.cache/dspy`" in md
+
+    def test_defaults_produce_valid_markdown(self):
+        from models import GenerationParams
+
+        params = GenerationParams()
+        md = params.as_markdown()
+        assert "- model: ``" in md
+        assert "- max_tokens: `0`" in md
+
+
+class TestIncrementalArtifactPersistence:
+    """Tests for output.initialize_artifact / update_artifact / write_generation_parameters."""
+
+    def test_initialize_artifact_creates_file(self, tmp_path):
+        from output import initialize_artifact
+
+        path = str(tmp_path / "story.md")
+        initialize_artifact(path)
+        content = open(path).read()
+        assert content == "# Story\n\n"
+
+    def test_update_artifact_appends_section(self, tmp_path):
+        from output import initialize_artifact, update_artifact
+
+        path = str(tmp_path / "story.md")
+        initialize_artifact(path)
+        update_artifact(path, "Core Premise", "A hero rises.")
+        content = open(path).read()
+        assert "## Core Premise\n\nA hero rises.\n\n" in content
+
+    def test_update_artifact_custom_heading_level(self, tmp_path):
+        from output import initialize_artifact, update_artifact
+
+        path = str(tmp_path / "story.md")
+        initialize_artifact(path)
+        update_artifact(path, "Characters", "Kael the warrior.", level=3)
+        content = open(path).read()
+        assert "### Characters\n\nKael the warrior.\n\n" in content
+
+    def test_write_generation_parameters_writes_to_file(self, tmp_path):
+        from models import GenerationParams
+        from output import initialize_artifact, write_generation_parameters
+
+        path = str(tmp_path / "story.md")
+        initialize_artifact(path)
+        params = GenerationParams(model="mock", max_tokens=1024)
+        write_generation_parameters(path, params)
+        content = open(path).read()
+        assert "## Generation Parameters" in content
+        assert "- model: `mock`" in content
+
+    def test_multiple_updates_accumulate(self, tmp_path):
+        from output import initialize_artifact, update_artifact
+
+        path = str(tmp_path / "story.md")
+        initialize_artifact(path)
+        update_artifact(path, "Section A", "Content A")
+        update_artifact(path, "Section B", "Content B")
+        content = open(path).read()
+        assert "## Section A" in content
+        assert "## Section B" in content
+        assert content.index("Section A") < content.index("Section B")
+
+
+def test_story_generator_public_methods_match_forward_output():
+    """Verify that calling public methods individually produces the same result as forward()."""
+    dspy.configure(lm=MockLM())
+    world_bible = WorldBible(
+        rules="Rules.",
+        characters="Tarin.",
+        locations="Moonwell.",
+        plot_timeline="Act 1 - Theft",
+    )
+    story_gen = StoryGenerator(random_detail_probability=0.0)
+
+    chapters = story_gen.generate_chapter_plan_entries(
+        core_premise="premise",
+        spine_template="spine",
+        world_bible=world_bible,
+    )
+    assert isinstance(chapters, list)
+    assert len(chapters) > 0
+
+    chapter_plan_text = "\n".join(chapters)
+    guide = story_gen.generate_enhancers_guide(
+        world_bible=world_bible,
+        chapter_plan_text=chapter_plan_text,
+    )
+    assert isinstance(guide, str)
+    assert guide.strip()
+
+    story = story_gen.write_story_chapters(
+        world_bible=world_bible,
+        chapter_plan_text=chapter_plan_text,
+        chapters_to_write=chapters,
+        enhancers_guide=guide,
+    )
+    assert isinstance(story, str)
+
+
+class TestCharacterEnhancer:
+    """Tests for per-character enhancement module."""
+
+    def test_enhancer_returns_enhanced_text(self):
+        from world_bible_modules import CharacterEnhancer
+
+        dspy.configure(lm=MockLM())
+        enhancer = CharacterEnhancer()
+        result = enhancer(
+            core_premise="A young wizard discovers a hidden world.",
+            spine_template="Once upon a time...",
+            rules="Magic is rare and costly.",
+            character="Kael - a 12-year-old orphan with latent magical talent.",
+            feedback="",
+        )
+        assert hasattr(result, "enhanced_character")
+        assert isinstance(result.enhanced_character, str)
+
+    def test_enhancer_accepts_feedback(self):
+        from world_bible_modules import CharacterEnhancer
+
+        dspy.configure(lm=MockLM())
+        enhancer = CharacterEnhancer()
+        result = enhancer(
+            core_premise="premise",
+            spine_template="spine",
+            rules="rules",
+            character="Kael the warrior.",
+            feedback="Make the character more conflicted.",
+        )
+        assert hasattr(result, "enhanced_character")
+
+
+class TestLocationEnhancer:
+    """Tests for per-location enhancement module."""
+
+    def test_enhancer_returns_enhanced_text(self):
+        from world_bible_modules import LocationEnhancer
+
+        dspy.configure(lm=MockLM())
+        enhancer = LocationEnhancer()
+        result = enhancer(
+            core_premise="premise",
+            spine_template="spine",
+            rules="rules",
+            location="The Moonwell - a glowing underground lake.",
+            feedback="",
+        )
+        assert hasattr(result, "enhanced_location")
+        assert isinstance(result.enhanced_location, str)
+
+
+class TestSplitSectionItems:
+    """Tests for _split_section_items helper."""
+
+    def test_splits_on_double_newlines(self):
+        from pipeline import _split_section_items
+
+        text = "Character A - brave knight.\n\nCharacter B - cunning rogue."
+        items = _split_section_items(text)
+        assert len(items) == 2
+        assert items[0] == "Character A - brave knight."
+        assert items[1] == "Character B - cunning rogue."
+
+    def test_single_block_returns_one_item(self):
+        from pipeline import _split_section_items
+
+        text = "A single character with no separator."
+        items = _split_section_items(text)
+        assert len(items) == 1
+        assert items[0] == text
+
+    def test_empty_string_returns_one_item(self):
+        from pipeline import _split_section_items
+
+        items = _split_section_items("")
+        assert len(items) == 1
+
+    def test_multiple_blank_lines_treated_as_separator(self):
+        from pipeline import _split_section_items
+
+        text = "Item one.\n\n\n\nItem two."
+        items = _split_section_items(text)
+        assert len(items) == 2
 
 
 if __name__ == "__main__":

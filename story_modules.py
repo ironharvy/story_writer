@@ -228,11 +228,14 @@ class QuestionGenerator(dspy.Module):
 
 
 class GenerateCorePremiseSignature(dspy.Signature):
-    """Synthesizes the user's idea, the questions, and the user's answers into a Core Premise."""
+    """Synthesize an enriched idea into a Core Premise."""
 
-    idea: str = dspy.InputField(desc="The initial idea or prompt for the story.")
-    qa_pairs: str = dspy.InputField(
-        desc="The interrogative questions and the user's accepted or provided answers.",
+    idea: str = dspy.InputField(
+        desc="The story idea enriched with clarifying Q&A context.",
+    )
+    feedback: str = dspy.InputField(
+        desc="User feedback requesting changes to the previous core premise attempt. "
+        "Empty on the first generation.",
     )
     core_premise: str = dspy.OutputField(
         desc="A detailed Core Premise summarizing the foundation of the story.",
@@ -247,19 +250,22 @@ class CorePremiseGenerator(dspy.Module):
         self.generate = dspy.Predict(GenerateCorePremiseSignature)
 
     @observe()
-    def forward(self, idea: str, qa_pairs: str):
-        """Build the core premise from the idea and Q/A refinements."""
-        return self.generate(idea=idea, qa_pairs=qa_pairs)
+    def forward(self, idea: str, feedback: str = ""):
+        """Build the core premise from the enriched idea."""
+        return self.generate(idea=idea, feedback=feedback)
 
 
 class GenerateSpineTemplateSignature(dspy.Signature):
     """Creates a narrative spine template based on the Core Premise."""
 
-    idea: str = dspy.InputField(desc="The original story idea.")
-    qa_pairs: str = dspy.InputField(
-        desc="Questions and answers to flesh out the story."
+    idea: str = dspy.InputField(
+        desc="The story idea enriched with clarifying Q&A context.",
     )
     core_premise: str = dspy.InputField(desc="The Core Premise of the story.")
+    feedback: str = dspy.InputField(
+        desc="User feedback requesting changes to the previous spine template. "
+        "Empty on the first generation.",
+    )
     spine_template: str = dspy.OutputField(
         desc=(
             "A narrative spine template (e.g., Once upon a time... Every day... "
@@ -276,9 +282,11 @@ class SpineTemplateGenerator(dspy.Module):
         self.generate = dspy.Predict(GenerateSpineTemplateSignature)
 
     @observe()
-    def forward(self, idea: str, qa_pairs: str, core_premise: str):
-        """Create a spine template from ideation and premise context."""
-        return self.generate(idea=idea, qa_pairs=qa_pairs, core_premise=core_premise)
+    def forward(self, idea: str, core_premise: str, feedback: str = ""):
+        """Create a spine template from enriched idea and premise context."""
+        return self.generate(
+            idea=idea, core_premise=core_premise, feedback=feedback,
+        )
 
 
 class CharacterVisual(BaseModel):
@@ -419,6 +427,10 @@ class GenerateChapterPlanSignature(dspy.Signature):
         ),
     )
     act: str = dspy.InputField(desc="The act of the story to plan chapters for.")
+    feedback: str = dspy.InputField(
+        desc="User feedback requesting changes to the previous chapter plan. "
+        "Empty on the first generation.",
+    )
     chapter_plan: list[str] = dspy.OutputField(
         desc=(
             "Chapter Plan for this act (5-10 major events). Each entry must "
@@ -732,11 +744,12 @@ class StoryGenerator(dspy.Module):
             logger.warning("Failed to generate random detail: %s", exc)
             return ""
 
-    def _generate_chapter_plan_entries(
+    def generate_chapter_plan_entries(
         self,
         core_premise: str,
         spine_template: str,
         world_bible: WorldBible,
+        feedback: str = "",
     ) -> list[str]:
         chapter_entries: list[str] = []
         for act in _ACT_SEQUENCE:
@@ -754,13 +767,14 @@ class StoryGenerator(dspy.Module):
                 rules=world_bible.rules,
                 previous_chapters=previous_chapters_text,
                 act=act,
+                feedback=feedback,
             )
             chapter_entries.extend(chapter_plan_result.chapter_plan)
             logger.debug("Added chapters: %s", chapter_plan_result.chapter_plan)
 
         return _normalize_chapter_plan_entries(chapter_entries)
 
-    def _generate_enhancers_guide(
+    def generate_enhancers_guide(
         self,
         world_bible: WorldBible,
         chapter_plan_text: str,
@@ -833,7 +847,7 @@ class StoryGenerator(dspy.Module):
         previous_summary_entries.append(summary_block)
         return rolling
 
-    def _write_story_chapters(
+    def write_story_chapters(
         self,
         world_bible: WorldBible,
         chapter_plan_text: str,
@@ -881,18 +895,18 @@ class StoryGenerator(dspy.Module):
         logger.debug(
             "StoryGenerator received spine template of %d chars", len(spine_template)
         )
-        chapters_to_write = self._generate_chapter_plan_entries(
+        chapters_to_write = self.generate_chapter_plan_entries(
             core_premise=core_premise,
             spine_template=spine_template,
             world_bible=world_bible,
         )
         chapter_plan_text = "\n".join(chapters_to_write)
 
-        enhancers_guide = self._generate_enhancers_guide(
+        enhancers_guide = self.generate_enhancers_guide(
             world_bible=world_bible,
             chapter_plan_text=chapter_plan_text,
         )
-        full_story = self._write_story_chapters(
+        full_story = self.write_story_chapters(
             world_bible=world_bible,
             chapter_plan_text=chapter_plan_text,
             chapters_to_write=chapters_to_write,

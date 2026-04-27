@@ -234,13 +234,23 @@ def test_specific_function():
 ```
 
 ### File Organization
-- `main.py` - CLI entry point and orchestration
+- `main.py` - Thin CLI entry point (parse args, setup, run, save)
+- `cli.py` - Argument parsing (`build_arg_parser`)
+- `models.py` - Pipeline dataclasses (`GenerationParams`, `ImageArtifacts`, `StoryFoundation`, `StoryRunArtifacts`)
+- `pipeline.py` - Orchestration with `@observe()` tracing and feedback loops
+- `ui.py` - Rich-based interactive UI (no business logic)
+- `output.py` - Incremental `update_artifact()` and final `save_story_output()`
+- `qa.py` - Post-generation quality checks
 - `story_modules.py` - Core story generation modules
 - `world_bible_modules.py` - World bible generation
-- `postprocessing.py` - Post-generation utilities
+- `world_bible.py` - Structured `WorldBible` Pydantic model
 - `image_gen.py` - Replicate image generation
 - `logging_config.py` - Centralized logging setup
+- `dspy_runtime.py` - Shared DSPy LM configuration
 - `dspy_optimization.py` - Module loading/optimization
+- `_compat.py` - Compatibility shims (Langfuse `@observe()` fallback)
+- `exceptions.py` - Recoverable exception definitions
+- `postprocessing.py` - Post-generation text utilities
 - `test_*.py` - Test files (mirror module structure)
 
 ### Docstrings
@@ -288,7 +298,7 @@ _match = _chapter_prefix_re.match(title)
 | `API_KEY` | API authentication | - |
 | `OPENAI_API_KEY` | OpenAI auth | - |
 | `REPLICATE_API_TOKEN` | Image generation | - |
-| `DSPY_CACHE_DIR` | DSPy disk cache | - |
+| `DSPY_CACHE_DIR` | DSPy disk cache | `.cache/dspy` |
 | `LOG_LEVEL` | Log verbosity | `INFO` |
 | `LOG_FORMAT` | `text` or `json` | `text` |
 | `LOG_FILE` | Log file path | - |

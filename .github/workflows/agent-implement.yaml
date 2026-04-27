@@ -1,0 +1,76 @@
+name: Agent Implement Issue
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  claude-implement:
+    if: github.event.label.name == 'claude'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.PAT_TOKEN }}
+          prompt: |
+            Implement this issue fully. Read the codebase,
+            write the implementation, add or update tests,
+            and open a PR.
+          claude_args: "--max-turns 20"
+          label_trigger: "claude"
+          branch_prefix: "claude/"
+
+  codex-implement:
+    if: github.event.label.name == 'codex'
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up branch
+        run: |
+          BRANCH="codex/issue-${{ github.event.issue.number }}"
+          git checkout -b "$BRANCH"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      - uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt: |
+            Implement GitHub issue #${{ github.event.issue.number }}.
+            Title: ${{ github.event.issue.title }}
+            Description: ${{ github.event.issue.body }}
+            Read the codebase, implement the change, run tests.
+            Keep changes minimal and focused.
+          sandbox: workspace-write
+          codex-args: '["--full-auto"]'
+
+      - name: Push and create PR
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "feat: implement #${{ github.event.issue.number }}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "Implement #${{ github.event.issue.number }}: ${{ github.event.issue.title }}" \
+            --body "Automated implementation by Codex for #${{ github.event.issue.number }}" \
+            --base main --head "$BRANCH"

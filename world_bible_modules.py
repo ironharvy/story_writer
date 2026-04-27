@@ -117,6 +117,82 @@ class GeneratePlotTimelineSignature(dspy.Signature):
     plot_timeline: str = dspy.OutputField(desc="A plot timeline.")
 
 
+class EnhanceCharacterSignature(dspy.Signature):
+    """Enhance a single character with richer biographical and personality detail."""
+
+    core_premise: str = dspy.InputField(desc="Core premise of the story.")
+    spine_template: str = dspy.InputField(desc="Narrative spine for context.")
+    rules: str = dspy.InputField(desc="Rules of the story world.")
+    character: str = dspy.InputField(desc="Character description to enhance.")
+    feedback: str = dspy.InputField(desc="User feedback for refinement.")
+    enhanced_character: str = dspy.OutputField(
+        desc="Elaborate, richly detailed character description.",
+    )
+
+
+class CharacterEnhancer(dspy.Module):
+    """Enhance a single character description with user feedback."""
+
+    def __init__(self):
+        super().__init__()
+        self.enhance = dspy.ChainOfThought(EnhanceCharacterSignature)
+
+    @observe()
+    def forward(
+        self,
+        core_premise: str,
+        spine_template: str,
+        rules: str,
+        character: str,
+        feedback: str = "",
+    ):
+        return self.enhance(
+            core_premise=core_premise,
+            spine_template=spine_template,
+            rules=rules,
+            character=character,
+            feedback=feedback,
+        )
+
+
+class EnhanceLocationSignature(dspy.Signature):
+    """Enhance a single location with richer sensory and atmospheric detail."""
+
+    core_premise: str = dspy.InputField(desc="Core premise of the story.")
+    spine_template: str = dspy.InputField(desc="Narrative spine for context.")
+    rules: str = dspy.InputField(desc="Rules of the story world.")
+    location: str = dspy.InputField(desc="Location description to enhance.")
+    feedback: str = dspy.InputField(desc="User feedback for refinement.")
+    enhanced_location: str = dspy.OutputField(
+        desc="Elaborate, richly detailed location description.",
+    )
+
+
+class LocationEnhancer(dspy.Module):
+    """Enhance a single location description with user feedback."""
+
+    def __init__(self):
+        super().__init__()
+        self.enhance = dspy.ChainOfThought(EnhanceLocationSignature)
+
+    @observe()
+    def forward(
+        self,
+        core_premise: str,
+        spine_template: str,
+        rules: str,
+        location: str,
+        feedback: str = "",
+    ):
+        return self.enhance(
+            core_premise=core_premise,
+            spine_template=spine_template,
+            rules=rules,
+            location=location,
+            feedback=feedback,
+        )
+
+
 class WorldBibleGenerator(dspy.Module):
     """Compose world rules, characters, locations, and timeline into one bible."""
 
