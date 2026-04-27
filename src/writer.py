@@ -74,7 +74,7 @@ class Writer:
         characters = self.define_characters(spine=spine).characters
         ch_qas = []
         for character in characters:
-            qa = QuestionWithAnswer(question=f"Is this a fitting character for the story?", answer=character)
+            qa = QuestionWithAnswer(question="Is this a fitting character for the story?", answer=character)
             ch_qas.append(qa)
         answered = ask_questions(ch_qas)
         for i, character in enumerate(characters):

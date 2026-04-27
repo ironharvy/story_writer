@@ -56,7 +56,7 @@ if __name__ == "__main__":
                 story_so_far = result.updated_story_so_far
 
                 print("## " + result.paragraph)
-            with open(f".tmp/story.md", "w") as f:
+            with open(".tmp/story.md", "w") as f:
                 f.write(story)
             sys.exit(0)
 
