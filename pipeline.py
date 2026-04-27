@@ -20,19 +20,19 @@ from models import ImageArtifacts, StoryFoundation, StoryRunArtifacts
 from output import update_artifact
 from story_modules import (
     ChapterInpaintingGenerator,
-    CharacterVisualDescriber,
-    CorePremiseGenerator,
-    QuestionGenerator,
-    SceneImagePromptGenerator,
-    SpineTemplateGenerator,
+    GenerateCharacterVisualsSignature,
+    GenerateCorePremiseSignature,
+    GenerateQuestionsSignature,
+    GenerateSceneImagePromptSignature,
+    GenerateSpineTemplateSignature,
     StoryGenerator,
 )
 from world_bible import WorldBible
 from world_bible_modules import (
     EnhanceCharacterSignature,
     EnhanceLocationSignature,
+    GenerateWorldBibleQuestionsSignature,
     WorldBibleGenerator,
-    WorldBibleQuestionGenerator,
 )
 import ui
 
@@ -46,13 +46,15 @@ def initialize_text_generators(
 ) -> dict[str, Any]:
     """Initialize all text generation modules used by the CLI flow."""
     generators = {
-        "QuestionGenerator": QuestionGenerator(),
-        "CorePremiseGenerator": CorePremiseGenerator(),
-        "SpineTemplateGenerator": SpineTemplateGenerator(),
-        "WorldBibleQuestionGenerator": WorldBibleQuestionGenerator(),
+        "QuestionGenerator": dspy.Predict(GenerateQuestionsSignature),
+        "CorePremiseGenerator": dspy.Predict(GenerateCorePremiseSignature),
+        "SpineTemplateGenerator": dspy.Predict(GenerateSpineTemplateSignature),
+        "WorldBibleQuestionGenerator": dspy.Predict(GenerateWorldBibleQuestionsSignature),
         "WorldBibleGenerator": WorldBibleGenerator(),
         "CharacterEnhancer": dspy.ChainOfThought(EnhanceCharacterSignature),
         "LocationEnhancer": dspy.ChainOfThought(EnhanceLocationSignature),
+        "CharacterVisualDescriber": dspy.Predict(GenerateCharacterVisualsSignature),
+        "SceneImagePromptGenerator": dspy.Predict(GenerateSceneImagePromptSignature),
         "StoryGenerator": StoryGenerator(),
         "ChapterInpaintingGenerator": ChapterInpaintingGenerator(),
     }
@@ -313,7 +315,7 @@ def maybe_generate_character_assets(
     image_generator = ImageGenerator(api_token=args.replicate_api_token)
 
     ui.print_status("Generating character visual descriptions...")
-    cv_describer = CharacterVisualDescriber()
+    cv_describer = dspy.Predict(GenerateCharacterVisualsSignature)
     cv_result = cv_describer(world_bible=world_bible.full_text)
     character_visuals = cv_result.character_visuals
     character_visuals_summary = ui.summarize_character_visuals(character_visuals)
@@ -451,7 +453,7 @@ def maybe_generate_scene_images(
         return {}
 
     ui.print_status("Generating scene illustrations for each chapter...")
-    scene_prompt_gen = SceneImagePromptGenerator()
+    scene_prompt_gen = dspy.Predict(GenerateSceneImagePromptSignature)
 
     chapters = [c for c in final_story_text.split("### Chapter ") if c.strip()]
     reference_paths = list(image_artifacts.character_portrait_paths.values())

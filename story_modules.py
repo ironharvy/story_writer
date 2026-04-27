@@ -214,19 +214,6 @@ class GenerateQuestionsSignature(dspy.Signature):
     )
 
 
-class QuestionGenerator(dspy.Module):
-    """Generate interactive clarification questions for the user's idea."""
-
-    def __init__(self):
-        super().__init__()
-        self.generate = dspy.Predict(GenerateQuestionsSignature)
-
-    @observe()
-    def forward(self, idea: str):
-        """Generate question/answer suggestions from the initial idea."""
-        return self.generate(idea=idea)
-
-
 class GenerateCorePremiseSignature(dspy.Signature):
     """Synthesize an enriched idea into a Core Premise."""
 
@@ -240,19 +227,6 @@ class GenerateCorePremiseSignature(dspy.Signature):
     core_premise: str = dspy.OutputField(
         desc="A detailed Core Premise summarizing the foundation of the story.",
     )
-
-
-class CorePremiseGenerator(dspy.Module):
-    """Synthesize idea context into a single core premise statement."""
-
-    def __init__(self):
-        super().__init__()
-        self.generate = dspy.Predict(GenerateCorePremiseSignature)
-
-    @observe()
-    def forward(self, idea: str, feedback: str = ""):
-        """Build the core premise from the enriched idea."""
-        return self.generate(idea=idea, feedback=feedback)
 
 
 class GenerateSpineTemplateSignature(dspy.Signature):
@@ -272,21 +246,6 @@ class GenerateSpineTemplateSignature(dspy.Signature):
             "One day... Because of that... Because of that... Until finally...)."
         ),
     )
-
-
-class SpineTemplateGenerator(dspy.Module):
-    """Generate a narrative spine scaffold for downstream planning."""
-
-    def __init__(self):
-        super().__init__()
-        self.generate = dspy.Predict(GenerateSpineTemplateSignature)
-
-    @observe()
-    def forward(self, idea: str, core_premise: str, feedback: str = ""):
-        """Create a spine template from enriched idea and premise context."""
-        return self.generate(
-            idea=idea, core_premise=core_premise, feedback=feedback,
-        )
 
 
 class CharacterVisual(BaseModel):
@@ -348,19 +307,6 @@ class GenerateCharacterVisualsSignature(dspy.Signature):
     )
 
 
-class CharacterVisualDescriber(dspy.Module):
-    """Extract and describe the story's major character visuals."""
-
-    def __init__(self):
-        super().__init__()
-        self.generate = dspy.Predict(GenerateCharacterVisualsSignature)
-
-    @observe()
-    def forward(self, world_bible: str):
-        """Generate normalized visual descriptors from a world bible."""
-        return self.generate(world_bible=world_bible)
-
-
 class GenerateSceneImagePromptSignature(dspy.Signature):
     """Generates a single anime image-generation prompt that depicts the most
     important scene from the given chapter.  The prompt must reference the
@@ -376,22 +322,6 @@ class GenerateSceneImagePromptSignature(dspy.Signature):
     image_prompt: str = dspy.OutputField(
         desc="A detailed anime scene image-generation prompt."
     )
-
-
-class SceneImagePromptGenerator(dspy.Module):
-    """Produce chapter-level scene prompts for image generation."""
-
-    def __init__(self):
-        super().__init__()
-        self.generate = dspy.Predict(GenerateSceneImagePromptSignature)
-
-    @observe()
-    def forward(self, chapter_text: str, character_visuals_summary: str):
-        """Generate an image prompt for a chapter's most salient scene."""
-        return self.generate(
-            chapter_text=chapter_text,
-            character_visuals_summary=character_visuals_summary,
-        )
 
 
 class GenerateChapterPlanSignature(dspy.Signature):
@@ -502,22 +432,6 @@ class GenerateChapterSummarySignature(dspy.Signature):
             "changes over theme or tone. No spoilers beyond this chapter."
         ),
     )
-
-
-class ChapterSummarizer(dspy.Module):
-    """Produce a short factual summary of a written chapter."""
-
-    def __init__(self):
-        super().__init__()
-        self.summarize = dspy.Predict(GenerateChapterSummarySignature)
-
-    @observe()
-    def forward(self, current_chapter_description: str, chapter_text: str):
-        """Summarize a written chapter in 2-3 sentences."""
-        return self.summarize(
-            current_chapter_description=current_chapter_description,
-            chapter_text=chapter_text,
-        )
 
 
 class GenerateSingleChapterSignature(dspy.Signature):
@@ -667,7 +581,7 @@ class StoryGenerator(dspy.Module):
         self.generate_enhancers = dspy.ChainOfThought(GenerateEnhancersSignature)
         self.generate_random_detail = dspy.Predict(GenerateRandomDetailSignature)
         self.write_chapter = dspy.ChainOfThought(GenerateSingleChapterSignature)
-        self.summarize_chapter = ChapterSummarizer()
+        self.summarize_chapter = dspy.Predict(GenerateChapterSummarySignature)
 
     def _summarize_written_chapter(
         self,

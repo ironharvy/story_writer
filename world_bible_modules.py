@@ -52,19 +52,6 @@ class GenerateWorldBibleQuestionsSignature(dspy.Signature):
     )
 
 
-class WorldBibleQuestionGenerator(dspy.Module):
-    """Generate world-bible clarification questions from premise and spine."""
-
-    def __init__(self):
-        super().__init__()
-        self.generate = dspy.Predict(GenerateWorldBibleQuestionsSignature)
-
-    @observe()
-    def forward(self, core_premise: str, spine_template: str):
-        """Generate clarification questions and proposed answers."""
-        return self.generate(core_premise=core_premise, spine_template=spine_template)
-
-
 class GenerateWorldRulesSignature(dspy.Signature):
     """Generate rules governing the world and its systems."""
 

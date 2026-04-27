@@ -12,14 +12,14 @@ from logging_config import TokenUsageCallback, setup_logging
 from pipeline import initialize_text_generators
 from story_modules import (
     ChapterInpaintingGenerator,
-    ChapterSummarizer,
     CharacterVisual,
-    CharacterVisualDescriber,
-    CorePremiseGenerator,
-    QuestionGenerator,
+    GenerateCharacterVisualsSignature,
+    GenerateChapterSummarySignature,
+    GenerateCorePremiseSignature,
+    GenerateQuestionsSignature,
+    GenerateSceneImagePromptSignature,
+    GenerateSpineTemplateSignature,
     QuestionWithAnswer,
-    SceneImagePromptGenerator,
-    SpineTemplateGenerator,
     StoryGenerator,
     _extract_trailing_paragraphs,
     _truncate_chapter_for_summary,
@@ -291,7 +291,7 @@ def test_pipeline(
     idea = "An unnamed child is raised by the Church as the ultimate weapon against demons. As child grows he learns that the church itself is corrupt and breeds demons for controlled chaos. The church recieves funding for protection and as such decides who should recieve help. The child eventually becomes overpowered and turns back on the Church"
 
     # 1. Questions
-    q_gen = QuestionGenerator()
+    q_gen = dspy.Predict(GenerateQuestionsSignature)
     q_result = q_gen(idea=idea)
     logger.info(f"Generated {len(q_result.questions_with_answers)} questions.")
     logger.debug("Questions: %s", [q.question for q in q_result.questions_with_answers])
@@ -302,14 +302,14 @@ def test_pipeline(
         qa_text += f"Q: {q.question}\nA: {q.proposed_answer}\n\n"
 
     # 2. Core Premise
-    cp_gen = CorePremiseGenerator()
+    cp_gen = dspy.Predict(GenerateCorePremiseSignature)
     enriched_idea = f"{idea}\n\nClarifying Q&A:\n{qa_text}"
     cp_result = cp_gen(idea=enriched_idea)
     logger.info("Core Premise generated.")
     logger.debug("Core premise preview: %.300s", cp_result.core_premise)
 
     # 3. Spine Template
-    st_gen = SpineTemplateGenerator()
+    st_gen = dspy.Predict(GenerateSpineTemplateSignature)
     st_result = st_gen(idea=enriched_idea, core_premise=cp_result.core_premise)
     logger.info("Spine Template generated.")
     logger.debug("Spine template preview: %.300s", st_result.spine_template)
@@ -324,7 +324,7 @@ def test_pipeline(
     world_bible = wb_result.world_bible_structured
 
     # 5. Character Visual Descriptions
-    cv_describer = CharacterVisualDescriber()
+    cv_describer = dspy.Predict(GenerateCharacterVisualsSignature)
     cv_result = cv_describer(world_bible=world_bible.full_text)
     print(f"Generated visuals for {len(cv_result.character_visuals)} characters.")
     for cv in cv_result.character_visuals:
@@ -364,7 +364,7 @@ def test_pipeline(
     logger.debug("Story preview: %.500s", story_result.story)
 
     # 8. Scene image prompts
-    scene_prompt_gen = SceneImagePromptGenerator()
+    scene_prompt_gen = dspy.Predict(GenerateSceneImagePromptSignature)
     prompt_result = scene_prompt_gen(
         chapter_text="Mock chapter text for testing",
         character_visuals_summary=character_visuals_summary,
@@ -604,13 +604,13 @@ def test_story_generator_uses_structured_world_bible_fields():
 
 
 def test_chapter_summarizer_instantiates():
-    summarizer = ChapterSummarizer()
+    summarizer = dspy.Predict(GenerateChapterSummarySignature)
     assert summarizer is not None
 
 
 def test_chapter_summarizer_forward_returns_chapter_summary():
     dspy.configure(lm=MockLM())
-    summarizer = ChapterSummarizer()
+    summarizer = dspy.Predict(GenerateChapterSummarySignature)
 
     result = summarizer(
         current_chapter_description="Chapter 7: Kael infiltrates the cathedral archive.",
@@ -831,6 +831,8 @@ def test_initialize_text_generators_uses_loader_when_enabled():
         "WorldBibleGenerator",
         "CharacterEnhancer",
         "LocationEnhancer",
+        "CharacterVisualDescriber",
+        "SceneImagePromptGenerator",
         "StoryGenerator",
         "ChapterInpaintingGenerator",
     }
