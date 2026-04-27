@@ -29,8 +29,8 @@ from story_modules import (
 )
 from world_bible import WorldBible
 from world_bible_modules import (
-    CharacterEnhancer,
-    LocationEnhancer,
+    EnhanceCharacterSignature,
+    EnhanceLocationSignature,
     WorldBibleGenerator,
     WorldBibleQuestionGenerator,
 )
@@ -51,8 +51,8 @@ def initialize_text_generators(
         "SpineTemplateGenerator": SpineTemplateGenerator(),
         "WorldBibleQuestionGenerator": WorldBibleQuestionGenerator(),
         "WorldBibleGenerator": WorldBibleGenerator(),
-        "CharacterEnhancer": CharacterEnhancer(),
-        "LocationEnhancer": LocationEnhancer(),
+        "CharacterEnhancer": dspy.ChainOfThought(EnhanceCharacterSignature),
+        "LocationEnhancer": dspy.ChainOfThought(EnhanceLocationSignature),
         "StoryGenerator": StoryGenerator(),
         "ChapterInpaintingGenerator": ChapterInpaintingGenerator(),
     }

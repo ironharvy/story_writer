@@ -1080,13 +1080,13 @@ def test_story_generator_public_methods_match_forward_output():
 
 
 class TestCharacterEnhancer:
-    """Tests for per-character enhancement module."""
+    """Tests for character enhancement via ChainOfThought + signature."""
 
     def test_enhancer_returns_enhanced_text(self):
-        from world_bible_modules import CharacterEnhancer
+        from world_bible_modules import EnhanceCharacterSignature
 
         dspy.configure(lm=MockLM())
-        enhancer = CharacterEnhancer()
+        enhancer = dspy.ChainOfThought(EnhanceCharacterSignature)
         result = enhancer(
             core_premise="A young wizard discovers a hidden world.",
             spine_template="Once upon a time...",
@@ -1098,10 +1098,10 @@ class TestCharacterEnhancer:
         assert isinstance(result.enhanced_character, str)
 
     def test_enhancer_accepts_feedback(self):
-        from world_bible_modules import CharacterEnhancer
+        from world_bible_modules import EnhanceCharacterSignature
 
         dspy.configure(lm=MockLM())
-        enhancer = CharacterEnhancer()
+        enhancer = dspy.ChainOfThought(EnhanceCharacterSignature)
         result = enhancer(
             core_premise="premise",
             spine_template="spine",
@@ -1113,13 +1113,13 @@ class TestCharacterEnhancer:
 
 
 class TestLocationEnhancer:
-    """Tests for per-location enhancement module."""
+    """Tests for location enhancement via ChainOfThought + signature."""
 
     def test_enhancer_returns_enhanced_text(self):
-        from world_bible_modules import LocationEnhancer
+        from world_bible_modules import EnhanceLocationSignature
 
         dspy.configure(lm=MockLM())
-        enhancer = LocationEnhancer()
+        enhancer = dspy.ChainOfThought(EnhanceLocationSignature)
         result = enhancer(
             core_premise="premise",
             spine_template="spine",

@@ -130,33 +130,6 @@ class EnhanceCharacterSignature(dspy.Signature):
     )
 
 
-class CharacterEnhancer(dspy.Module):
-    """Enhance a single character description with user feedback."""
-
-    def __init__(self):
-        super().__init__()
-        self.enhance = dspy.ChainOfThought(EnhanceCharacterSignature)
-
-    @observe()
-    def forward(  # pylint: disable=too-many-arguments
-        self,
-        *,
-        core_premise: str,
-        spine_template: str,
-        rules: str,
-        character: str,
-        feedback: str = "",
-    ):
-        """Enhance a character description, optionally guided by user feedback."""
-        return self.enhance(
-            core_premise=core_premise,
-            spine_template=spine_template,
-            rules=rules,
-            character=character,
-            feedback=feedback,
-        )
-
-
 class EnhanceLocationSignature(dspy.Signature):
     """Enhance a single location with richer sensory and atmospheric detail."""
 
@@ -168,33 +141,6 @@ class EnhanceLocationSignature(dspy.Signature):
     enhanced_location: str = dspy.OutputField(
         desc="Elaborate, richly detailed location description.",
     )
-
-
-class LocationEnhancer(dspy.Module):
-    """Enhance a single location description with user feedback."""
-
-    def __init__(self):
-        super().__init__()
-        self.enhance = dspy.ChainOfThought(EnhanceLocationSignature)
-
-    @observe()
-    def forward(  # pylint: disable=too-many-arguments
-        self,
-        *,
-        core_premise: str,
-        spine_template: str,
-        rules: str,
-        location: str,
-        feedback: str = "",
-    ):
-        """Enhance a location description, optionally guided by user feedback."""
-        return self.enhance(
-            core_premise=core_premise,
-            spine_template=spine_template,
-            rules=rules,
-            location=location,
-            feedback=feedback,
-        )
 
 
 class WorldBibleGenerator(dspy.Module):
