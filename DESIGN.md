@@ -13,7 +13,7 @@ Audience: contributors, integrators, and anyone tuning the DSPy pipeline.
 1. [Purpose & Scope](#1-purpose--scope)
 2. [High-Level Architecture](#2-high-level-architecture)
 3. [Pipeline Stages](#3-pipeline-stages)
-4. DSPy Signature Reference — _TBD_
+4. [DSPy Signature Reference](#4-dspy-signature-reference)
 5. DSPy Module Reference — _TBD_
 6. Cross-Cutting Concerns — _TBD_
 7. Extensibility — _TBD_
@@ -346,3 +346,252 @@ Inside `StoryGenerator`, the per-chapter loop additionally maintains:
   feed `previous_chapters_summary` into the next chapter's signature.
 - `ChapterWritingContext` (frozen dataclass) — invariants that don't
   change per chapter (`world_bible`, `chapter_plan_text`, `enhancers_guide`).
+
+## 4. DSPy Signature Reference
+
+Each signature is a typed prompt contract: input fields are LLM context,
+output fields are what the model must produce. All signatures live in
+`story_modules.py` or `world_bible_modules.py`. Field types use Python
+3.10+ syntax; `List[T]` indicates a Pydantic-validated list.
+
+Signatures are grouped by the pipeline stage that consumes them.
+
+### 4.1 Shared types
+
+These Pydantic models appear as input/output field types across multiple
+signatures.
+
+#### `QuestionWithAnswer` (`story_modules.py:154`)
+
+| Field | Type | Description |
+|---|---|---|
+| `question` | `str` | The interrogative question. |
+| `proposed_answer` | `str` | A proposed answer the user can accept or override. |
+
+Has a `model_validator(mode="before")` that normalizes loosely-keyed model
+output (e.g. `q`/`prompt`/`query` → `question`,
+`answer`/`response`/`a` → `proposed_answer`).
+
+#### `CharacterVisual` (`story_modules.py:284`)
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `str` | Character's name. |
+| `reference_mix` | `str` | Visual anchor (e.g. "a mix of Cinderella and Princess Pingyang"). |
+| `distinguishing_features` | `str` | Hair, eyes, clothing, accessories, scars, etc. |
+| `full_prompt` | `str` | Complete anime image-gen prompt for the portrait. |
+
+Has a normalizer that backfills legacy `description`/`visual_description`
+keys into the current schema.
+
+#### `WorldBible` (`world_bible.py:6`)
+
+| Field | Type | Description |
+|---|---|---|
+| `rules` | `str` | Rules of the world and its governing systems. |
+| `characters` | `str` | Character bios and relationships. |
+| `locations` | `str` | Key places and setting details. |
+| `plot_timeline` | `str` | Plot beats organized by act. |
+
+Exposes `full_text` (markdown rendering used everywhere downstream).
+
+### 4.2 Ideation signatures
+
+#### `GenerateQuestionsSignature` — Stage S2
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `idea` | `str` |
+| out | `questions_with_answers` | `List[QuestionWithAnswer]` (5 items) |
+
+Generates 5 interrogative questions with proposed answers to clarify the
+user's idea. Used by `QuestionGenerator` (`dspy.Predict`).
+
+#### `GenerateCorePremiseSignature` — Stage S2
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `idea` | `str` |
+| in  | `qa_pairs` | `str` (formatted Q/A blob from S2 user input) |
+| out | `core_premise` | `str` |
+
+Synthesizes the idea + Q&A into a single core premise. Used by
+`CorePremiseGenerator` (`dspy.Predict`).
+
+#### `GenerateSpineTemplateSignature` — Stage S3
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `idea` | `str` |
+| in  | `qa_pairs` | `str` |
+| in  | `core_premise` | `str` |
+| out | `spine_template` | `str` (Pixar-style "Once upon a time… Until finally…") |
+
+Used by `SpineTemplateGenerator` (`dspy.Predict`).
+
+### 4.3 World-bible signatures
+
+#### `GenerateWorldBibleQuestionsSignature` — Stage S4
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `core_premise` | `str` |
+| in  | `spine_template` | `str` |
+| out | `questions_with_answers` | `List[QuestionWithAnswer]` (≤3 items) |
+
+Used by `WorldBibleQuestionGenerator` (`dspy.Predict`).
+
+#### `GenerateWorldRulesSignature` — Stage S4
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `core_premise` | `str` |
+| in  | `spine_template` | `str` |
+| in  | `user_additions` | `str` (Q&A blob from world-bible questions) |
+| out | `world_rules` | `str` |
+
+Used inside `WorldBibleGenerator` via `dspy.ChainOfThought`. The output
+becomes input to the next three signatures.
+
+#### `GenerateCharactersSignature` — Stage S4
+
+Adds `world_rules: str` to the previous inputs; outputs `characters: str`.
+CoT.
+
+#### `GenerateLocationsSignature` — Stage S4
+
+Adds `characters: str`; outputs `locations: str`. CoT.
+
+#### `GeneratePlotTimelineSignature` — Stage S4
+
+Adds `locations: str`; outputs `plot_timeline: str`. CoT. The output is
+post-processed by `_normalize_plot_timeline` to deduplicate Act headings.
+
+### 4.4 Story-planning signatures
+
+#### `GenerateChapterPlanSignature` — Stage S6.1
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `core_premise` | `str` |
+| in  | `spine_template` | `str` |
+| in  | `characters` | `str` |
+| in  | `plot_timeline` | `str` |
+| in  | `rules` | `str` |
+| in  | `previous_chapters` | `str` (newline-joined prior chapter titles, or empty) |
+| in  | `act` | `str` (one of `_ACT_SEQUENCE`) |
+| out | `chapter_plan` | `list[str]` (5–10 entries for *this* act) |
+
+Called once per act inside `StoryGenerator._generate_chapter_plan_entries`.
+The `previous_chapters` field is the mechanism that prevents repetition
+across acts. CoT.
+
+#### `GenerateEnhancersSignature` — Stage S6.2
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `world_bible` | `str` (full markdown rendering) |
+| in  | `chapter_plan` | `str` |
+| out | `enhancers_guide` | `str` |
+
+Single CoT call producing tension/mystery/twist/setup-payoff guidance over
+the entire plan.
+
+### 4.5 Chapter-writing signatures
+
+#### `GenerateRandomDetailSignature` — Stage S6.3 (probabilistic)
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `world_bible` | `str` |
+| in  | `current_chapter_description` | `str` |
+| in  | `detail_type` | `str` (sampled from `_RANDOM_DETAIL_TYPES`) |
+| out | `random_detail` | `str` (2–5 sentence creative flourish) |
+
+Triggered with probability `RANDOM_DETAIL_PROBABILITY` (default 0.35) per
+chapter. `dspy.Predict`. Recoverable failures return `""` and the chapter
+proceeds without a flourish.
+
+#### `GenerateSingleChapterSignature` — Stage S6.3
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `characters` | `str` |
+| in  | `rules` | `str` |
+| in  | `locations` | `str` |
+| in  | `chapter_plan` | `str` |
+| in  | `current_chapter_description` | `str` |
+| in  | `previous_chapters_summary` | `str` (rolling) |
+| in  | `enhancers_guide` | `str` |
+| in  | `random_detail` | `str` (may be empty) |
+| out | `title` | `str` |
+| out | `chapter_text` | `str` |
+
+The workhorse signature: one CoT call per chapter. The CLI reformats
+`title` via `_clean_chapter_title` before composing the final
+`### Chapter N: …` markdown.
+
+#### `GenerateChapterSummarySignature` — Stage S6.3
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `current_chapter_description` | `str` |
+| in  | `chapter_text` | `str` |
+| out | `chapter_summary` | `str` (2–3 factual sentences) |
+
+Called by `ChapterSummarizer` (`dspy.Predict`) after each chapter is
+written; the output feeds the rolling `previous_chapters_summary`.
+On recoverable failure, `_truncate_chapter_for_summary` falls back to a
+600-char prefix.
+
+### 4.6 Post-generation refinement signatures
+
+#### `GenerateChapterInpaintingSignature` — Stage S7
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `world_bible` | `str` |
+| in  | `chapter_plan` | `str` |
+| in  | `chapter_header` | `str` (e.g. `### Chapter 4: …`) |
+| in  | `chapter_text` | `str` |
+| in  | `expansion_ratio` | `float` (must be > 1.0) |
+| out | `expanded_chapter_text` | `str` |
+
+CoT. Called per chapter when `--inpaint-chapters` is set. Empty or
+recoverably-failed expansions fall back to the original chapter text.
+
+### 4.7 Image-side text signatures
+
+These are still text-only DSPy signatures; they produce prompts that are
+later sent to Replicate.
+
+#### `GenerateCharacterVisualsSignature` — Stage S5
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `world_bible` | `str` |
+| out | `character_visuals` | `List[CharacterVisual]` |
+
+`dspy.Predict`. Each entry's `full_prompt` is sent to Animagine XL 4.0 in
+`ImageGenerator.generate_character_portrait`.
+
+#### `GenerateSceneImagePromptSignature` — Stage S8
+
+| Direction | Field | Type |
+|---|---|---|
+| in  | `chapter_text` | `str` |
+| in  | `character_visuals_summary` | `str` |
+| out | `image_prompt` | `str` |
+
+`dspy.Predict`. The output is sent to FLUX Kontext along with the first
+character portrait as a reference image to preserve identity across
+scenes.
+
+### 4.8 Predict vs ChainOfThought — convention
+
+Modules use `dspy.Predict` for short-form transforms (questions, premise,
+summary, detail, image prompts) and `dspy.ChainOfThought` for longer
+narrative generation (world-bible sections, chapter plan, enhancers
+guide, single chapter, chapter inpainting). The choice is a default, not
+a contract — any signature can be re-wrapped at module construction time
+without changing the signature itself.
