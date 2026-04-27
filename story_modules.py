@@ -751,6 +751,7 @@ class StoryGenerator(dspy.Module):
         world_bible: WorldBible,
         feedback: str = "",
     ) -> list[str]:
+        """Generate chapter plan entries across all acts."""
         chapter_entries: list[str] = []
         for act in _ACT_SEQUENCE:
             previous_chapters_text = "\n".join(chapter_entries)
@@ -779,6 +780,7 @@ class StoryGenerator(dspy.Module):
         world_bible: WorldBible,
         chapter_plan_text: str,
     ) -> str:
+        """Generate the enhancers guide from the world bible and chapter plan."""
         enhancers_result = self.generate_enhancers(
             world_bible=world_bible.full_text,
             chapter_plan=chapter_plan_text,
@@ -854,6 +856,7 @@ class StoryGenerator(dspy.Module):
         chapters_to_write: list[str],
         enhancers_guide: str,
     ) -> str:
+        """Write all story chapters and return the combined markdown text."""
         context = ChapterWritingContext(
             world_bible=world_bible,
             chapter_plan_text=chapter_plan_text,

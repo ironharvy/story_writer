@@ -138,14 +138,16 @@ class CharacterEnhancer(dspy.Module):
         self.enhance = dspy.ChainOfThought(EnhanceCharacterSignature)
 
     @observe()
-    def forward(
+    def forward(  # pylint: disable=too-many-arguments
         self,
+        *,
         core_premise: str,
         spine_template: str,
         rules: str,
         character: str,
         feedback: str = "",
     ):
+        """Enhance a character description, optionally guided by user feedback."""
         return self.enhance(
             core_premise=core_premise,
             spine_template=spine_template,
@@ -176,14 +178,16 @@ class LocationEnhancer(dspy.Module):
         self.enhance = dspy.ChainOfThought(EnhanceLocationSignature)
 
     @observe()
-    def forward(
+    def forward(  # pylint: disable=too-many-arguments
         self,
+        *,
         core_premise: str,
         spine_template: str,
         rules: str,
         location: str,
         feedback: str = "",
     ):
+        """Enhance a location description, optionally guided by user feedback."""
         return self.enhance(
             core_premise=core_premise,
             spine_template=spine_template,

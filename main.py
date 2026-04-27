@@ -27,7 +27,7 @@ def _build_generation_params(config: DSPyConfig) -> GenerationParams:
     )
 
 
-if __name__ == "__main__":
+def main() -> None:
     """Run the interactive Story Writer CLI."""
     parser = build_arg_parser()
     args = parser.parse_args()
@@ -64,3 +64,6 @@ if __name__ == "__main__":
     )
     ui.print_completion(output_filename)
 
+
+if __name__ == "__main__":
+    main()
