@@ -245,6 +245,22 @@ python suno_prompt.py --style "noir audiobook narration, jazz ambient bed"
 python suno_prompt.py --only 3
 ```
 
+### LLM-segmented mode
+
+`--llm-segment` asks a DSPy-configured model to split each chapter into
+emotionally coherent segments (≥500 prose chars per multi-paragraph segment,
+≤2500 chars per segment, contiguous coverage of the chapter) and to author a
+fresh Suno "Style of Music" string for each segment. The script validates the
+LLM's segments and falls back to greedy chunking on invalid output.
+
+```bash
+python suno_prompt.py --llm-segment --model openai/gpt-4o-mini
+python suno_prompt.py --llm-segment --min-chars 750 --only 2
+```
+
+Reuses the same env vars as the main pipeline: `MODEL`, `LLM_URL`, `API_KEY`
+(with `OPENAI_API_KEY` as a fallback for OpenAI-flavored model ids).
+
 ## Running Tests
 
 ```bash
