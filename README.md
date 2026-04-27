@@ -28,6 +28,7 @@ python main.py
 - `scripts/fetch_langfuse_traces.py` — utility to fetch/summarize Langfuse traces.
 - `test_story.py`, `test_alternate.py` — pytest coverage for main and alternate pipelines.
 - `audiobook.py` — standalone TTS script that turns `story_output.md` into per-chapter audio (local or remote providers).
+- `suno_prompt.py` — emits copy-pasteable Suno prompts (Style + Lyrics) chunked on paragraph boundaries.
 
 ## Requirements
 
@@ -217,6 +218,32 @@ python audiobook.py --provider elevenlabs --voice Rachel
 Keys come from `--api-key` or the env vars `NVIDIA_API_KEY`, `OPENAI_API_KEY`,
 `ELEVENLABS_API_KEY`. Input defaults to `.tmp/story_output.md`; output goes to
 `.tmp/audiobook/chXX_<slug>.<ext>`. Use `--only N` to re-render a single chapter.
+
+## Suno Prompts
+
+`suno_prompt.py` is a separate script that emits copy-pasteable prompts for
+Suno (Custom mode). It does not call any API — Suno doesn't behave like a
+narrator out of the box, so this gives you the upside (emotive performance)
+while keeping a deterministic TTS path for true narration.
+
+For each chapter it writes one or more `.txt` files under
+`.tmp/suno_prompts/`. Each file contains:
+
+- `STYLE` block — paste into Suno's "Style of Music" field.
+- `LYRICS` block — paste into "Lyrics". Wrapped with `[Spoken Word]` /
+  `[no singing]` / `[no melody]` and a fresh `[Narrator]` tag per paragraph
+  so Suno re-evaluates tone when emotion shifts.
+- `TIPS` block — usage notes for the Suno UI.
+
+Prose is chunked greedily on paragraph boundaries up to ~2500 chars (under
+Suno's 5000-char lyrics cap, leaving headroom for tags). Paragraphs longer
+than 2500 chars are sentence-split.
+
+```bash
+python suno_prompt.py
+python suno_prompt.py --style "noir audiobook narration, jazz ambient bed"
+python suno_prompt.py --only 3
+```
 
 ## Running Tests
 
