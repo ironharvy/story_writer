@@ -1,0 +1,57 @@
+name: Cross-Agent Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  # Codex-made PRs get reviewed by Claude
+  claude-reviews-codex:
+    if: startsWith(github.head_ref, 'codex/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this PR. It was implemented by Codex.
+            Check correctness, security, test coverage,
+            and whether it addresses the linked issue.
+            Post specific line comments where needed.
+
+  # Claude-made PRs get reviewed by Codex
+  codex-reviews-claude:
+    if: startsWith(github.head_ref, 'claude/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          fetch-depth: 0
+      - name: Fetch refs
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.sha }}
+          git fetch origin ${{ github.event.pull_request.head.sha }}
+      - uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt: |
+            Review PR #${{ github.event.pull_request.number }}.
+            It was implemented by Claude.
+            Title: ${{ github.event.pull_request.title }}
+
+            Diff: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+
+            Check correctness, security, edge cases,
+            test coverage, and code style.
+            Post findings as a PR comment using gh CLI.
+          sandbox: read-only
+          codex-args: '["--full-auto"]'

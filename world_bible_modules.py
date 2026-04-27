@@ -52,19 +52,6 @@ class GenerateWorldBibleQuestionsSignature(dspy.Signature):
     )
 
 
-class WorldBibleQuestionGenerator(dspy.Module):
-    """Generate world-bible clarification questions from premise and spine."""
-
-    def __init__(self):
-        super().__init__()
-        self.generate = dspy.Predict(GenerateWorldBibleQuestionsSignature)
-
-    @observe()
-    def forward(self, core_premise: str, spine_template: str):
-        """Generate clarification questions and proposed answers."""
-        return self.generate(core_premise=core_premise, spine_template=spine_template)
-
-
 class GenerateWorldRulesSignature(dspy.Signature):
     """Generate rules governing the world and its systems."""
 
@@ -115,6 +102,32 @@ class GeneratePlotTimelineSignature(dspy.Signature):
     characters: str = dspy.InputField(desc="Character descriptions and biographies.")
     locations: str = dspy.InputField(desc="Places and locations in the world.")
     plot_timeline: str = dspy.OutputField(desc="A plot timeline.")
+
+
+class EnhanceCharacterSignature(dspy.Signature):
+    """Enhance a single character with richer biographical and personality detail."""
+
+    core_premise: str = dspy.InputField(desc="Core premise of the story.")
+    spine_template: str = dspy.InputField(desc="Narrative spine for context.")
+    rules: str = dspy.InputField(desc="Rules of the story world.")
+    character: str = dspy.InputField(desc="Character description to enhance.")
+    feedback: str = dspy.InputField(desc="User feedback for refinement.")
+    enhanced_character: str = dspy.OutputField(
+        desc="Elaborate, richly detailed character description.",
+    )
+
+
+class EnhanceLocationSignature(dspy.Signature):
+    """Enhance a single location with richer sensory and atmospheric detail."""
+
+    core_premise: str = dspy.InputField(desc="Core premise of the story.")
+    spine_template: str = dspy.InputField(desc="Narrative spine for context.")
+    rules: str = dspy.InputField(desc="Rules of the story world.")
+    location: str = dspy.InputField(desc="Location description to enhance.")
+    feedback: str = dspy.InputField(desc="User feedback for refinement.")
+    enhanced_location: str = dspy.OutputField(
+        desc="Elaborate, richly detailed location description.",
+    )
 
 
 class WorldBibleGenerator(dspy.Module):
