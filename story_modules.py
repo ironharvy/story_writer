@@ -214,6 +214,26 @@ class GenerateQuestionsSignature(dspy.Signature):
     )
 
 
+class SynthesizeEnrichedIdeaSignature(dspy.Signature):
+    """Rewrite a story idea to naturally incorporate clarifying Q&A details.
+
+    Produce a single, coherent description of the story idea that weaves in
+    every relevant detail from the answered questions. Do NOT include the
+    questions themselves — only the enriched idea.
+    """
+
+    original_idea: str = dspy.InputField(
+        desc="The user's original story idea before any clarification.",
+    )
+    qa_text: str = dspy.InputField(
+        desc="Clarifying questions and the user's accepted or edited answers.",
+    )
+    enriched_idea: str = dspy.OutputField(
+        desc="A coherent, rephrased story idea that naturally incorporates "
+        "all information from the Q&A without including the questions.",
+    )
+
+
 class GenerateCorePremiseSignature(dspy.Signature):
     """Synthesize an enriched idea into a Core Premise."""
 

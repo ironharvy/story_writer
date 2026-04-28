@@ -26,6 +26,7 @@ from story_modules import (
     GenerateSceneImagePromptSignature,
     GenerateSpineTemplateSignature,
     StoryGenerator,
+    SynthesizeEnrichedIdeaSignature,
 )
 from world_bible import WorldBible
 from world_bible_modules import (
@@ -47,6 +48,7 @@ def initialize_text_generators(
     """Initialize all text generation modules used by the CLI flow."""
     generators = {
         "QuestionGenerator": dspy.Predict(GenerateQuestionsSignature),
+        "IdeaSynthesizer": dspy.Predict(SynthesizeEnrichedIdeaSignature),
         "CorePremiseGenerator": dspy.Predict(GenerateCorePremiseSignature),
         "SpineTemplateGenerator": dspy.Predict(GenerateSpineTemplateSignature),
         "WorldBibleQuestionGenerator": dspy.Predict(GenerateWorldBibleQuestionsSignature),
@@ -79,6 +81,7 @@ def initialize_text_generators(
 def run_idea_enrichment(
     idea: str,
     question_generator: Any,
+    idea_synthesizer: Any,
     output_file: str | None = None,
 ) -> str:
     """Generate clarifying questions, collect user answers, return enriched idea."""
@@ -86,7 +89,10 @@ def run_idea_enrichment(
     q_result = question_generator(idea=idea)
     qa_text = ui.get_answers_for_questions(q_result.questions_with_answers)
 
-    enriched_idea = f"{idea}\n\nClarifying Q&A:\n{qa_text}"
+    ui.print_status("Synthesizing enriched idea from your answers...")
+    synth_result = idea_synthesizer(original_idea=idea, qa_text=qa_text)
+    enriched_idea = synth_result.enriched_idea
+
     if output_file:
         update_artifact(output_file, "Enriched Idea", enriched_idea)
     return enriched_idea
@@ -487,6 +493,7 @@ def _build_story_foundation(
     enriched_idea = run_idea_enrichment(
         idea=idea,
         question_generator=generators["QuestionGenerator"],
+        idea_synthesizer=generators["IdeaSynthesizer"],
         output_file=output_file,
     )
     core_premise = run_core_premise_flow(

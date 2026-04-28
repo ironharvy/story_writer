@@ -21,6 +21,7 @@ from story_modules import (
     GenerateSpineTemplateSignature,
     QuestionWithAnswer,
     StoryGenerator,
+    SynthesizeEnrichedIdeaSignature,
     _extract_trailing_paragraphs,
     _truncate_chapter_for_summary,
 )
@@ -69,6 +70,12 @@ class MockLM(dspy.LM):
         ):
             return [
                 '```json\n{"image_prompt": "anime scene, a warrior with short black hair and amber eyes standing in a dark cathedral, dramatic lighting"}\n```'
+            ]
+        if "[[ ## enriched_idea ## ]]" in content or (
+            '"enriched_idea"' in content and "incorporates" in content
+        ):
+            return [
+                '```json\n{"enriched_idea": "Mock enriched idea synthesized from Q&A."}\n```'
             ]
         if "[[ ## chapter_summary ## ]]" in content or (
             '"chapter_summary"' in content and "factual summary" in content
@@ -301,9 +308,15 @@ def test_pipeline(
     for q in q_result.questions_with_answers:
         qa_text += f"Q: {q.question}\nA: {q.proposed_answer}\n\n"
 
+    # 1b. Synthesize enriched idea
+    synth_gen = dspy.Predict(SynthesizeEnrichedIdeaSignature)
+    synth_result = synth_gen(original_idea=idea, qa_text=qa_text)
+    enriched_idea = synth_result.enriched_idea
+    logger.info("Enriched idea synthesized.")
+    logger.debug("Enriched idea preview: %.300s", enriched_idea)
+
     # 2. Core Premise
     cp_gen = dspy.Predict(GenerateCorePremiseSignature)
-    enriched_idea = f"{idea}\n\nClarifying Q&A:\n{qa_text}"
     cp_result = cp_gen(idea=enriched_idea)
     logger.info("Core Premise generated.")
     logger.debug("Core premise preview: %.300s", cp_result.core_premise)
@@ -429,6 +442,20 @@ def test_pipeline(
 def test_question_with_answer_key_normalization(payload, expected):
     result = QuestionWithAnswer.model_validate(payload)
     assert result.model_dump() == expected
+
+
+def test_synthesize_enriched_idea_returns_coherent_text():
+    dspy.configure(lm=MockLM())
+    synthesizer = dspy.Predict(SynthesizeEnrichedIdeaSignature)
+
+    result = synthesizer(
+        original_idea="A child raised by the Church fights demons.",
+        qa_text="Q: What is the child's name?\nA: Kael\n\nQ: What age?\nA: 12",
+    )
+
+    assert hasattr(result, "enriched_idea")
+    assert isinstance(result.enriched_idea, str)
+    assert result.enriched_idea.strip()
 
 
 @pytest.mark.parametrize(
@@ -825,6 +852,7 @@ def test_initialize_text_generators_uses_loader_when_enabled():
 
     expected_module_names = {
         "QuestionGenerator",
+        "IdeaSynthesizer",
         "CorePremiseGenerator",
         "SpineTemplateGenerator",
         "WorldBibleQuestionGenerator",
