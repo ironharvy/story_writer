@@ -1,209 +1,164 @@
 # Story Writer
 
-Interactive DSPy-based story generation pipeline with optional image generation and Langfuse observability.
+A local-first, DSPy-driven pipeline that turns a story idea into a coherent, artifact-free narrative. Runs against a local Ollama by default; optionally escalates to DeepSeek for harder steps.
+
+This is the MVP rebuild: **CLI only, output quality is the only success metric.** Web UI, auth, image/audio generation, and story sharing are deferred to later phases.
 
 ## Quickstart
 
 ```bash
-pip install -r requirements.txt
+# 1. Make sure Ollama is running and you have models pulled
+ollama pull llama3.1:8b
+ollama pull qwen2.5:14b
+
+# 2. Install
+pip install -e .[dev]
 cp .env.example .env
-python main.py
+
+# 3. Run
+story-writer new --idea "A girl looks for a brother no one remembers."
 ```
 
-## What It Does
-
-- Guides you through an interactive ideation flow with feedback loops at every stage (questions, premise, spine, world bible, chapter plan).
-- Generates structured story artifacts (chapter plan, enhancers guide, full story).
-- Saves progress incrementally — if the process crashes, you keep everything generated so far.
-- Optionally generates character portraits and per-chapter scene illustrations via Replicate.
-- Writes all outputs to a markdown file in your chosen output directory.
-
-## Project Layout
-
-- `main.py` — thin CLI entry point: parse args, setup runtime, run pipeline, save output.
-- `cli.py` — argument parsing (`build_arg_parser`, model/runtime/output flag groups).
-- `models.py` — pipeline dataclasses (`GenerationParams`, `ImageArtifacts`, `StoryFoundation`, `StoryRunArtifacts`).
-- `pipeline.py` — orchestration logic with `@observe()` tracing and user feedback loops.
-- `ui.py` — Rich-based interactive UI layer (all `console.print` / `Prompt.ask` / `Confirm.ask`).
-- `output.py` — file I/O helpers: incremental `update_artifact()` and final `save_story_output()`.
-- `qa.py` — post-generation quality checks (similar-sentence detection).
-- `story_modules.py` — core DSPy story generation modules/signatures.
-- `world_bible_modules.py` — world bible question + generation modules.
-- `world_bible.py` — structured `WorldBible` Pydantic model.
-- `image_gen.py` — Replicate-based image generation helpers.
-- `logging_config.py` — centralized logging configuration with token-usage callback.
-- `dspy_runtime.py` — shared DSPy LM configuration helpers.
-- `dspy_optimization.py` — optimized module loading.
-- `_compat.py` — compatibility shims (Langfuse `@observe()` fallback).
-- `scripts/` — utilities (Langfuse traces, text-pipeline optimization, word count).
-- `test_story.py` — pytest coverage for the primary pipeline.
-
-## Requirements
-
-- Python 3.10+
-- Access to an LLM provider supported by DSPy (default model is `openai/gpt-4o-mini`)
-- Optional for images: Replicate account/token
-- Optional for observability: Langfuse credentials
-
-Install dependencies:
+You'll be asked a few clarifying questions, then prompted to accept/edit/regenerate the premise, spine, and world bible. The remaining stages run unattended. Final story:
 
 ```bash
-pip install -r requirements.txt
+story-writer render <slug>     # writes runs/<slug>/story.md
 ```
 
-For development/test tooling:
+## The pipeline
+
+Each stage is a typed DSPy module. Each artifact is persisted as JSON under `runs/<slug>/`. Stages are skipped if their output already exists, so you can `Ctrl-C` and `story-writer resume <slug>` at any time.
+
+| Stage           | What it produces                                                |
+|-----------------|------------------------------------------------------------------|
+| `clarify`       | 3–7 clarifying questions (user answers in interactive mode)      |
+| `premise`       | Protagonist / want / obstacle / stakes + 2–4 sentence summary    |
+| `spine`         | Pixar six-beat structure                                         |
+| `world_bible`   | Rules, characters, locations, timeline (single source of truth)  |
+| `chapter_plan`  | Ordered chapters sized by `--length`, each with 4–10 beats       |
+| `enhancement`   | Four passes per chapter: tension, mystery, setup/payoff, theme   |
+| `embellish`     | Random small detail injection (probability `--embellish-probability`) |
+| `prose`         | The actual chapter text                                          |
+| `qa` (always)   | Detection of LLM artifacts (R1–R6); reports under `runs/<slug>/qa/` |
+
+## CLI
 
 ```bash
-pip install -r requirements-dev.txt
+story-writer new --idea "..."  [--length short|novella|novel]
+                               [--slug NAME]
+                               [--embellish-probability 0.25]
+                               [--non-interactive]
+                               [--allow-paid]
+                               [--strict]
+                               [--skip-qa-embeddings]
+                               [--model MODEL]      # override every stage with one Ollama model
+                               [--profile PROFILE]  # named bundle: fast | quality | tiny
+
+story-writer resume <slug>
+story-writer render  <slug> [--fmt md|txt] [--out PATH]
+story-writer inspect <slug> [--stage premise]
 ```
 
-If you plan to use image generation, also install:
+## Providers
+
+- **Ollama** (default) — set `OLLAMA_HOST` if not on `localhost:11434`.
+- **DeepSeek** (opt-in) — set `DEEPSEEK_API_KEY` and pass `--allow-paid`. Used only as a fallback when explicitly authorized.
+
+### Default per-stage routing
+
+| Stage(s) | Model | Why |
+|---|---|---|
+| `clarify`, `premise`, `spine`, `chapter_plan`, `enhancement` | `qwen3:latest` | installed local structured-output default |
+| `world_bible`, `prose` | `gemma4:26b` | installed local quality default for fact and prose-heavy stages |
+| `embellish` | `gemma3:4b` | installed local small model for short texture details |
+
+Override the whole routing at runtime:
 
 ```bash
-pip install replicate
+story-writer new --idea "..." --model qwen3:latest         # one model everywhere
+story-writer new --idea "..." --profile fast               # qwen3:latest everywhere
+story-writer new --idea "..." --profile quality            # gemma4:26b everywhere
+story-writer new --idea "..." --profile tiny               # gemma3:4b everywhere
 ```
 
-## Environment Variables
+Per-stage routing lives in `src/story_writer/config.py` (`DEFAULT_ROUTING`). Edit there if you want different per-stage assignments.
 
-Copy `.env.example` to `.env` and fill what you need.
+### Known reasoning-model caveat
 
-Core model/runtime settings:
+Reasoning models can occasionally mode-collapse on the internal `reasoning` field of a `dspy.ChainOfThought` Signature, especially under tight `max_tokens` budgets — the model gets stuck in a repetitive loop and never emits the structured output. If you see `AdapterParseError`, retry with a higher `max_tokens` (edit `DEFAULT_ROUTING`) or lower temperature. Tracked as SPIKE-002 in `docs/requirements.md`.
 
-- `MODEL` (default: `openai/gpt-4o-mini`)
-- `LLM_URL` (for local/custom providers, e.g. Ollama)
-- `API_KEY`
-- `DSPY_CACHE_DIR`
-- `DSPY_USE_OPTIMIZED` (set `true`/`1` to load optimized text-module artifacts)
-- `DSPY_OPTIMIZED_MANIFEST` (path to text-pipeline optimization manifest)
+## QA
 
-Optional image generation:
+QA runs after every chapter. Eight rules:
 
-- `REPLICATE_API_TOKEN`
+| Rule | Severity | Catches                                              |
+|------|----------|------------------------------------------------------|
+| R1   | hard     | Empty or whitespace-only chapter prose               |
+| R2   | hard     | Meta-framing openers ("In this chapter…")            |
+| R3   | hard     | AI assistant leaks ("as an AI", "I cannot")          |
+| R4   | hard     | Affirmation openers ("Certainly!", "Here is…")       |
+| R5   | hard     | Proper nouns not in the world bible                  |
+| R6   | soft     | Missing expected world-bible anchors                 |
+| R7   | soft     | Within-chapter sentence repetition                   |
+| R8   | soft     | Cross-chapter sentence repetition                    |
 
-Optional logging:
+Pass `--strict` to fail the run on any hard violation. `--skip-qa-embeddings` is accepted for CLI compatibility; the MVP QA implementation does not download embedding models by default.
 
-- `LOG_LEVEL` (e.g. `DEBUG`, `INFO`)
-- `LOG_FORMAT` (`text` or `json`)
-- `LOG_FILE` (set to enable JSON file logging)
+## Artifacts on disk (per run)
 
-Optional Langfuse:
+Every stage persists its output. After `story-writer new --slug demo`, you get:
 
-- `LANGFUSE_PUBLIC_KEY`
-- `LANGFUSE_SECRET_KEY`
-- `LANGFUSE_HOST` (default in example: `https://cloud.langfuse.com`)
+```
+runs/demo/
+├── manifest.json          stage statuses, models used per stage, timestamps
+├── idea.txt               your raw idea
+├── clarify.json           list of {question, suggested_answer, answer, source}
+├── premise.json           protagonist / want / obstacle / stakes / summary
+├── spine.json             6 spine beats
+├── world_bible.json       rules, characters, locations, timeline
+├── chapter_plan.json      ordered chapters with their assigned spine beats
+├── chapters/NN.json       per chapter: beats + enhancement_notes + embellishment + prose
+├── qa/NN.json             per chapter: each rule's pass/fail/flag with offending spans
+└── story.md               (after `story-writer render demo`) the final assembled story
+```
 
-## Running the App
-
-Basic run:
+Inspect any single artifact:
 
 ```bash
-python main.py
+story-writer inspect demo                  # prints manifest
+story-writer inspect demo --stage premise  # prints premise.json
 ```
 
-Example with explicit model endpoint:
+## Layout
+
+```
+src/story_writer/
+├── cli.py            # Typer app
+├── orchestrator.py   # Stage walker + QA hand-off
+├── run_store.py      # Filesystem persistence
+├── providers.py      # Ollama / DeepSeek router
+├── config.py         # Defaults, sizing, routing
+├── interactive.py    # Rich prompts
+├── render.py         # Final story export
+├── stages/           # One DSPy module per stage
+├── qa/               # Detection rules + embeddings
+└── models/           # Pydantic story / run / qa models
+```
+
+## Development
 
 ```bash
-python main.py --model ollama_chat/llama3 --llm-url http://localhost:11434
+pip install -e .[dev]
+ruff check .
+ruff format --check .
+pytest                                # unit tests (no Ollama required)
+pytest tests/integration/              # real-Ollama smoke; auto-skips if unreachable
 ```
 
-Enable images:
+## Documentation
 
-```bash
-python main.py --enable-images --replicate-api-token "$REPLICATE_API_TOKEN"
-```
-
-## Main CLI Flags (`main.py`)
-
-- `--model`
-- `--llm-url`
-- `--api-key`
-- `--max-tokens`
-- `--output-dir` (default: `.tmp`)
-- `--cache` / `--no-cache`
-- `--memory-cache` / `--no-memory-cache`
-- `--cache-dir` (default: `.cache/dspy`)
-- `--use-optimized` / `--no-use-optimized`
-- `--optimized-manifest` (default: `.tmp/dspy_optimized/text_pipeline_manifest.json`)
-- `--enable-images`
-- `--replicate-api-token`
-- `--log-file`
-- `-v`, `-vv`, `-vvv` (increasing verbosity)
-
-## Text Pipeline Optimization
-
-Compile/save text-module artifacts and a manifest:
-
-```bash
-python scripts/optimize_text_pipeline.py \
-  --model openai/gpt-4o-mini \
-  --manifest .tmp/dspy_optimized/text_pipeline_manifest.json
-```
-
-Run with optimized text modules enabled:
-
-```bash
-python main.py \
-  --use-optimized \
-  --optimized-manifest .tmp/dspy_optimized/text_pipeline_manifest.json
-```
-
-Optimize only a subset of text modules:
-
-```bash
-python scripts/optimize_text_pipeline.py \
-  --modules QuestionGenerator,CorePremiseGenerator,StoryGenerator
-```
-
-## Output
-
-By default, output is written to:
-
-- `.tmp/story_output.md`
-
-The markdown includes:
-
-- Generation Parameters (model, max_tokens, cache settings)
-- Core Premise
-- Spine Template
-- World Bible
-- Chapter Plan
-- Enhancers Guide
-- Final Story
-- Optional character portraits / scene image embeds when images are enabled
-
-Sections are written incrementally as they are generated, so partial progress is preserved on interruption.
-
-## Logging Behavior
-
-- Console logging is always enabled.
-- `--log-file` (or `LOG_FILE`) enables JSON file logging.
-- Verbosity flags:
-  - `-v`: INFO for app logs
-  - `-vv`: includes LLM-related debug logs
-  - `-vvv`: full HTTP + LLM debug firehose
-
-## Langfuse Trace Utility
-
-Fetch traces:
-
-```bash
-python scripts/fetch_langfuse_traces.py --mode fetch --limit 50 --hours 24 --output .tmp/langfuse_traces.json
-```
-
-Summarize traces:
-
-```bash
-python scripts/fetch_langfuse_traces.py --mode summarize --input .tmp/langfuse_traces.json --output .tmp/langfuse_summary.json --summary-hours 24
-```
-
-## Running Tests
-
-```bash
-pytest -q
-```
-
-## TODO
-
-- Defer DSPy optimization for image-oriented modules until text-pipeline metrics are stable:
-  - `CharacterVisualDescriber`
-  - `SceneImagePromptGenerator`
+- [`docs/project-brief.md`](docs/project-brief.md) — scope and success criteria
+- [`docs/requirements.md`](docs/requirements.md) — FRs / NFRs / glossary
+- [`docs/architecture.md`](docs/architecture.md) — module graph, signatures, data model
+- [`docs/sprint-backlog.md`](docs/sprint-backlog.md) — epics → tasks
+- [`docs/decisions.md`](docs/decisions.md) — every decision with rationale
