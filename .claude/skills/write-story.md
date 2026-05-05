@@ -39,12 +39,59 @@ Save state often so progress survives interruptions and the user can read interm
 
 After **every stage** (and after **every chapter** in Stage 10):
 
-1. Write `.tmp/story_state.json` containing all accumulated variables collected so far. Possible keys: `IDEA`, `QA_PAIRS`, `CORE_PREMISE`, `SPINE_TEMPLATE`, `WORLD_BIBLE_QA`, `WORLD_BIBLE`, `CHAPTER_PLAN`, `ENHANCERS_GUIDE`, `PREPRO_NOTES`, `CHAPTERS` (list of `{title, prose}`), `EDITOR_NOTES`.
+1. Write `.tmp/story_state.json` containing all accumulated variables collected so far. Possible keys:
+   - Plain strings: `IDEA`, `CORE_PREMISE`, `SPINE_TEMPLATE`, `WORLD_BIBLE`, `CHAPTER_PLAN`, `ENHANCERS_GUIDE`.
+   - Q&A blocks: `QA_PAIRS`, `WORLD_BIBLE_QA`.
+   - `CHAPTERS`: list of `{title, prose}`.
+   - `CHAPTERS_PRIOR`: list of `{chapter_index, title, prose}` snapshots saved before each Stage 11 revision (recovery state, not rendered to `story_output.md`).
+   - `PREPRO_NOTES` / `EDITOR_NOTES`: structured as
+     ```
+     {
+       "notes":   ["1. ...", "2. ...", ...],   // numbered strings as presented to the user
+       "applied": [1, 3],                       // indices the user accepted
+       "ignored": [2, 4, 5]                     // remainder
+     }
+     ```
+     If the editor produced no notes, store `{"notes": [], "applied": [], "ignored": []}`.
 2. Rebuild `.tmp/story_output.md` from current state using the format in Stage 12, omitting sections that don't yet exist. The user should always have a readable artifact on disk reflecting the latest progress.
 
 Create `.tmp/` if it doesn't exist. Note "checkpoint saved" once per stage so the user knows.
 
+The load-half of this is **Stage 0** below — at skill start, check for an existing checkpoint and offer to resume.
+
 ## Instructions
+
+### Stage 0: Resume or Start Fresh
+
+Before Stage 1, check whether `.tmp/story_state.json` exists.
+
+- **If it does not exist:** skip Stage 0 silently and proceed to Stage 1.
+- **If it exists:** parse it and infer the last completed stage from which keys are populated:
+
+  | Last completed stage | Detect by                                                              |
+  |----------------------|------------------------------------------------------------------------|
+  | 1                    | `IDEA` present, `QA_PAIRS` absent                                      |
+  | 2                    | `QA_PAIRS` present, `CORE_PREMISE` absent                              |
+  | 3                    | `CORE_PREMISE` present, `SPINE_TEMPLATE` absent                        |
+  | 4                    | `SPINE_TEMPLATE` present, `WORLD_BIBLE_QA` absent                      |
+  | 5                    | `WORLD_BIBLE_QA` present, `WORLD_BIBLE` absent                         |
+  | 6                    | `WORLD_BIBLE` present, `CHAPTER_PLAN` absent                           |
+  | 7                    | `CHAPTER_PLAN` present, `ENHANCERS_GUIDE` absent                       |
+  | 8                    | `ENHANCERS_GUIDE` present, `PREPRO_NOTES` absent                       |
+  | 9                    | `PREPRO_NOTES` present, `CHAPTERS` empty/absent                        |
+  | 10 (partial)         | `CHAPTERS` non-empty but shorter than the chapter plan, no `EDITOR_NOTES` |
+  | 10 (complete)        | `CHAPTERS` length matches chapter plan, `EDITOR_NOTES` absent          |
+  | 11                   | `EDITOR_NOTES` present                                                 |
+
+  Use `AskUserQuestion`:
+  - "Found a saved story in progress (last completed: **Stage X — \<name\>**). What would you like to do?"
+    - "Resume from Stage X+1"
+    - "Show me what's saved first"
+    - "Start fresh — discard checkpoint"
+
+  - **Resume:** hydrate every variable found in the JSON into working state, emit `=== Resuming from Stage X+1 ===`, then jump straight to that stage's marker. For partial Stage 10, resume by writing the next un-written chapter (do not re-write existing entries in `CHAPTERS`).
+  - **Show me what's saved first:** render the current `.tmp/story_output.md` (or rebuild it from state if missing) for the user, then re-ask the same question.
+  - **Start fresh:** delete `.tmp/story_state.json` and `.tmp/story_output.md`, then proceed to Stage 1.
 
 ### Stage 1/12: Get the Story Idea
 
@@ -186,7 +233,7 @@ Use `AskUserQuestion`:
 
 If applying, regenerate the affected artifacts (any of `CORE_PREMISE`, `WORLD_BIBLE`, `CHAPTER_PLAN`, `ENHANCERS_GUIDE`) incorporating the accepted notes, present the updated versions, and overwrite the same variables.
 
-Store the notes (and which were applied) as `PREPRO_NOTES`. Checkpoint.
+Store as `PREPRO_NOTES` using the `{notes, applied, ignored}` schema defined in the Checkpointing section. Checkpoint.
 
 ### Stage 10/12: Write the Story
 
@@ -238,9 +285,9 @@ Use `AskUserQuestion`:
   - "Apply selected (tell me which numbers)"
   - "Ignore — keep manuscript as-is"
 
-For accepted notes, revise the affected chapters in place, replacing entries in `CHAPTERS`. Briefly summarize what was changed per chapter. Checkpoint after each revision.
+For accepted notes, revise the affected chapters. **Before overwriting `CHAPTERS[i]`, append the existing entry to `CHAPTERS_PRIOR` as `{chapter_index: i, title, prose}`** so the pre-revision prose is recoverable if the editor over-corrects. Then replace `CHAPTERS[i]` with the revised `{title, prose}`. Briefly summarize what was changed per chapter. Checkpoint after each revision.
 
-Store the notes as `EDITOR_NOTES`.
+Store as `EDITOR_NOTES` using the `{notes, applied, ignored}` schema defined in the Checkpointing section.
 
 ### Stage 12/12: Compile and Save Output
 
@@ -273,6 +320,8 @@ Rebuild `.tmp/story_output.md` one last time as the canonical artifact:
 ## Manuscript Editor Notes
 {EDITOR_NOTES}
 ```
+
+For both `## Pre-Production Editor Notes` and `## Manuscript Editor Notes`: render each entry from `notes` tagged `(applied)` if its index is in `applied`, otherwise `(not applied)`. If `notes` is empty, render `_No notes._` under the header. `CHAPTERS_PRIOR` is recovery state and is **not** rendered to `story_output.md`.
 
 Confirm the file path to the user.
 
