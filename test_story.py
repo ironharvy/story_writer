@@ -239,18 +239,15 @@ def test_pipeline(
 ):
     from image_gen import ImageGenerator
 
+    from dspy_runtime import resolve_api_key
+
     kwargs = {"max_tokens": max_tokens}
     if api_base:
         kwargs["api_base"] = api_base
 
-    if api_key is not None:
-        kwargs["api_key"] = api_key
-    elif "openai" in model_name.lower():
-        env_key = os.environ.get("OPENAI_API_KEY")
-        if env_key:
-            kwargs["api_key"] = env_key
-    elif "ollama" in model_name.lower():
-        pass
+    resolved_key = resolve_api_key(api_key)
+    if resolved_key:
+        kwargs["api_key"] = resolved_key
 
     logger.info(f"Testing pipeline with model: {model_name}...")
     logger.debug(
@@ -285,10 +282,11 @@ def test_pipeline(
         lm = MockLM()
         dspy.configure(lm=lm, callbacks=callbacks)
     else:
-        # We assume OPENAI_API_KEY is available in the run_in_bash_session, if not, we skip the actual test
-        if "openai" in model_name.lower() and not kwargs.get("api_key"):
+        needs_key = "ollama" not in model_name.lower()
+        if needs_key and not kwargs.get("api_key"):
             logger.warning(
-                "OPENAI_API_KEY not found. Skipping full integration test to avoid errors."
+                "No API key found (checked LLM_API_KEY, API_KEY, OPENAI_API_KEY). "
+                "Skipping full integration test to avoid errors."
             )
             return
 
