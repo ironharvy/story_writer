@@ -1,0 +1,49 @@
+name: Integration (real LLM)
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model identifier (e.g. openai/llama-3.3-70b-versatile)"
+        required: false
+      llm_url:
+        description: "Base URL (e.g. https://api.groq.com/openai/v1)"
+        required: false
+  schedule:
+    - cron: "0 6 * * 1"  # Mondays 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  real-llm:
+    runs-on: ubuntu-latest
+    environment: llm-integration
+    env:
+      MODEL: ${{ inputs.model || vars.LLM_MODEL }}
+      LLM_URL: ${{ inputs.llm_url || vars.LLM_URL }}
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run end-to-end pipeline
+        run: python scripts/run_integration.py
+
+      - name: Upload story output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: story_output
+          path: .tmp/story_output.md
+          if-no-files-found: warn

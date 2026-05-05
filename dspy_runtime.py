@@ -44,22 +44,37 @@ def dspy_config_from_namespace(args: Namespace) -> DSPyConfig:
     )
 
 
+_API_KEY_ENV_VARS = ("LLM_API_KEY", "API_KEY", "OPENAI_API_KEY")
+
+
+def resolve_api_key(explicit: str | None = None) -> str | None:
+    """Resolve an API key from explicit value or provider-agnostic env vars.
+
+    Checks LLM_API_KEY, API_KEY, OPENAI_API_KEY in that order.
+    """
+    if explicit:
+        return explicit
+    for name in _API_KEY_ENV_VARS:
+        value = os.environ.get(name)
+        if value:
+            return value
+    return None
+
+
 def configure_dspy(config: DSPyConfig) -> None:
     """Configure DSPy LM and optional instrumentation."""
     kwargs: dict[str, str] = {}
     if config.api_base:
         kwargs["api_base"] = config.api_base
-    if config.api_key is not None:
-        kwargs["api_key"] = config.api_key
-    elif "openai" in config.model_name.lower():
-        env_key = os.environ.get("OPENAI_API_KEY")
-        if env_key:
-            kwargs["api_key"] = env_key
-        else:
-            logger.warning(
-                "OPENAI_API_KEY not found in environment variables. "
-                "Assuming mock or alternative setup."
-            )
+
+    api_key = resolve_api_key(config.api_key)
+    if api_key:
+        kwargs["api_key"] = api_key
+    elif "ollama" not in config.model_name.lower() and config.model_name != "mock":
+        logger.warning(
+            "No API key found (checked LLM_API_KEY, API_KEY, OPENAI_API_KEY). "
+            "Assuming mock or local setup."
+        )
 
     dspy.configure_cache(
         enable_disk_cache=config.cache,
