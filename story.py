@@ -392,6 +392,7 @@ def run_generate_timeline(
 @observe()
 def run_generate_chapters_plan(
     idea: str,
+    title: str,
     spine: str,
     world_bible: WorldBible,
 ):
@@ -399,6 +400,7 @@ def run_generate_chapters_plan(
         """Generate chapters for the story based on the idea, spine and world bible"""
 
         idea: str = dspy.InputField()
+        title: str = dspy.InputField()
         spine: str = dspy.InputField()
         rules_of_the_world: list[str] = dspy.InputField()
         characters: list[str] = dspy.InputField()
@@ -414,6 +416,7 @@ def run_generate_chapters_plan(
     while True:
         chapters = generate_chapters_func(
             idea=idea,
+            title=title,
             spine=spine,
             rules_of_the_world=world_bible.rules_of_the_world,
             characters=world_bible.characters,
@@ -431,6 +434,7 @@ def run_generate_chapters_plan(
 def run_enhance_chapter(
     chapter: str,
     idea: str,
+    title: str,
     spine: str,
     world_bible: WorldBible,
     story_so_far: str,
@@ -456,6 +460,7 @@ def run_enhance_chapter(
         """Generate a random detail for the chapter"""
 
         idea: str = dspy.InputField()
+        title: str = dspy.InputField()
         spine: str = dspy.InputField()
         rules_of_the_world: list[str] = dspy.InputField()
         characters: list[str] = dspy.InputField()
@@ -470,6 +475,7 @@ def run_enhance_chapter(
     if random.random() < 0.33:
         random_detail = random_gen(
             idea=idea,
+            title=title,
             spine=spine,
             rules_of_the_world=world_bible.rules_of_the_world,
             characters=world_bible.characters,
@@ -486,6 +492,7 @@ def run_enhance_chapter(
         enhanced_chapter = enhance_chapter_func(
             chapter=chapter,
             idea=idea,
+            title=title,
             spine=spine,
             rules_of_the_world=world_bible.rules_of_the_world,
             characters=world_bible.characters,
