@@ -1,5 +1,4 @@
 dspy-ai
-pydantic
 rich
 python-dotenv
 langfuse
