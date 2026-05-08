@@ -25,6 +25,35 @@ def ask_idea() -> str:
     )
 
 
+def print_review_prompt(question: str, proposed_answer: str) -> None:
+    """Display a question and proposed answer for user review."""
+    console.print(f"\n[bold cyan]{question}[/bold cyan]")
+    console.print(proposed_answer)
+
+
+def ask_is_correct(default: bool = True) -> bool:
+    """Ask whether the proposed answer is correct."""
+    return Confirm.ask("Is this correct?", default=default)
+
+
+def ask_user_input(prompt: str = "Enter your answer") -> str:
+    """Prompt for free-form user input."""
+    return Prompt.ask(prompt)
+
+
+def review_answer(question: str, proposed_answer: str) -> tuple[str, bool]:
+    """Display a proposed answer and return user-confirmed value.
+
+    Returns:
+        A tuple of (answer_text, is_accepted).
+    """
+    print_review_prompt(question, proposed_answer)
+    if not ask_is_correct(default=True):
+        answer = ask_user_input("Enter your answer")
+        return answer, False
+    return proposed_answer, True
+
+
 def print_status(message: str) -> None:
     """Print an italic status/progress message."""
     console.print(f"\n[italic]{message}[/italic]")
