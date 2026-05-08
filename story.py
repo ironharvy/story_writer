@@ -444,6 +444,7 @@ def run_enhance_chapter(
 
         chapter: str = dspy.InputField()
         idea: str = dspy.InputField()
+        title: str = dspy.InputField()
         spine: str = dspy.InputField()
         rules_of_the_world: list[str] = dspy.InputField()
         characters: list[str] = dspy.InputField()

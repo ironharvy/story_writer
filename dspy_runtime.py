@@ -26,6 +26,7 @@ class DSPyConfig:
     api_base: str | None = None
     api_key: str | None = None
     max_tokens: int = 8000
+    num_ctx: int | None = None
     cache: bool = True
     memory_cache: bool = True
     cache_dir: str | None = None
@@ -42,6 +43,50 @@ def dspy_config_from_namespace(args: Namespace) -> DSPyConfig:
         memory_cache=getattr(args, "memory_cache", True),
         cache_dir=getattr(args, "cache_dir", None),
     )
+
+
+def _log_ollama_runtime(model_name: str, num_ctx: int | None) -> None:
+    """If the model is served by ollama, load it with our options and log actual context_length / VRAM."""
+    if not model_name.startswith("ollama/"):
+        return
+    try:
+        import urllib.request
+        import json as _json
+
+        api_base = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+        ollama_model = model_name.split("/", 1)[1]
+        if ":" not in ollama_model:
+            ollama_model = f"{ollama_model}:latest"
+
+        # Empty-prompt generate just loads the model with the requested options
+        # so /api/ps reflects what the real DSPy calls will hit.
+        options = {"num_ctx": num_ctx} if num_ctx is not None else {}
+        payload = {
+            "model": ollama_model,
+            "prompt": "",
+            "stream": False,
+            "keep_alive": "30s",
+            "options": options,
+        }
+        req = urllib.request.Request(
+            f"{api_base}/api/generate",
+            data=_json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=60).read()
+
+        with urllib.request.urlopen(f"{api_base}/api/ps", timeout=5) as r:
+            ps = _json.loads(r.read())
+        for m in ps.get("models", []):
+            if m["name"] == ollama_model:
+                logger.info(
+                    "Ollama runtime model=%s context_length=%d size_vram=%.2fGB",
+                    m["name"], m["context_length"], m["size_vram"] / 1e9,
+                )
+                return
+        logger.warning("Ollama probe: model %s not found in /api/ps", ollama_model)
+    except RECOVERABLE_RUNTIME_EXCEPTIONS as exc:
+        logger.warning("Ollama runtime probe failed: %s", exc)
 
 
 def configure_dspy(config: DSPyConfig) -> None:
@@ -67,10 +112,14 @@ def configure_dspy(config: DSPyConfig) -> None:
         disk_cache_dir=config.cache_dir,
     )
 
+    if config.num_ctx is not None:
+        kwargs["num_ctx"] = config.num_ctx
+
     logger.info(
-        "Configuring DSPy model=%r max_tokens=%s cache=%s memory_cache=%s cache_dir=%r",
+        "Configuring DSPy model=%r max_tokens=%s num_ctx=%s cache=%s memory_cache=%s cache_dir=%r",
         config.model_name,
         config.max_tokens,
+        config.num_ctx,
         config.cache,
         config.memory_cache,
         config.cache_dir,
@@ -81,6 +130,8 @@ def configure_dspy(config: DSPyConfig) -> None:
         cache=config.cache,
         **kwargs,
     )
+    logger.info("DSPy LM kwargs=%s", lm.kwargs)
+    _log_ollama_runtime(config.model_name, config.num_ctx)
 
     if os.environ.get("LANGFUSE_PUBLIC_KEY") and DSPyInstrumentor is not None:
         try:

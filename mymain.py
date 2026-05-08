@@ -2,6 +2,8 @@ import argparse
 import logging
 import os
 
+from dotenv import load_dotenv
+
 from dspy_runtime import DSPyConfig, configure_dspy
 from logging_config import setup_logging
 from artifact import update_artifact, initialize_artifact
@@ -18,6 +20,7 @@ def format_generation_parameters(args: argparse.Namespace) -> str:
             f"- model: `{model_name}`",
             f"- provider: `{args.provider}`",
             f"- max_tokens: `{args.max_tokens}`",
+            f"- num_ctx: `{args.num_ctx}`",
             f"- cache: `{args.cache}`",
             f"- memory_cache: `{args.memory_cache}`",
             f"- cache_dir: `{args.cache_dir}`",
@@ -35,6 +38,15 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=4096,
         help="The maximum number of tokens to use for the model. Defaults to 4096.",
+    )
+    parser.add_argument(
+        "--num-ctx",
+        type=int,
+        default=16384,
+        help=(
+            "Ollama context window size (num_ctx). Bigger = more VRAM. "
+            "qwen3 max 40960; gemma4:26b max 262144."
+        ),
     )
     parser.add_argument(
         "--cache",
@@ -84,6 +96,7 @@ def configure_runtime(args: argparse.Namespace) -> None:
             model_name=model_name,
             api_key=args.api_key,
             max_tokens=args.max_tokens,
+            num_ctx=args.num_ctx,
             cache=args.cache,
             memory_cache=args.memory_cache,
             cache_dir=args.cache_dir,
@@ -92,6 +105,7 @@ def configure_runtime(args: argparse.Namespace) -> None:
 
 
 if __name__ == "__main__":
+    load_dotenv()
     args = parse_args()
     configure_logging(args)
     configure_runtime(args)

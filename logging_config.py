@@ -334,6 +334,9 @@ if BaseCallback is not None:
             tokens_out = usage.get("completion_tokens", 0)
             cost = entry.get("cost")
 
+            cache_hit = tokens_in == 0 and tokens_out == 0 and elapsed_ms < 50
+            message = "llm call (cache hit)" if cache_hit else "llm call"
+
             log_llm_call(
                 self._logger,
                 model=model,
@@ -341,6 +344,7 @@ if BaseCallback is not None:
                 tokens_out=tokens_out,
                 cost=cost,
                 latency_ms=elapsed_ms,
+                message=message,
             )
 
 else:

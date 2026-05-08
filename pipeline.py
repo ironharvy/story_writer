@@ -127,10 +127,10 @@ def write(idea: str, title: str, output_file: str):
         logger.error("Idea, spine, and world bible are not consistent")
         return
 
-    logger.info("STEP chapters_plan | inputs idea=%s | spine=%s | world_bible(chars=%d, locs=%d)",
-                _snip(updated_idea), _snip(spine),
+    logger.info("STEP chapters_plan | inputs idea=%s | title=%s | spine=%s | world_bible(chars=%d, locs=%d)",
+                _snip(updated_idea), _snip(story_title, 80), _snip(spine),
                 len(world_bible.characters), len(world_bible.locations))
-    chapters_plan = run_generate_chapters_plan(updated_idea, spine, world_bible)
+    chapters_plan = run_generate_chapters_plan(updated_idea, story_title, spine, world_bible)
     logger.info("STEP chapters_plan | output count=%d", len(chapters_plan))
     update_artifact(output_file, "Chapters Plan", "", level=3)
 
@@ -138,14 +138,18 @@ def write(idea: str, title: str, output_file: str):
         logger.info("STEP chapters_plan | chapter %d=%s", i, _snip(chapter, 300))
         update_artifact(output_file, f"Chapter {i}", chapter, level=4)
     logger.info(f"Chapters plan added to artifact {output_file}")
-    logger.info("Pipeline reached end of chapters plan; stopping before story generation per request.")
-    return
 
     story_so_far = ""
-    update_artifact(output_file, "Finale Story", "", level=2)
-    
+    update_artifact(output_file, "Final Story", "", level=2)
+
     for i, chapter in enumerate(chapters_plan, 1):
-        chapter = run_enhance_chapter(chapter, updated_idea, spine, world_bible, story_so_far)
-        story_so_far = run_generate_story_so_far(story_so_far, chapter)
-        update_artifact(output_file, f"Chapter {i}", chapter, level=3)
+        logger.info("STEP enhance_chapter[%d/%d] | chapter_outline=%s | story_so_far_len=%d",
+                    i, len(chapters_plan), _snip(chapter, 200), len(story_so_far))
+        enhanced = run_enhance_chapter(chapter, updated_idea, story_title, spine, world_bible, story_so_far)
+        logger.info("STEP enhance_chapter[%d/%d] | output_chars=%d preview=%s",
+                    i, len(chapters_plan), len(enhanced), _snip(enhanced, 240))
+        update_artifact(output_file, f"Chapter {i}", enhanced, level=3)
         logger.info(f"Chapter {i} added to artifact {output_file}")
+        logger.info("STEP story_so_far[%d/%d] | summarizing", i, len(chapters_plan))
+        story_so_far = run_generate_story_so_far(story_so_far, enhanced)
+        logger.info("STEP story_so_far[%d/%d] | new_len=%d", i, len(chapters_plan), len(story_so_far))
