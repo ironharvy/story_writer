@@ -104,12 +104,14 @@ def write(idea: str, title: str, output_file: str):
     update_artifact(output_file, "Story Title", story_title)
     logger.info(f"Story title {story_title} added to artifact {output_file}")
 
+    # Core premise
     logger.info("STEP core_premise | inputs idea=%s", _snip(updated_idea))
     core_premise = run_generate_core_premise(updated_idea)
     logger.info("STEP core_premise | output=%s", _snip(core_premise, 600))
     update_artifact(output_file, "Core Premise", core_premise)
     logger.info(f"Core premise added to artifact {output_file}")
 
+    # Spine
     logger.info("STEP spine | inputs idea=%s | core_premise=%s",
                 _snip(updated_idea), _snip(core_premise))
     spine = run_generate_spine(updated_idea, core_premise)
@@ -117,6 +119,7 @@ def write(idea: str, title: str, output_file: str):
     update_artifact(output_file, "Spine", spine)
     logger.info(f"Spine added to artifact {output_file}")
 
+    # World bible
     world_bible = build_world_bible(updated_idea, story_title, spine, output_file)
 
     logger.info("STEP sanity_check | running on world_bible (chars=%d, locs=%d)",
@@ -127,6 +130,7 @@ def write(idea: str, title: str, output_file: str):
         logger.error("Idea, spine, and world bible are not consistent")
         return
 
+    # Chapters plan
     logger.info("STEP chapters_plan | inputs idea=%s | title=%s | spine=%s | world_bible(chars=%d, locs=%d)",
                 _snip(updated_idea), _snip(story_title, 80), _snip(spine),
                 len(world_bible.characters), len(world_bible.locations))
@@ -136,20 +140,26 @@ def write(idea: str, title: str, output_file: str):
 
     for i, chapter in enumerate(chapters_plan, 1):
         logger.info("STEP chapters_plan | chapter %d=%s", i, _snip(chapter, 300))
-        update_artifact(output_file, f"Chapter {i}", chapter, level=4)
+        update_artifact(output_file, f"Chapter {i}: {chapter.chapter_title}", chapter.chapter_beats, level=4)
     logger.info(f"Chapters plan added to artifact {output_file}")
 
+    # Final story
     story_so_far = ""
     update_artifact(output_file, "Final Story", "", level=2)
 
     for i, chapter in enumerate(chapters_plan, 1):
+        chapter_plan_str = f"{chapter.chapter_title}\n{chapter.chapter_beats}"
         logger.info("STEP enhance_chapter[%d/%d] | chapter_outline=%s | story_so_far_len=%d",
-                    i, len(chapters_plan), _snip(chapter, 200), len(story_so_far))
-        enhanced = run_enhance_chapter(chapter, updated_idea, story_title, spine, world_bible, story_so_far)
+                    i, len(chapters_plan), _snip(chapter_plan_str, 200), len(story_so_far))
+        enhanced = run_enhance_chapter(chapter_plan_str, updated_idea, story_title, spine, world_bible, story_so_far)
         logger.info("STEP enhance_chapter[%d/%d] | output_chars=%d preview=%s",
                     i, len(chapters_plan), len(enhanced), _snip(enhanced, 240))
-        update_artifact(output_file, f"Chapter {i}", enhanced, level=3)
+        update_artifact(output_file, f"Chapter {i}: {chapter.chapter_title}", enhanced, level=3)
         logger.info(f"Chapter {i} added to artifact {output_file}")
-        logger.info("STEP story_so_far[%d/%d] | summarizing", i, len(chapters_plan))
-        story_so_far = run_generate_story_so_far(story_so_far, enhanced)
+        plan_so_far = chapters_plan[:i]
+        logger.info("STEP story_so_far[%d/%d] | summarizing | plan_so_far_count=%d",
+                    i, len(chapters_plan), len(plan_so_far))
+
+        chapter_plan_strs = [c.chapter_title + "\n" + c.chapter_beats for c in plan_so_far]
+        story_so_far = run_generate_story_so_far(chapter_plan_strs, story_so_far, enhanced)
         logger.info("STEP story_so_far[%d/%d] | new_len=%d", i, len(chapters_plan), len(story_so_far))

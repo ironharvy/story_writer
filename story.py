@@ -15,6 +15,11 @@ class Character:
     relationships: list[str]
     arc: str
 
+@dataclass
+class PlanEntry:
+    chapter_title: str
+    chapter_beats: str
+
 
 @dataclass
 class WorldBible:
@@ -26,52 +31,62 @@ class WorldBible:
 
 
 @observe()
-def run_clarify_idea(idea: str = None, title: str = None) -> tuple[str, str]:
-    class ClarifyIdea(dspy.Signature):
-        """Generate questions to clarify the story idea"""
+def run_clarify_idea(story_idea: str = None, story_title: str = None) -> tuple[str, str]:
+    class Clarifystory_idea(dspy.Signature):
+        """Generate questions to clarify the story story_idea"""
 
-        idea: str = dspy.InputField()
-        title: str = dspy.InputField()
+        story_idea: str = dspy.InputField()
+        story_title: str = dspy.InputField()
         questions: list[str] = dspy.OutputField(
-            desc="List of questions to clarify the story idea",
+            desc="List of questions to clarify the story story_idea",
         )
         proposed_answers: list[str] = dspy.OutputField(
             desc="List of proposed answers to the questions",
         )
 
-    class GenerateTitle(dspy.Signature):
-        """Generate a title for the story"""
+    class UpdateIdea(dspy.Signature):
+        """Update the story idea based on the questions and answers"""
 
-        idea: str = dspy.InputField()
-        title: str = dspy.OutputField()
+        story_idea: str = dspy.InputField()
+        qas: list[str] = dspy.InputField()
+        updated_idea: str = dspy.OutputField()
+        
 
-    if not idea:
-        idea = ui.ask_idea()
+    class GenerateStoryTitle(dspy.Signature):
+        """Generate a story_title for the story"""
 
-    clarify_idea = dspy.ChainOfThought(ClarifyIdea)
-    result = clarify_idea(idea=idea, title=title)
+        story_idea: str = dspy.InputField()
+        story_title: str = dspy.OutputField()
+
+    if not story_idea:
+        story_idea = ui.ask_idea()
+
+    clarify_idea = dspy.ChainOfThought(Clarifystory_idea)
+    result = clarify_idea(story_idea=story_idea, story_title=story_title)
     qas = []
     for i in range(len(result.questions)):
         proposed_answer, _ = ui.review_answer(
             result.questions[i],
             result.proposed_answers[i],
         )
-        qas.append({"question": result.questions[i], "proposed_answer": proposed_answer})
+        qas.append(f"question: {result.questions[i]}\nproposed_answer: {proposed_answer}")
 
-    updated_idea = idea + "\n" + "\n".join([f"{qa['question']}: {qa['proposed_answer']}" for qa in qas])
-    if not title:
-        generate_title = dspy.ChainOfThought(GenerateTitle)
-        result = generate_title(idea=updated_idea)
-        title = result.title
-    return updated_idea, title
+    update_idea = dspy.ChainOfThought(UpdateIdea)
+    #updated_idea = story_idea + "\n" + "\n".join([f"{qa['question']}: {qa['proposed_answer']}" for qa in qas])
+    updated_idea = update_idea(story_idea=story_idea, qas=qas).updated_idea
+    if not story_title:
+        generate_title = dspy.ChainOfThought(GenerateStoryTitle)
+        result = generate_title(story_idea=updated_idea)
+        story_title = result.story_title
+    return updated_idea, story_title
 
 
 @observe()
-def run_generate_core_premise(idea: str) -> str:
+def run_generate_core_premise(story_idea: str) -> str:
     class GenerateCorePremise(dspy.Signature):
         """Generate a core premise for the story"""
 
-        idea: str = dspy.InputField()
+        story_idea: str = dspy.InputField()
         previous_result: str = dspy.InputField(desc="Previous result of the core premise generation")
         feedback: str = dspy.InputField(
             desc="Feedback from the user for the core premise of the story",
@@ -82,7 +97,7 @@ def run_generate_core_premise(idea: str) -> str:
     previous_result = ""
     core_prem_func = dspy.ChainOfThought(GenerateCorePremise)
     while True:
-        generate_core_premise = core_prem_func(idea=idea, previous_result=previous_result, feedback=feedback)
+        generate_core_premise = core_prem_func(story_idea=story_idea, previous_result=previous_result, feedback=feedback)
 
         previous_result = generate_core_premise.core_premise
         feedback, is_correct = ui.review_answer(
@@ -94,15 +109,15 @@ def run_generate_core_premise(idea: str) -> str:
 
 
 @observe()
-def run_generate_spine(idea: str, core_premise: str) -> str:
-    class GenerateSpine(dspy.Signature):
-        """Generate a a structured story spine using pixar's 7 step formula for building a compelling narrative arc"""
+def run_generate_spine(story_idea: str, core_premise: str) -> str:
+    class Generatestory_spine(dspy.Signature):
+        """Generate a a structured story story_spine using pixar's 7 step formula for building a compelling narrative arc"""
 
-        idea: str = dspy.InputField()
+        story_idea: str = dspy.InputField()
         core_premise: str = dspy.InputField()
-        previous_result: str = dspy.InputField(desc="Previous result of the spine generation")
+        previous_result: str = dspy.InputField(desc="Previous result of the story_spine generation")
         feedback: str = dspy.InputField(
-            desc="Feedback from the user for the spine of the story",
+            desc="Feedback from the user for the story_spine of the story",
         )
         once_upon_a_time: str = dspy.OutputField()
         every_day: str = dspy.OutputField()
@@ -114,10 +129,10 @@ def run_generate_spine(idea: str, core_premise: str) -> str:
 
     feedback = ""
     previous_result = ""
-    generate_spine_func = dspy.ChainOfThought(GenerateSpine)
+    generate_spine_func = dspy.ChainOfThought(Generatestory_spine)
     while True:
-        spine = generate_spine_func(
-            idea=idea,
+        story_spine = generate_spine_func(
+            story_idea=story_idea,
             core_premise=core_premise,
             previous_result=previous_result,
             feedback=feedback,
@@ -125,18 +140,18 @@ def run_generate_spine(idea: str, core_premise: str) -> str:
 
         previous_result = "\n".join(
             [
-                spine.once_upon_a_time,
-                spine.every_day,
-                spine.until_one_day,
-                spine.because_of_that,
-                spine.and_because_of_that,
-                spine.until_finally,
-                spine.ever_since_that_day,
+                story_spine.once_upon_a_time,
+                story_spine.every_day,
+                story_spine.until_one_day,
+                story_spine.because_of_that,
+                story_spine.and_because_of_that,
+                story_spine.until_finally,
+                story_spine.ever_since_that_day,
             ]
         )
 
         feedback, is_correct = ui.review_answer(
-            "Spine:",
+            "spine:",
             previous_result,
         )
         if is_correct:
@@ -144,13 +159,13 @@ def run_generate_spine(idea: str, core_premise: str) -> str:
         
 
 @observe()
-def run_generate_rules_of_the_world(idea: str, title: str, spine: str) -> list[str]:
+def run_generate_rules_of_the_world(story_idea: str, story_title: str, story_spine: str) -> list[str]:
     class GenerateRulesOfTheWorld(dspy.Signature):
-        """Generate rules of the world for the story based on the idea and spine"""
+        """Generate rules of the world for the story based on the story_idea and story_spine"""
 
-        idea: str = dspy.InputField()
-        title: str = dspy.InputField()
-        spine: str = dspy.InputField()
+        story_idea: str = dspy.InputField()
+        story_title: str = dspy.InputField()
+        story_spine: str = dspy.InputField()
         previous_result: str = dspy.InputField(desc="Previous result of the rules of the world generation")
         feedback: str = dspy.InputField(
             desc="Feedback from the user for the rules of the world",
@@ -162,9 +177,9 @@ def run_generate_rules_of_the_world(idea: str, title: str, spine: str) -> list[s
     generate_rules_of_the_world_func = dspy.ChainOfThought(GenerateRulesOfTheWorld)
     while True:
         rules_of_the_world = generate_rules_of_the_world_func(
-            idea=idea,
-            title=title,
-            spine=spine,
+            story_idea=story_idea,
+            story_title=story_title,
+            story_spine=story_spine,
             previous_result=previous_result,
             feedback=feedback,
         )
@@ -180,13 +195,13 @@ def run_generate_rules_of_the_world(idea: str, title: str, spine: str) -> list[s
 
 
 @observe()
-def run_generate_characters(idea: str, title: str, spine: str, rules_of_the_world: str) -> list[str]:
+def run_generate_characters(story_idea: str, story_title: str, story_spine: str, rules_of_the_world: str) -> list[str]:
     class GenerateCharacters(dspy.Signature):
-        """Generate characters for the story based on the idea, spine and rules of the world"""
+        """Generate characters for the story based on the story_idea, story_spine and rules of the world"""
 
-        idea: str = dspy.InputField()
-        title: str = dspy.InputField()
-        spine: str = dspy.InputField()
+        story_idea: str = dspy.InputField()
+        story_title: str = dspy.InputField()
+        story_spine: str = dspy.InputField()
         rules_of_the_world: list[str] = dspy.InputField()
         previous_result: str = dspy.InputField(desc="Previous result of the characters generation")
         feedback: str = dspy.InputField(
@@ -201,9 +216,9 @@ def run_generate_characters(idea: str, title: str, spine: str, rules_of_the_worl
     generate_characters_func = dspy.ChainOfThought(GenerateCharacters)
     while True:
         characters = generate_characters_func(
-            idea=idea,
-            title=title,
-            spine=spine,
+            story_idea=story_idea,
+            story_title=story_title,
+            story_spine=story_spine,
             rules_of_the_world=rules_of_the_world,
             feedback=feedback,
             previous_result=previous_result,
@@ -218,17 +233,17 @@ def run_generate_characters(idea: str, title: str, spine: str, rules_of_the_worl
 @observe()
 def run_enhance_character(
     character: str,
-    idea: str,
-    title: str,
-    spine: str,
+    story_idea: str,
+    story_title: str,
+    story_spine: str,
     rules_of_the_world: str,
 ) -> str:
     class EnhanceCharacter(dspy.Signature):
         """Enhance the character with more details, background, motivation, and personality."""
 
-        idea: str = dspy.InputField()
-        title: str = dspy.InputField()
-        spine: str = dspy.InputField()
+        story_idea: str = dspy.InputField()
+        story_title: str = dspy.InputField()
+        story_spine: str = dspy.InputField()
         rules_of_the_world: list[str] = dspy.InputField()
         character: str = dspy.InputField()
         feedback: str = dspy.InputField(
@@ -242,9 +257,9 @@ def run_enhance_character(
     enhance_character_func = dspy.ChainOfThought(EnhanceCharacter)
     while True:
         enhanced_character = enhance_character_func(
-            idea=idea,
-            title=title,
-            spine=spine,
+            story_idea=story_idea,
+            story_title=story_title,
+            story_spine=story_spine,
             rules_of_the_world=rules_of_the_world,
             character=character,
             feedback=feedback,
@@ -260,17 +275,17 @@ def run_enhance_character(
 
 @observe()
 def run_generate_locations(
-    idea: str,
-    title: str,
-    spine: str,
+    story_idea: str,
+    story_title: str,
+    story_spine: str,
     rules_of_the_world: str,
 ) -> list[str]:
     class GenerateLocations(dspy.Signature):
-        """Generate locations for the story based on the idea, spine and rules of the world"""
+        """Generate locations for the story based on the story_idea, story_spine and rules of the world"""
 
-        idea: str = dspy.InputField()
-        title: str = dspy.InputField()
-        spine: str = dspy.InputField()
+        story_idea: str = dspy.InputField()
+        story_title: str = dspy.InputField()
+        story_spine: str = dspy.InputField()
         rules_of_the_world: list[str] = dspy.InputField()
         locations_str: str = dspy.InputField(
             desc="Previous locations generated",
@@ -287,9 +302,9 @@ def run_generate_locations(
     generate_locations_func = dspy.ChainOfThought(GenerateLocations)
     while True:
         locations = generate_locations_func(
-            idea=idea,
-            title=title,
-            spine=spine,
+            story_idea=story_idea,
+            story_title=story_title,
+            story_spine=story_spine,
             rules_of_the_world=rules_of_the_world,
             locations_str=locations_str,
             feedback=feedback,
@@ -304,17 +319,17 @@ def run_generate_locations(
 @observe()
 def run_enhance_location(
     location: str,
-    idea: str,
-    title: str,
-    spine: str,
+    story_idea: str,
+    story_title: str,
+    story_spine: str,
     rules_of_the_world: str,
 ) -> str:
     class EnhanceLocation(dspy.Signature):
         """Enhance the location given with more details"""
 
-        idea: str = dspy.InputField()
-        title: str = dspy.InputField()
-        spine: str = dspy.InputField()
+        story_idea: str = dspy.InputField()
+        story_title: str = dspy.InputField()
+        story_spine: str = dspy.InputField()
         rules_of_the_world: list[str] = dspy.InputField()
         location: str = dspy.InputField()
         feedback: str = dspy.InputField(
@@ -330,9 +345,9 @@ def run_enhance_location(
     enhance_location_func = dspy.ChainOfThought(EnhanceLocation)
     while True:
         enhanced_location = enhance_location_func(
-            idea=idea,
-            title=title,
-            spine=spine,
+            story_idea=story_idea,
+            story_title=story_title,
+            story_spine=story_spine,
             rules_of_the_world=rules_of_the_world,
             location=location,
             feedback=feedback,
@@ -348,18 +363,18 @@ def run_enhance_location(
 
 @observe()
 def run_generate_timeline(
-    idea: str,
-    title: str,
-    spine: str,
+    story_idea: str,
+    story_title: str,
+    story_spine: str,
     rules_of_the_world: list[str],
     locations: list[str],
 ) -> list[str]:
     class GenerateTimeline(dspy.Signature):
-        """Generate a timeline for the story based on the idea, spine, rules of the world and locations"""
+        """Generate a timeline for the story based on the story_idea, story_spine, rules of the world and locations"""
 
-        idea: str = dspy.InputField()
-        title: str = dspy.InputField()
-        spine: str = dspy.InputField()
+        story_idea: str = dspy.InputField()
+        story_title: str = dspy.InputField()
+        story_spine: str = dspy.InputField()
         rules_of_the_world: list[str] = dspy.InputField()
         locations: list[str] = dspy.InputField()
         previous_timeline: str = dspy.InputField(desc="Previous timeline generated")
@@ -373,9 +388,9 @@ def run_generate_timeline(
     generate_timeline_func = dspy.ChainOfThought(GenerateTimeline)
     while True:
         timeline = generate_timeline_func(
-            idea=idea,
-            title=title,
-            spine=spine,
+            story_idea=story_idea,
+            story_title=story_title,
+            story_spine=story_spine,
             rules_of_the_world=rules_of_the_world,
             locations=locations,
             previous_timeline=timeline_str,
@@ -391,17 +406,18 @@ def run_generate_timeline(
 
 @observe()
 def run_generate_chapters_plan(
-    idea: str,
-    title: str,
-    spine: str,
+    story_idea: str,
+    story_title: str,
+    story_spine: str,
     world_bible: WorldBible,
+    number_of_chapters: int = 7,
 ):
     class GenerateChaptersPlan(dspy.Signature):
-        """Generate chapters for the story based on the idea, spine and world bible"""
+        """Generate chapters for the story based on the story_idea, story_spine and world bible"""
 
-        idea: str = dspy.InputField()
-        title: str = dspy.InputField()
-        spine: str = dspy.InputField()
+        story_idea: str = dspy.InputField()
+        story_title: str = dspy.InputField()
+        story_spine: str = dspy.InputField()
         rules_of_the_world: list[str] = dspy.InputField()
         characters: list[str] = dspy.InputField()
         locations: list[str] = dspy.InputField()
@@ -409,23 +425,26 @@ def run_generate_chapters_plan(
         feedback: str = dspy.InputField(
             desc="Feedback from the user for the chapters",
         )
-        chapters: list[str] = dspy.OutputField(desc="list of chapters in the story")
+        number_of_chapters: int = dspy.InputField(desc="Number of chapters to generate")
+        chapters: list[PlanEntry] = dspy.OutputField(desc="list of chapters in the story")
 
     feedback = ""
     generate_chapters_func = dspy.ChainOfThought(GenerateChaptersPlan)
     while True:
         chapters = generate_chapters_func(
-            idea=idea,
-            title=title,
-            spine=spine,
+            story_idea=story_idea,
+            story_title=story_title,
+            story_spine=story_spine,
             rules_of_the_world=world_bible.rules_of_the_world,
             characters=world_bible.characters,
             locations=world_bible.locations,
             timeline=world_bible.timeline,
             feedback=feedback,
+            number_of_chapters=number_of_chapters,
         )
 
-        feedback, is_correct = ui.review_answer("Chapters:", chapters.chapters)
+        plan_str = "\n".join([chapter.chapter_title + "\n" + chapter.chapter_beats for chapter in chapters.chapters])
+        feedback, is_correct = ui.review_answer("Chapters:", plan_str)
         if is_correct:
             return chapters.chapters
 
@@ -433,36 +452,35 @@ def run_generate_chapters_plan(
 @observe()
 def run_enhance_chapter(
     chapter: str,
-    idea: str,
-    title: str,
-    spine: str,
+    story_idea: str,
+    story_title: str,
+    story_spine: str,
     world_bible: WorldBible,
     story_so_far: str,
 ):
-    class EnhanceChapter(dspy.Signature):
-        """Enhance the chapter based on the idea, spine, rules of the world, characters, locations and timeline"""
-
-        chapter: str = dspy.InputField()
-        idea: str = dspy.InputField()
-        title: str = dspy.InputField()
-        spine: str = dspy.InputField()
+    class DraftChapter(dspy.Signature):
+        """Draft or enhance the chapter prose"""
+        story_idea: str = dspy.InputField()
+        story_title: str = dspy.InputField()
+        story_spine: str = dspy.InputField()
         rules_of_the_world: list[str] = dspy.InputField()
         characters: list[str] = dspy.InputField()
         locations: list[str] = dspy.InputField()
         timeline: list[str] = dspy.InputField()
-        detail: str = dspy.InputField(default="")
+        additional_detail_to_include: str = dspy.InputField(default="")
+        chapter: str = dspy.InputField()
         feedback: str = dspy.InputField(
             desc="Feedback from the user for the chapter",
         )
         story_so_far: str = dspy.InputField(desc="Story so far")
-        enhanced_chapter: str = dspy.OutputField(desc="Enhanced chapter")
+        prose: str = dspy.OutputField(desc="Chapter prose")
 
     class GenerateRandomDetail(dspy.Signature):
         """Generate a random detail for the chapter"""
 
-        idea: str = dspy.InputField()
-        title: str = dspy.InputField()
-        spine: str = dspy.InputField()
+        story_idea: str = dspy.InputField()
+        story_title: str = dspy.InputField()
+        story_spine: str = dspy.InputField()
         rules_of_the_world: list[str] = dspy.InputField()
         characters: list[str] = dspy.InputField()
         locations: list[str] = dspy.InputField()
@@ -472,77 +490,90 @@ def run_enhance_chapter(
             desc="Random detail that doesn't influence the chapter but makes it more interesting. Scenry description or quirky item or a meal or something else fitting the setting",
         )
 
+    random_detail = ""
     random_gen = dspy.ChainOfThought(GenerateRandomDetail)
     if random.random() < 0.33:
         random_detail = random_gen(
-            idea=idea,
-            title=title,
-            spine=spine,
+            story_idea=story_idea,
+            story_title=story_title,
+            story_spine=story_spine,
             rules_of_the_world=world_bible.rules_of_the_world,
             characters=world_bible.characters,
             locations=world_bible.locations,
             timeline=world_bible.timeline,
             chapter=chapter,
         ).random_detail
-    else:
-        random_detail = ""
 
     feedback = ""
-    enhance_chapter_func = dspy.ChainOfThought(EnhanceChapter)
+    draft_chapter_func = dspy.ChainOfThought(DraftChapter)
     while True:
-        enhanced_chapter = enhance_chapter_func(
-            chapter=chapter,
-            idea=idea,
-            title=title,
-            spine=spine,
+        result = draft_chapter_func(
+            story_idea=story_idea,
+            story_title=story_title,
+            story_spine=story_spine,
             rules_of_the_world=world_bible.rules_of_the_world,
             characters=world_bible.characters,
             locations=world_bible.locations,
             timeline=world_bible.timeline,
-            detail=random_detail,
+            additional_detail_to_include=random_detail,
+            chapter=chapter,
             feedback=feedback,
             story_so_far=story_so_far,
         )
 
         feedback, is_correct = ui.review_answer(
-            "Enhanced Chapter:",
-            enhanced_chapter.enhanced_chapter,
+            "Drafted Chapter:",
+            result.prose,
         )
         if is_correct:
-            return enhanced_chapter.enhanced_chapter
+            return result.prose
 
 
 @observe()
-def run_generate_story_so_far(story_so_far: str, chapter: str) -> str:
+def run_generate_story_so_far(
+    chapter_plan_so_far: list[str],
+    story_so_far: str,
+    chapter: str,
+) -> str:
     class Summarize(dspy.Signature):
-        """Summarize the story so far"""
+        """Summarize story progress based on chapter plan, previous summary and last chapter."""
 
-        story_so_far: str = dspy.InputField()
-        chapter: str = dspy.InputField()
-        summary: str = dspy.OutputField(desc="Summary of the story so far")
+        chapter_plan_so_far: list[str] = dspy.InputField(
+            desc="Chapters and beats that were already written"
+        )
+        story_so_far: str = dspy.InputField(
+            desc="previous summary of the story"
+        )
+        chapter: str = dspy.InputField(
+            desc="The newly-written chapter N. Summarize its events and APPEND to the prior log."
+        )
+        summary: str = dspy.OutputField(
+            desc="new summary of the story"
+        )
 
     generate_story_so_far = dspy.ChainOfThought(Summarize)
     return generate_story_so_far(
+        chapter_plan_so_far=chapter_plan_so_far,
         story_so_far=story_so_far,
         chapter=chapter,
     ).summary
 
 
 @observe()
-def sanity_check(idea: str, title: str, spine: str, world_bible: WorldBible) -> bool:
+def sanity_check(story_idea: str, story_title: str, story_spine: str, world_bible: WorldBible) -> bool:
     class SanityCheck(dspy.Signature):
-        """Check if the idea, spine, and world bible are consistent"""
+        """Check if the story_idea, story_spine, and world bible are consistent"""
         
-        idea: str = dspy.InputField()
-        title: str = dspy.InputField()
-        spine: str = dspy.InputField()
+        story_idea: str = dspy.InputField()
+        story_title: str = dspy.InputField()
+        story_spine: str = dspy.InputField()
         world_bible: WorldBible = dspy.InputField()
-        is_consistent: bool = dspy.OutputField(desc="Whether the idea, spine, and world bible are consistent")
+        is_consistent: bool = dspy.OutputField(desc="Whether the story_idea, story_spine, and world bible are consistent")
     
     sanity_check = dspy.ChainOfThought(SanityCheck)
     return sanity_check(
-        idea=idea,
-        title=title,
-        spine=spine,
+        story_idea=story_idea,
+        story_title=story_title,
+        story_spine=story_spine,
         world_bible=world_bible,
     ).is_consistent
