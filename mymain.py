@@ -77,6 +77,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--idea", type=str, required=False, help="The initial story idea/prompt")
     parser.add_argument("--title", type=str, required=False, help="The title of the story")
+    parser.add_argument("--number-of-chapters", type=int, default=7, help="The number of chapters to generate")
     parser.add_argument("--output-file", default=".tmp/story.md")
     return parser.parse_args()
 
@@ -113,5 +114,5 @@ if __name__ == "__main__":
     initialize_artifact(args.output_file)
     update_artifact(args.output_file, "Generation Parameters", format_generation_parameters(args))
     
-    logger.info("Starting story writer")
-    write(args.idea, args.title, args.output_file)
+    logger.info("Starting story writer with %d chapters", args.number_of_chapters)
+    write(args.idea, args.title, args.output_file, args.number_of_chapters)

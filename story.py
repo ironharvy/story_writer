@@ -459,7 +459,17 @@ def run_enhance_chapter(
     story_so_far: str,
 ):
     class DraftChapter(dspy.Signature):
-        """Draft or enhance the chapter prose"""
+        """Write the chapter prose.
+
+The world bible (locations, characters, timeline, rules) is reference material,
+not source material — describe scenes in fresh language and never reuse
+evocative phrases from the bible verbatim. Drive the chapter on a concrete
+scene with at least one moment of friction (a request denied, a plan reversed,
+a cost paid on the page). End on an action or image, not a thematic aphorism.
+Vary sentence rhythm; avoid stacking triadic 'X and Y' constructions or
+'not X but Y' parallelism. Show the world's cost on a body or an object rather
+than restating it.
+"""
         story_idea: str = dspy.InputField()
         story_title: str = dspy.InputField()
         story_spine: str = dspy.InputField()
