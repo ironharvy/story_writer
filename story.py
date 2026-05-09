@@ -1,3 +1,4 @@
+import math
 import random
 from dataclasses import dataclass
 
@@ -449,6 +450,56 @@ def run_generate_chapters_plan(
             return chapters.chapters
 
 
+_ACT_LABELS = {
+    1: "Act 1: Setup",
+    2: "Act 2: Confrontation",
+    3: "Act 3: Resolution",
+}
+
+
+def act_hint_for_chapter(i: int, n: int, story_spine: str) -> dict:
+    """Map 1-indexed chapter `i` (of `n`) onto a 3-act structure.
+
+    Splits chapters using a ~25/50/25 ratio, with at least one chapter per
+    act when n >= 3. Returns the act number, a human-readable label, and
+    the spine sliced up to and including the current act (so chapter prose
+    only sees beats it should know about, not later-act foreshadowing).
+    """
+    if n >= 3:
+        a1 = max(1, math.ceil(n / 4))
+        a3 = max(1, math.ceil(n / 4))
+        a2 = n - a1 - a3
+        if a2 < 1:
+            a2 = 1
+            a3 = max(1, n - a1 - a2)
+            a1 = max(1, n - a2 - a3)
+    elif n == 2:
+        a1, a2, a3 = 1, 0, 1
+    else:
+        a1, a2, a3 = 1, 0, 0
+
+    if i <= a1:
+        act = 1
+    elif i <= a1 + a2:
+        act = 2
+    else:
+        act = 3
+
+    # Spine is 7 newline-separated beats from Pixar's formula:
+    # 0:once_upon_a_time 1:every_day 2:until_one_day  -> Act 1
+    # 3:because_of_that 4:and_because_of_that         -> Act 2
+    # 5:until_finally 6:ever_since_that_day           -> Act 3
+    beats = story_spine.split("\n")
+    cutoff = {1: 3, 2: 5, 3: 7}[act]
+    spine_through_act = "\n".join(beats[:cutoff])
+
+    return {
+        "act": act,
+        "label": _ACT_LABELS[act],
+        "spine_through_act": spine_through_act,
+    }
+
+
 @observe()
 def run_enhance_chapter(
     chapter: str,
@@ -457,6 +508,8 @@ def run_enhance_chapter(
     story_spine: str,
     world_bible: WorldBible,
     story_so_far: str,
+    chapter_index: int = 1,
+    total_chapters: int = 1,
 ):
     class DraftChapter(dspy.Signature):
         """Write the chapter prose.
@@ -469,10 +522,17 @@ a cost paid on the page). End on an action or image, not a thematic aphorism.
 Vary sentence rhythm; avoid stacking triadic 'X and Y' constructions or
 'not X but Y' parallelism. Show the world's cost on a body or an object rather
 than restating it.
+
+Write this chapter in a tone appropriate to {act_hint}; do not foreshadow
+events from later acts. The story_spine you receive only covers beats up to
+and including the current act — treat anything beyond it as not yet decided.
 """
         story_idea: str = dspy.InputField()
         story_title: str = dspy.InputField()
         story_spine: str = dspy.InputField()
+        act_hint: str = dspy.InputField(
+            desc="Which act of the three-act structure this chapter belongs to",
+        )
         rules_of_the_world: list[str] = dspy.InputField()
         characters: list[str] = dspy.InputField()
         locations: list[str] = dspy.InputField()
@@ -500,13 +560,16 @@ than restating it.
             desc="Random detail that doesn't influence the chapter but makes it more interesting. Scenry description or quirky item or a meal or something else fitting the setting",
         )
 
+    hint = act_hint_for_chapter(chapter_index, total_chapters, story_spine)
+    spine_for_draft = hint["spine_through_act"]
+
     random_detail = ""
     random_gen = dspy.ChainOfThought(GenerateRandomDetail)
     if random.random() < 0.33:
         random_detail = random_gen(
             story_idea=story_idea,
             story_title=story_title,
-            story_spine=story_spine,
+            story_spine=spine_for_draft,
             rules_of_the_world=world_bible.rules_of_the_world,
             characters=world_bible.characters,
             locations=world_bible.locations,
@@ -520,7 +583,8 @@ than restating it.
         result = draft_chapter_func(
             story_idea=story_idea,
             story_title=story_title,
-            story_spine=story_spine,
+            story_spine=spine_for_draft,
+            act_hint=hint["label"],
             rules_of_the_world=world_bible.rules_of_the_world,
             characters=world_bible.characters,
             locations=world_bible.locations,
