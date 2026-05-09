@@ -32,7 +32,7 @@ class WorldBible:
 
 @observe()
 def run_clarify_idea(story_idea: str = None, story_title: str = None) -> tuple[str, str]:
-    class Clarifystory_idea(dspy.Signature):
+    class ClarifyStoryIdea(dspy.Signature):
         """Generate questions to clarify the story story_idea"""
 
         story_idea: str = dspy.InputField()
@@ -61,7 +61,7 @@ def run_clarify_idea(story_idea: str = None, story_title: str = None) -> tuple[s
     if not story_idea:
         story_idea = ui.ask_idea()
 
-    clarify_idea = dspy.ChainOfThought(Clarifystory_idea)
+    clarify_idea = dspy.ChainOfThought(ClarifyStoryIdea)
     result = clarify_idea(story_idea=story_idea, story_title=story_title)
     qas = []
     for i in range(len(result.questions)):
@@ -110,7 +110,7 @@ def run_generate_core_premise(story_idea: str) -> str:
 
 @observe()
 def run_generate_spine(story_idea: str, core_premise: str) -> str:
-    class Generatestory_spine(dspy.Signature):
+    class GenerateStorySpine(dspy.Signature):
         """Generate a a structured story story_spine using pixar's 7 step formula for building a compelling narrative arc"""
 
         story_idea: str = dspy.InputField()
@@ -129,7 +129,7 @@ def run_generate_spine(story_idea: str, core_premise: str) -> str:
 
     feedback = ""
     previous_result = ""
-    generate_spine_func = dspy.ChainOfThought(Generatestory_spine)
+    generate_spine_func = dspy.ChainOfThought(GenerateStorySpine)
     while True:
         story_spine = generate_spine_func(
             story_idea=story_idea,
