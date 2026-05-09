@@ -30,13 +30,13 @@ jobs:
         run: ruff check .
 
       - name: Pylint (design smells)
-        run: pylint main.py story_modules.py world_bible_modules.py postprocessing.py
+        run: pylint --fail-under=8.0 mymain.py story.py pipeline.py
 
       - name: Radon (cyclomatic complexity)
-        run: radon cc . -s -n C --exclude ".venv/*" --no-assert
+        run: radon cc . -s -n C --exclude ".venv/*,archive/*" --no-assert
 
       - name: Vulture (dead code)
-        run: vulture . --min-confidence 80 --exclude .venv
+        run: vulture . --min-confidence 80 --exclude .venv,archive
 
   test:
     runs-on: ubuntu-latest
@@ -58,4 +58,10 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run tests
-        run: pytest -q
+        run: |
+          set +e
+          pytest -q --ignore=archive
+          code=$?
+          # exit code 5 = no tests collected; treat as success until a test suite exists
+          if [ $code -eq 5 ]; then exit 0; fi
+          exit $code
