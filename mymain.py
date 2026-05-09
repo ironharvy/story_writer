@@ -112,7 +112,6 @@ if __name__ == "__main__":
 
     initialize_artifact(args.output_file)
     update_artifact(args.output_file, "Generation Parameters", format_generation_parameters(args))
-    update_artifact(args.output_file, "Idea", args.idea)
     
     logger.info("Starting story writer")
     write(args.idea, args.title, args.output_file)
