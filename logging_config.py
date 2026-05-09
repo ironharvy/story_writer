@@ -173,21 +173,35 @@ def setup_logging(
         formatter = HumanFormatter(use_color=use_color)
 
     # Configure root logger
+    # Root level is always DEBUG so handlers see every record; per-handler
+    # levels do the actual filtering. This guarantees the file handler
+    # (when present) captures everything regardless of stderr verbosity,
+    # so post-mortem debugging never loses warnings that flickered past
+    # the terminal.
     root = logging.getLogger()
-    root.setLevel(level)
+    root.setLevel(logging.DEBUG)
 
     # Remove existing handlers to avoid duplicates on re-init
     root.handlers.clear()
 
-    # Stderr handler
+    # Route warnings.warn() calls through the logging system so that
+    # third-party warnings (DSPy parser failures, deprecation notices, etc.)
+    # land in the same handlers as everything else instead of bypassing
+    # them via direct sys.stderr writes.
+    logging.captureWarnings(True)
+
+    # Stderr handler — filtered to user-chosen verbosity.
     stderr_handler = logging.StreamHandler(sys.stderr)
     stderr_handler.setFormatter(formatter)
+    stderr_handler.setLevel(level)
     root.addHandler(stderr_handler)
 
     # Optional file handler — only enabled when log_file is passed explicitly
     # or LOG_FILE is set in the environment. Pass log_file="" or set LOG_FILE=""
     # to disable. No implicit fallback path is used so that library consumers
     # and containerised environments are not surprised by on-disk output.
+    # File handler captures DEBUG and above unconditionally — see root-level
+    # comment above.
     file_path = log_file if log_file is not None else os.environ.get("LOG_FILE")
     if file_path:
         dir_name = os.path.dirname(file_path)
@@ -195,6 +209,7 @@ def setup_logging(
             os.makedirs(dir_name, exist_ok=True)
         file_handler = logging.FileHandler(file_path)
         file_handler.setFormatter(HumanFormatter(use_color=False))
+        file_handler.setLevel(logging.DEBUG)
         root.addHandler(file_handler)
 
     # --- Verbosity-based logger tuning ---
@@ -205,7 +220,20 @@ def setup_logging(
     #
     # LLM-related loggers — the stuff you actually want at -vv.
     # litellm is what DSPy uses under the hood for all LLM calls.
-    _llm_loggers = ("litellm", "dspy", "langfuse", "openai", "anthropic")
+    # Both casings are listed because litellm registers as "LiteLLM" in
+    # newer versions and "litellm" in older ones.
+    _llm_loggers = (
+        "litellm", "LiteLLM",
+        "dspy", "dspy.adapters", "dspy.adapters.chat_adapter",
+        "langfuse", "openai", "anthropic",
+    )
+
+    # Ensure third-party loggers propagate to root so the file handler sees
+    # them. DSPy in particular installs its own handlers with propagate=False
+    # on submodules like dspy.adapters.chat_adapter, which silently drops
+    # parser-failure warnings from our log file.
+    for name in _llm_loggers + _http_loggers:
+        logging.getLogger(name).propagate = True
 
     # When LOG_LEVEL is set explicitly, the caller expects that level to apply
     # uniformly — including to third-party loggers. Skip the verbosity-based
