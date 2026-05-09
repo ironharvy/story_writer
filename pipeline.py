@@ -1,15 +1,9 @@
 import logging
+
 from _compat import observe
-
 from artifact import update_artifact
-from story import WorldBible
-
-
-def _snip(value, limit: int = 240) -> str:
-    text = str(value).replace("\n", " ⏎ ")
-    return text if len(text) <= limit else text[:limit] + "…"
-
 from story import (
+    WorldBible,
     run_clarify_idea,
     run_enhance_chapter,
     run_enhance_character,
@@ -22,8 +16,14 @@ from story import (
     run_generate_spine,
     run_generate_story_so_far,
     run_generate_timeline,
-    sanity_check
+    sanity_check,
 )
+
+
+def _snip(value, limit: int = 240) -> str:
+    text = str(value).replace("\n", " ⏎ ")
+    return text if len(text) <= limit else text[:limit] + "…"
+
 
 logger = logging.getLogger(__name__)
 
