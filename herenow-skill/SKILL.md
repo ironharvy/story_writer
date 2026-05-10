@@ -54,22 +54,35 @@ Functionally equivalent but does **not** sanitize server error text — prefer
 - `--slug` updates an existing publish instead of creating a new one.
 - Base URL is pinned to `https://here.now`; both scripts refuse anything else.
 
-## Getting an API key
+## Getting an API key (permanent publishes)
 
 ```bash
-curl -sS https://here.now/api/auth/agent/request-code \
-  -H 'content-type: application/json' \
-  -d '{"email":"you@example.com"}'
-
-# check inbox for code, then:
-curl -sS https://here.now/api/auth/agent/verify-code \
-  -H 'content-type: application/json' \
-  -d '{"email":"you@example.com","code":"ABCD-2345"}'
+./scripts/claim_token.py            # prompts for email, then the emailed code
 ```
 
-Save the returned `apiKey` to `~/.herenow/credentials` (`chmod 600`) or export `HERENOW_API_KEY`.
+This runs the request-code → verify-code flow and writes `HERENOW_API_KEY=...`
+to `.env.publish` (mode `600`), appending `.env.publish` to `.gitignore` if it
+isn't already there. The key is **never printed** — it goes straight to the
+file, so it doesn't pass through an agent's transcript the way a raw
+`curl …/verify-code` would. Output is just `{"ok": true, "stored_in": ...}`.
+
+Then load it into the environment before publishing:
+
+```bash
+set -a; source .env.publish; set +a
+./scripts/publish_content.py <file-or-dir>
+```
+
+`publish_content.py` picks up the key from `$HERENOW_API_KEY` (or
+`~/.herenow/credentials`, or `--api-key`). Without a key it publishes
+anonymously (24h expiry, no token needed).
+
+Treat `.env.publish` as a secret: never commit it, never paste it into a chat,
+and remember it's a full-account bearer token with no built-in expiry — revoke
+it (via here.now's account settings) if the file or session log leaves your
+control.
 
 ## Requirements
 
-- `publish_content.py`: Python 3.8+ (stdlib only).
+- `publish_content.py`, `claim_token.py`: Python 3.8+ (stdlib only).
 - `publish.sh`: `bash`, `curl`, `jq`, `file`, `sha256sum` (or `shasum`).
