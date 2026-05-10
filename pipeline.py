@@ -94,7 +94,7 @@ def build_world_bible(updated_idea: str, story_title: str, spine: str, output_fi
 
 
 @observe()
-def write(idea: str, title: str, output_file: str):
+def write(idea: str, title: str, output_file: str, number_of_chapters: int = 7):
     logger.info("STEP clarify_idea | inputs idea=%s | title=%s",
                 _snip(idea), _snip(title, 80))
     updated_idea, story_title = run_clarify_idea(idea, title)
@@ -131,10 +131,10 @@ def write(idea: str, title: str, output_file: str):
         return
 
     # Chapters plan
-    logger.info("STEP chapters_plan | inputs idea=%s | title=%s | spine=%s | world_bible(chars=%d, locs=%d)",
+    logger.info("STEP chapters_plan | inputs idea=%s | title=%s | spine=%s | world_bible(chars=%d, locs=%d) | number_of_chapters=%d",
                 _snip(updated_idea), _snip(story_title, 80), _snip(spine),
-                len(world_bible.characters), len(world_bible.locations))
-    chapters_plan = run_generate_chapters_plan(updated_idea, story_title, spine, world_bible)
+                len(world_bible.characters), len(world_bible.locations), number_of_chapters)
+    chapters_plan = run_generate_chapters_plan(updated_idea, story_title, spine, world_bible, number_of_chapters)
     logger.info("STEP chapters_plan | output count=%d", len(chapters_plan))
     update_artifact(output_file, "Chapters Plan", "", level=3)
 
@@ -151,7 +151,10 @@ def write(idea: str, title: str, output_file: str):
         chapter_plan_str = f"{chapter.chapter_title}\n{chapter.chapter_beats}"
         logger.info("STEP enhance_chapter[%d/%d] | chapter_outline=%s | story_so_far_len=%d",
                     i, len(chapters_plan), _snip(chapter_plan_str, 200), len(story_so_far))
-        enhanced = run_enhance_chapter(chapter_plan_str, updated_idea, story_title, spine, world_bible, story_so_far)
+        enhanced = run_enhance_chapter(
+            chapter_plan_str, updated_idea, story_title, spine, world_bible, story_so_far,
+            chapter_index=i, total_chapters=len(chapters_plan),
+        )
         logger.info("STEP enhance_chapter[%d/%d] | output_chars=%d preview=%s",
                     i, len(chapters_plan), len(enhanced), _snip(enhanced, 240))
         update_artifact(output_file, f"Chapter {i}: {chapter.chapter_title}", enhanced, level=3)
