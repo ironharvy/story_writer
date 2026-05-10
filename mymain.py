@@ -78,6 +78,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--idea", type=str, required=False, help="The initial story idea/prompt")
     parser.add_argument("--title", type=str, required=False, help="The title of the story")
     parser.add_argument("--number-of-chapters", type=int, default=7, help="The number of chapters to generate")
+    parser.add_argument(
+        "--max-depth",
+        type=int,
+        default=2,
+        help="Recursion depth for the recursive variant (1=chapters only, 2=story→chapter→scene). Ignored by other variants.",
+    )
     parser.add_argument("--output-file", default=".tmp/story.md")
     return parser.parse_args()
 
