@@ -2,6 +2,8 @@ __pycache__/
 .venv/
 .tmp/
 .env
+.env.publish
+.herenow/
 .gitignore
 images/
 .logs/
