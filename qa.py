@@ -34,8 +34,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 NGRAM = 5
+CHAPTER_MIN_WORDS = 80
 WORD_RE = re.compile(r"[A-Za-z']+")
-PROPER_NOUN_RE = re.compile(r"\b([A-Z][a-z]+(?:\s+(?:the\s+)?[A-Z][a-z]+){0,2})\b")
+# Proper-noun matcher: 1–3 capitalised tokens joined by spaces/tabs only.
+# Newlines are excluded so a paragraph break can't merge two separate names
+# (e.g. "Renn\n\nThe Sanctum" was previously parsed as one entity).
+PROPER_NOUN_RE = re.compile(r"\b([A-Z][a-z]+(?:[ \t]+(?:the[ \t]+)?[A-Z][a-z]+){0,2})\b")
+# Bullets whose entire content is wrapped in markdown emphasis with no
+# trailing description — some models use this slot for motivations/goals
+# instead of character names.
+_BOLD_ONLY_BULLET_RE = re.compile(r"\s*\*+[^*]+\*+\s*")
 
 
 @dataclass
@@ -93,13 +101,20 @@ def split_chapters(text: str) -> dict[str, str]:
 def character_bullets(text: str) -> list[str]:
     """Return the list of `<name>, <desc>` bullets from `### Characters`.
     Only the first numbered list is read; enhanced `#### Character N` blocks
-    are skipped."""
+    are skipped. Bullets whose entire content is bold/italic with no
+    trailing description are skipped — some models emit motivation lists
+    ("**Reclaim Identity**") in this slot, which would otherwise be reported
+    as missing characters."""
     section = _section(text, 3, "Characters")
     bullets: list[str] = []
     for line in section.splitlines():
         m = re.match(r"^\s*\d+\.\s+(.+)", line)
-        if m:
-            bullets.append(m.group(1).strip())
+        if not m:
+            continue
+        content = m.group(1).strip()
+        if _BOLD_ONLY_BULLET_RE.fullmatch(content):
+            continue
+        bullets.append(content)
     return bullets
 
 
@@ -111,10 +126,14 @@ def canonical_name(bullet: str) -> str:
     """Return the head of a `Name <delim> description` bullet.
 
     Tries the first comma, colon, semicolon, em-dash, en-dash, or hyphen — whichever
-    comes first."""
+    comes first. Surrounding markdown emphasis (``**Cinder**`` → ``Cinder``) is
+    stripped so a model that bolds the name doesn't produce a literal-asterisk
+    canonical."""
     m = _NAME_DELIM_RE.search(bullet)
     head = bullet[: m.start()] if m else bullet
-    return head.strip()
+    head = head.strip()
+    head = re.sub(r"^\*+|\*+$", "", head).strip()
+    return head
 
 
 # --- check 1: cross-chapter phrase reuse -------------------------------------
@@ -214,9 +233,14 @@ def check_name_drift(text: str) -> list[Finding]:
 
     for first, variants in drifts.items():
         canonical_form = next(n for n in canonical if n.split()[0] == first)
+        # Severity is "warn" rather than "fail": same-first-token matches catch
+        # real misspellings (Cinder/Cindar) but also harmless paraphrases
+        # ("High Cardinal Vane" ↔ "High Clergy") and WorldState parse
+        # artifacts. The post-generation linter (scripts/lint_story.py) is the
+        # tool that fixes the real misspellings.
         findings.append(Finding(
             check="name_drift",
-            severity="fail",
+            severity="warn",
             message=f"canonical='{canonical_form}' but chapters also use: {sorted(variants)}",
         ))
 
@@ -262,12 +286,43 @@ def check_character_presence(text: str) -> list[Finding]:
     return findings
 
 
+# --- check 4: chapter length -------------------------------------------------
+
+def check_chapter_length(text: str, min_words: int = CHAPTER_MIN_WORDS) -> list[Finding]:
+    """Fail chapters whose prose is below `min_words`.
+
+    Catches empty / truncated chapters that previously passed every check
+    (the `runs/demo-hollow` regression had an empty chapter 3 that passed
+    R1–R6 silently)."""
+    chapters = split_chapters(text)
+    findings: list[Finding] = []
+    short: list[tuple[str, int]] = []
+    for title, body in chapters.items():
+        n = len(_words(body))
+        if n < min_words:
+            short.append((title, n))
+    for title, n in short:
+        findings.append(Finding(
+            check="chapter_length",
+            severity="fail",
+            message=f"chapter '{title}' has only {n} words (min={min_words})",
+        ))
+    if not short and chapters:
+        findings.append(Finding(
+            check="chapter_length",
+            severity="info",
+            message=f"all {len(chapters)} chapters >= {min_words} words",
+        ))
+    return findings
+
+
 # --- runner ------------------------------------------------------------------
 
 CHECKS = [
     check_cross_chapter_phrase_reuse,
     check_name_drift,
     check_character_presence,
+    check_chapter_length,
 ]
 
 
