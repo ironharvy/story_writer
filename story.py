@@ -6,6 +6,7 @@ import dspy
 
 import ui
 from _compat import observe
+from lm_retry import LMOutputError, call_with_retry
 
 
 @dataclass
@@ -63,7 +64,12 @@ def run_clarify_idea(story_idea: str = None, story_title: str = None) -> tuple[s
         story_idea = ui.ask_idea()
 
     clarify_idea = dspy.ChainOfThought(ClarifyStoryIdea)
-    result = clarify_idea(story_idea=story_idea, story_title=story_title)
+    result = call_with_retry(
+        clarify_idea,
+        label="clarify_idea",
+        story_idea=story_idea,
+        story_title=story_title,
+    )
     qas = []
     for i in range(len(result.questions)):
         proposed_answer, _ = ui.review_answer(
@@ -73,11 +79,21 @@ def run_clarify_idea(story_idea: str = None, story_title: str = None) -> tuple[s
         qas.append(f"question: {result.questions[i]}\nproposed_answer: {proposed_answer}")
 
     update_idea = dspy.ChainOfThought(UpdateIdea)
-    #updated_idea = story_idea + "\n" + "\n".join([f"{qa['question']}: {qa['proposed_answer']}" for qa in qas])
-    updated_idea = update_idea(story_idea=story_idea, qas=qas).updated_idea
+    updated_idea = call_with_retry(
+        update_idea,
+        fields="updated_idea",
+        label="update_idea",
+        story_idea=story_idea,
+        qas=qas,
+    ).updated_idea
     if not story_title:
         generate_title = dspy.ChainOfThought(GenerateStoryTitle)
-        result = generate_title(story_idea=updated_idea)
+        result = call_with_retry(
+            generate_title,
+            fields="story_title",
+            label="generate_title",
+            story_idea=updated_idea,
+        )
         story_title = result.story_title
     return updated_idea, story_title
 
@@ -98,7 +114,14 @@ def run_generate_core_premise(story_idea: str) -> str:
     previous_result = ""
     core_prem_func = dspy.ChainOfThought(GenerateCorePremise)
     while True:
-        generate_core_premise = core_prem_func(story_idea=story_idea, previous_result=previous_result, feedback=feedback)
+        generate_core_premise = call_with_retry(
+            core_prem_func,
+            fields="core_premise",
+            label="core_premise",
+            story_idea=story_idea,
+            previous_result=previous_result,
+            feedback=feedback,
+        )
 
         previous_result = generate_core_premise.core_premise
         feedback, is_correct = ui.review_answer(
@@ -131,8 +154,20 @@ def run_generate_spine(story_idea: str, core_premise: str) -> str:
     feedback = ""
     previous_result = ""
     generate_spine_func = dspy.ChainOfThought(GenerateStorySpine)
+    spine_fields = [
+        "once_upon_a_time",
+        "every_day",
+        "until_one_day",
+        "because_of_that",
+        "and_because_of_that",
+        "until_finally",
+        "ever_since_that_day",
+    ]
     while True:
-        story_spine = generate_spine_func(
+        story_spine = call_with_retry(
+            generate_spine_func,
+            fields=spine_fields,
+            label="spine",
             story_idea=story_idea,
             core_premise=core_premise,
             previous_result=previous_result,
@@ -177,7 +212,10 @@ def run_generate_rules_of_the_world(story_idea: str, story_title: str, story_spi
     previous_result = ""
     generate_rules_of_the_world_func = dspy.ChainOfThought(GenerateRulesOfTheWorld)
     while True:
-        rules_of_the_world = generate_rules_of_the_world_func(
+        rules_of_the_world = call_with_retry(
+            generate_rules_of_the_world_func,
+            fields="rules_of_the_world",
+            label="rules_of_the_world",
             story_idea=story_idea,
             story_title=story_title,
             story_spine=story_spine,
@@ -216,7 +254,10 @@ def run_generate_characters(story_idea: str, story_title: str, story_spine: str,
     previous_result = ""
     generate_characters_func = dspy.ChainOfThought(GenerateCharacters)
     while True:
-        characters = generate_characters_func(
+        characters = call_with_retry(
+            generate_characters_func,
+            fields="characters",
+            label="characters",
             story_idea=story_idea,
             story_title=story_title,
             story_spine=story_spine,
@@ -257,7 +298,10 @@ def run_enhance_character(
     feedback = ""
     enhance_character_func = dspy.ChainOfThought(EnhanceCharacter)
     while True:
-        enhanced_character = enhance_character_func(
+        enhanced_character = call_with_retry(
+            enhance_character_func,
+            fields="enhanced_character",
+            label="enhance_character",
             story_idea=story_idea,
             story_title=story_title,
             story_spine=story_spine,
@@ -302,7 +346,10 @@ def run_generate_locations(
     locations_str = ""
     generate_locations_func = dspy.ChainOfThought(GenerateLocations)
     while True:
-        locations = generate_locations_func(
+        locations = call_with_retry(
+            generate_locations_func,
+            fields="locations",
+            label="locations",
             story_idea=story_idea,
             story_title=story_title,
             story_spine=story_spine,
@@ -345,7 +392,10 @@ def run_enhance_location(
     feedback = ""
     enhance_location_func = dspy.ChainOfThought(EnhanceLocation)
     while True:
-        enhanced_location = enhance_location_func(
+        enhanced_location = call_with_retry(
+            enhance_location_func,
+            fields="enhanced_location",
+            label="enhance_location",
             story_idea=story_idea,
             story_title=story_title,
             story_spine=story_spine,
@@ -388,7 +438,10 @@ def run_generate_timeline(
     timeline_str = ""
     generate_timeline_func = dspy.ChainOfThought(GenerateTimeline)
     while True:
-        timeline = generate_timeline_func(
+        timeline = call_with_retry(
+            generate_timeline_func,
+            fields="timeline",
+            label="timeline",
             story_idea=story_idea,
             story_title=story_title,
             story_spine=story_spine,
@@ -432,7 +485,10 @@ def run_generate_chapters_plan(
     feedback = ""
     generate_chapters_func = dspy.ChainOfThought(GenerateChaptersPlan)
     while True:
-        chapters = generate_chapters_func(
+        chapters = call_with_retry(
+            generate_chapters_func,
+            fields="chapters",
+            label="chapters_plan",
             story_idea=story_idea,
             story_title=story_title,
             story_spine=story_spine,
@@ -566,21 +622,30 @@ and including the current act — treat anything beyond it as not yet decided.
     random_detail = ""
     random_gen = dspy.ChainOfThought(GenerateRandomDetail)
     if random.random() < 0.33:
-        random_detail = random_gen(
-            story_idea=story_idea,
-            story_title=story_title,
-            story_spine=spine_for_draft,
-            rules_of_the_world=world_bible.rules_of_the_world,
-            characters=world_bible.characters,
-            locations=world_bible.locations,
-            timeline=world_bible.timeline,
-            chapter=chapter,
-        ).random_detail
+        try:
+            random_detail = call_with_retry(
+                random_gen,
+                fields="random_detail",
+                label=f"random_detail[ch{chapter_index}]",
+                story_idea=story_idea,
+                story_title=story_title,
+                story_spine=spine_for_draft,
+                rules_of_the_world=world_bible.rules_of_the_world,
+                characters=world_bible.characters,
+                locations=world_bible.locations,
+                timeline=world_bible.timeline,
+                chapter=chapter,
+            ).random_detail
+        except LMOutputError:
+            random_detail = ""  # best-effort flavor; carry on without it
 
     feedback = ""
     draft_chapter_func = dspy.ChainOfThought(DraftChapter)
     while True:
-        result = draft_chapter_func(
+        result = call_with_retry(
+            draft_chapter_func,
+            fields="prose",
+            label=f"draft_chapter[{chapter_index}/{total_chapters}]",
             story_idea=story_idea,
             story_title=story_title,
             story_spine=spine_for_draft,
@@ -626,7 +691,10 @@ def run_generate_story_so_far(
         )
 
     generate_story_so_far = dspy.ChainOfThought(Summarize)
-    return generate_story_so_far(
+    return call_with_retry(
+        generate_story_so_far,
+        fields="summary",
+        label="story_so_far",
         chapter_plan_so_far=chapter_plan_so_far,
         story_so_far=story_so_far,
         chapter=chapter,
@@ -645,7 +713,10 @@ def sanity_check(story_idea: str, story_title: str, story_spine: str, world_bibl
         is_consistent: bool = dspy.OutputField(desc="Whether the story_idea, story_spine, and world bible are consistent")
     
     sanity_check = dspy.ChainOfThought(SanityCheck)
-    return sanity_check(
+    return call_with_retry(
+        sanity_check,
+        fields="is_consistent",
+        label="sanity_check",
         story_idea=story_idea,
         story_title=story_title,
         story_spine=story_spine,

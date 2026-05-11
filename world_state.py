@@ -18,6 +18,7 @@ import dspy
 
 import ui
 from _compat import observe
+from lm_retry import call_with_retry
 from story import WorldBible, act_hint_for_chapter
 
 logger = logging.getLogger(__name__)
@@ -99,7 +100,10 @@ def run_init_world_state(
     previous_result = ""
     init_func = dspy.ChainOfThought(InitWorldState)
     while True:
-        result = init_func(
+        result = call_with_retry(
+            init_func,
+            fields="world_state",
+            label="init_world_state",
             story_idea=story_idea,
             story_title=story_title,
             story_spine=story_spine,
@@ -151,7 +155,10 @@ def run_advance_world_state(
         )
 
     advance_func = dspy.ChainOfThought(AdvanceWorldState)
-    result = advance_func(
+    result = call_with_retry(
+        advance_func,
+        fields="updated_state",
+        label="advance_world_state",
         story_idea=story_idea,
         story_title=story_title,
         world_bible=world_bible,
@@ -213,7 +220,10 @@ def run_draft_chapter_with_state(
     feedback = ""
     draft_func = dspy.ChainOfThought(DraftChapterWithState)
     while True:
-        result = draft_func(
+        result = call_with_retry(
+            draft_func,
+            fields="prose",
+            label=f"draft_chapter_ws[{chapter_index}/{total_chapters}]",
             story_idea=story_idea,
             story_title=story_title,
             story_spine=hint["spine_through_act"],

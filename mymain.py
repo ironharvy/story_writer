@@ -36,8 +36,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-tokens",
         type=int,
-        default=4096,
-        help="The maximum number of tokens to use for the model. Defaults to 4096.",
+        default=8192,
+        help=(
+            "Max tokens the model may emit per call. Defaults to 8192. "
+            "Verbose models (e.g. qwen3.6:27b) truncate at 4096 mid-structure, "
+            "which the parser turns into an empty/None field."
+        ),
     )
     parser.add_argument(
         "--num-ctx",

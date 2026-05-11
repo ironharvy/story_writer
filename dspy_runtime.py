@@ -25,7 +25,7 @@ class DSPyConfig:
     model_name: str
     api_base: str | None = None
     api_key: str | None = None
-    max_tokens: int = 8000
+    max_tokens: int = 8192
     num_ctx: int | None = None
     cache: bool = True
     memory_cache: bool = True
@@ -38,7 +38,7 @@ def dspy_config_from_namespace(args: Namespace) -> DSPyConfig:
         model_name=args.model,
         api_base=getattr(args, "llm_url", None),
         api_key=getattr(args, "api_key", None),
-        max_tokens=getattr(args, "max_tokens", 8000),
+        max_tokens=getattr(args, "max_tokens", 8192),
         cache=getattr(args, "cache", True),
         memory_cache=getattr(args, "memory_cache", True),
         cache_dir=getattr(args, "cache_dir", None),

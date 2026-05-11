@@ -20,6 +20,7 @@ from dataclasses import dataclass
 import dspy
 
 from _compat import observe
+from lm_retry import LMOutputError, call_with_retry
 from story import PlanEntry, WorldBible, act_hint_for_chapter
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,10 @@ class WriteStory(dspy.Module):
         world_bible: WorldBible,
         number_of_chapters: int = 7,
     ) -> dspy.Prediction:
-        outline = self.build_outline(
+        outline = call_with_retry(
+            self.build_outline,
+            fields="chapters",
+            label="story_outline",
             story_idea=story_idea,
             story_title=story_title,
             story_spine=story_spine,
@@ -105,19 +109,30 @@ class WriteStory(dspy.Module):
         for i, spec in enumerate(outline.chapters, 1):
             hint = act_hint_for_chapter(i, total, story_spine)
             logger.info("draft_chapter[%d/%d] | %s", i, total, spec.chapter_title)
-            section = self.draft_chapter(
-                story_idea=story_idea,
-                story_title=story_title,
-                story_spine=hint["spine_through_act"],
-                act_hint=hint["label"],
-                world_bible=world_bible,
-                chapter=f"{spec.chapter_title}\n{spec.chapter_beats}",
-            )
+            try:
+                section = call_with_retry(
+                    self.draft_chapter,
+                    fields="prose",
+                    label=f"draft_chapter[{i}/{total}]",
+                    story_idea=story_idea,
+                    story_title=story_title,
+                    story_spine=hint["spine_through_act"],
+                    act_hint=hint["label"],
+                    world_bible=world_bible,
+                    chapter=f"{spec.chapter_title}\n{spec.chapter_beats}",
+                )
+                prose = section.prose
+            except LMOutputError as exc:
+                logger.error("Chapter %d could not be drafted after retries: %s", i, exc)
+                prose = (
+                    f"*[Chapter {i} could not be generated — the model returned "
+                    f"no usable text. {exc}]*"
+                )
             drafted.append(
                 DraftedChapter(
                     chapter_title=spec.chapter_title,
                     chapter_beats=spec.chapter_beats,
-                    prose=section.prose,
+                    prose=prose,
                 )
             )
         return dspy.Prediction(outline=outline.chapters, chapters=drafted)

@@ -10,6 +10,7 @@ import logging
 
 from _compat import observe
 from artifact import update_artifact
+from lm_retry import LMOutputError
 from pipeline import _snip, build_world_bible
 from story import (
     run_clarify_idea,
@@ -91,27 +92,42 @@ def _draft_chapters(
             total,
             _snip(world_state.story_clock, 120),
         )
-        prose = run_draft_chapter_with_state(
-            chapter_plan_str,
-            updated_idea,
-            story_title,
-            spine,
-            world_bible,
-            world_state,
-            chapter_index=i,
-            total_chapters=total,
-        )
+        try:
+            prose = run_draft_chapter_with_state(
+                chapter_plan_str,
+                updated_idea,
+                story_title,
+                spine,
+                world_bible,
+                world_state,
+                chapter_index=i,
+                total_chapters=total,
+            )
+        except LMOutputError as exc:
+            logger.error("Chapter %d drafting failed after retries: %s", i, exc)
+            prose = (
+                f"*[Chapter {i} could not be generated — the model returned no "
+                f"usable text. {exc}]*"
+            )
         update_artifact(
             output_file, f"Chapter {i}: {chapter.chapter_title}", prose, level=3
         )
-        world_state = run_advance_world_state(
-            world_state,
-            chapter_plan_str,
-            prose,
-            updated_idea,
-            story_title,
-            world_bible,
-        )
+        try:
+            world_state = run_advance_world_state(
+                world_state,
+                chapter_plan_str,
+                prose,
+                updated_idea,
+                story_title,
+                world_bible,
+            )
+        except LMOutputError as exc:
+            logger.error(
+                "World-state advance failed after retries at chapter %d: %s; "
+                "keeping previous state",
+                i,
+                exc,
+            )
         update_artifact(
             output_file,
             f"World State after Chapter {i}",

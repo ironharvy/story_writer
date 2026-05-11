@@ -2,6 +2,7 @@ import logging
 
 from _compat import observe
 from artifact import update_artifact
+from lm_retry import LMOutputError
 from story import (
     WorldBible,
     run_clarify_idea,
@@ -151,10 +152,17 @@ def write(idea: str, title: str, output_file: str, number_of_chapters: int = 7):
         chapter_plan_str = f"{chapter.chapter_title}\n{chapter.chapter_beats}"
         logger.info("STEP enhance_chapter[%d/%d] | chapter_outline=%s | story_so_far_len=%d",
                     i, len(chapters_plan), _snip(chapter_plan_str, 200), len(story_so_far))
-        enhanced = run_enhance_chapter(
-            chapter_plan_str, updated_idea, story_title, spine, world_bible, story_so_far,
-            chapter_index=i, total_chapters=len(chapters_plan),
-        )
+        try:
+            enhanced = run_enhance_chapter(
+                chapter_plan_str, updated_idea, story_title, spine, world_bible, story_so_far,
+                chapter_index=i, total_chapters=len(chapters_plan),
+            )
+        except LMOutputError as exc:
+            logger.error("Chapter %d drafting failed after retries: %s", i, exc)
+            enhanced = (
+                f"*[Chapter {i} could not be generated — the model returned no "
+                f"usable text. {exc}]*"
+            )
         logger.info("STEP enhance_chapter[%d/%d] | output_chars=%d preview=%s",
                     i, len(chapters_plan), len(enhanced), _snip(enhanced, 240))
         update_artifact(output_file, f"Chapter {i}: {chapter.chapter_title}", enhanced, level=3)
@@ -164,5 +172,9 @@ def write(idea: str, title: str, output_file: str, number_of_chapters: int = 7):
                     i, len(chapters_plan), len(plan_so_far))
 
         chapter_plan_strs = [c.chapter_title + "\n" + c.chapter_beats for c in plan_so_far]
-        story_so_far = run_generate_story_so_far(chapter_plan_strs, story_so_far, enhanced)
+        try:
+            story_so_far = run_generate_story_so_far(chapter_plan_strs, story_so_far, enhanced)
+        except LMOutputError as exc:
+            logger.error("story_so_far summary failed after retries at chapter %d: %s; "
+                         "keeping previous summary", i, exc)
         logger.info("STEP story_so_far[%d/%d] | new_len=%d", i, len(chapters_plan), len(story_so_far))
