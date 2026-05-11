@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
         default=16384,
         help=(
             "Ollama context window size (num_ctx). Bigger = more VRAM. "
-            "qwen3 max 40960; gemma4:26b max 262144."
+            "qwen3:latest max 40960; qwen3.6:27b max 262144."
         ),
     )
     parser.add_argument(
