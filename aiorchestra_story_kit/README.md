@@ -20,7 +20,9 @@ copied into every story repo so the agent can read it there.
 
 ## Prerequisites
 
-- `gh` CLI, authenticated, with the target repo already created on GitHub.
+- `gh` CLI, authenticated (`gh auth login`). The target repo can already exist
+  on GitHub, or the init script can create it for you. Not needed if you run
+  with `--no-issue`.
 - An [aiorchestra](https://github.com/ironharvy/AIOrchestra) instance running
   somewhere with visibility into the target repo (e.g. `aiorchestra dispatch
   --watch` on your home machine), `claude-code` provider configured.
@@ -30,6 +32,22 @@ copied into every story repo so the agent can read it there.
   `.claude/skills/herenow/` so the "Assemble & Publish" phase can publish.
 
 ## Quickstart
+
+```bash
+mkdir my-story && cd my-story
+python /path/to/aiorchestra_story_kit/init_story_repo.py . --push
+```
+
+The script is interactive and walks you through the missing pieces: if the
+directory isn't a git repo yet it offers to `git init`; if there's no
+`README.md` it offers to create a starter one (asking for a title and logline);
+if the repo isn't on GitHub yet it offers to run `gh repo create`. Already have
+a README written out? Even better — it parses the `# Title` line and the first
+paragraph as the logline. Pass `--yes` (or `-y`) to accept every prompt
+non-interactively, or `--no-issue` to just scaffold + commit without touching
+GitHub.
+
+A fully manual setup still works if you prefer it:
 
 ```bash
 mkdir my-story && cd my-story && git init
@@ -42,8 +60,6 @@ holding back something in the fog; the mainland wants the lighthouse
 decommissioned.
 EOF
 git add -A && git commit -m "seed idea"
-
-# the repo must be on GitHub before the script can open issue #1
 gh repo create my-story --private --source=. --remote=origin --push
 
 python /path/to/aiorchestra_story_kit/init_story_repo.py . --push
