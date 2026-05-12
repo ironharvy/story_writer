@@ -1,0 +1,30 @@
+# aiorchestra config for an aiorchestra story repo.
+# Layered on top of aiorchestra's built-in defaults — only the overrides below.
+# Full workflow: ../WORKFLOW.md
+#
+# Note: the discovery label is NOT set here. `aiorchestra dispatch` discovers
+# issues by the `aiorchestra` label (not configurable); `aiorchestra run --repo`
+# uses the default agent-family label (`claude`, matching `ai.provider`). Story
+# phase issues carry `aiorchestra` + `claude` (+ a cosmetic `story` tag).
+
+ai:
+  provider: "claude-code"
+  model: "claude-opus-4-6"
+  max_retries: 2
+  skip_permissions: true
+
+# "Tests" here = a stdlib consistency check on the story/ tree, not pytest.
+test:
+  command: "python story/_check.py"
+  lint_command: 'python -c "pass"'
+
+review:
+  enabled: true
+  provider: "claude-code"
+
+# This is a prose repo — no CI checks, no OSINT enrichment.
+ci:
+  enabled: false
+
+osint:
+  enabled: false
