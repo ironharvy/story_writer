@@ -89,6 +89,17 @@ def _log_ollama_runtime(model_name: str, num_ctx: int | None) -> None:
         logger.warning("Ollama runtime probe failed: %s", exc)
 
 
+_SECRET_KWARG_NAMES = frozenset({"api_key", "apikey", "api_base_key", "secret", "token", "authorization"})
+
+
+def _redact_secrets(kwargs: dict) -> dict:
+    """Return a shallow copy of ``kwargs`` with credential-bearing values masked, for logging."""
+    return {
+        k: ("***redacted***" if k.lower() in _SECRET_KWARG_NAMES and v else v)
+        for k, v in kwargs.items()
+    }
+
+
 def configure_dspy(config: DSPyConfig) -> None:
     """Configure DSPy LM and optional instrumentation."""
     kwargs: dict[str, str] = {}
@@ -130,7 +141,7 @@ def configure_dspy(config: DSPyConfig) -> None:
         cache=config.cache,
         **kwargs,
     )
-    logger.info("DSPy LM kwargs=%s", lm.kwargs)
+    logger.info("DSPy LM kwargs=%s", _redact_secrets(lm.kwargs))
     _log_ollama_runtime(config.model_name, config.num_ctx)
 
     if os.environ.get("LANGFUSE_PUBLIC_KEY") and DSPyInstrumentor is not None:
