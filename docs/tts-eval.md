@@ -138,6 +138,25 @@ Tuned re-test commands:
     python scripts/tts_eval.py --engine chatterbox --cfg-weight 0.3 --exaggeration 0.5 --speed 0.92
     python scripts/tts_eval.py --engine higgs --temperature 0.1 --speed 0.95
 
+## Multi-voice (narrator + male/female)
+
+A "voice" in Chatterbox is the reference clip; in Kokoro it is a built-in voice id. So
+multi-voice = render each segment with the matching voice and concatenate. The harness
+casts at the right granularity -- **narration vs quoted speech**, not whole paragraphs,
+since a paragraph often mixes both (`She set the lantern down. "Did you think I wouldn't?"`).
+Quotes are attributed male/female by `he/she`-style cues near the line; unattributed lines
+fall back to the previous speaker.
+
+    python scripts/tts_eval.py --engine kokoro --multivoice \
+        --voice-narrator af_heart --voice-male am_adam --voice-female af_bella
+    python scripts/tts_eval.py --engine chatterbox --multivoice \
+        --voice-narrator narr.wav --voice-male man.wav --voice-female woman.wav
+
+Limits: attribution is heuristic, so lines with no nearby cue (or third+ speakers) can be
+miscast. The robust path -- since we *generate* the prose and know the cast -- is to have
+the pipeline emit explicit speaker tags per line and map those to voices, instead of
+guessing. Treat this mode as a demo of the casting mechanics, not the final attribution.
+
 ## Scoring (1-5 each)
 
 | Engine | Emo (T1 plain) | Emo (T2 directed) | Naturalness | Dialogue | Stability | Speed (s) | Notes |

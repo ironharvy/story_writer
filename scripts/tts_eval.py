@@ -25,6 +25,12 @@ Run:
     python scripts/tts_eval.py --engine chatterbox --cfg-weight 0.3 --speed 0.92
     # Higgs: low temperature is the fix for uncanny/"creepy" output
     python scripts/tts_eval.py --engine higgs --temperature 0.1 --speed 0.95
+    # Multi-voice: narrator + male/female dialogue (Kokoro built-in voices)
+    python scripts/tts_eval.py --engine kokoro --multivoice \
+        --voice-narrator af_heart --voice-male am_adam --voice-female af_bella
+    # Multi-voice on Chatterbox uses a reference wav per role
+    python scripts/tts_eval.py --engine chatterbox --multivoice \
+        --voice-narrator narr.wav --voice-male man.wav --voice-female woman.wav
 
 Writes out_<engine>.wav and prints render time + real-time factor (RTF).
 A reference clip enables voice cloning on Chatterbox (--ref voice.wav).
@@ -103,6 +109,62 @@ def _apply_speed_ffmpeg(path: Path, speed: float) -> None:
         check=True,
     )
     os.replace(tmp, path)
+
+
+_FEMALE_CUES = {
+    "she", "her", "hers", "herself", "woman", "girl", "lady", "mother", "mom",
+    "sister", "daughter", "queen", "mrs", "ms", "madam", "miss",
+}
+_MALE_CUES = {
+    "he", "his", "him", "himself", "man", "boy", "father", "dad", "brother",
+    "son", "king", "mr", "sir", "lord",
+}
+_QUOTE_RE = re.compile(r"(\"[^\"]*\"|“[^”]*”)")
+
+
+def _attribute(paragraph: str, quote: str, fallback: str) -> str:
+    """Guess a quote's speaker (male/female) from attribution cues near it.
+
+    Prefers cues after the quote ('"..." he said'), then before; falls back to
+    the previous speaker. Heuristic -- unattributed lines will sometimes miss.
+    """
+    idx = paragraph.find(quote)
+    after = paragraph[idx + len(quote):]
+    before = paragraph[:idx]
+    for window in (after, before):
+        for word in re.findall(r"[a-z]+", window.lower()):
+            if word in _FEMALE_CUES:
+                return "female"
+            if word in _MALE_CUES:
+                return "male"
+    return fallback
+
+
+def cast_segments(text: str, default_speaker: str = "narrator") -> list[tuple[str, str]]:
+    """Split prose into (role, text) where role is narrator | male | female.
+
+    Narration (outside quotes) goes to the narrator; quoted speech is attributed
+    per paragraph so 'he said' / 'she said' cues pick the voice.
+    """
+    segments: list[tuple[str, str]] = []
+    last_speaker = default_speaker
+    for paragraph in re.split(r"\n+", text.strip()):
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        for part in _QUOTE_RE.split(paragraph):
+            part = part.strip()
+            if not part:
+                continue
+            if _QUOTE_RE.fullmatch(part):
+                role = _attribute(paragraph, part, last_speaker)
+                if role in ("male", "female"):
+                    last_speaker = role
+                segments.append((role, part))
+            else:
+                segments.append(("narrator", part))
+    return segments
+
 
 
 def synth_kokoro(text: str, args: argparse.Namespace) -> tuple[np.ndarray, int]:
@@ -194,6 +256,80 @@ ENGINES = {
     "higgs": synth_higgs,
 }
 
+_KOKORO_ROLE_DEFAULTS = {"narrator": "af_heart", "male": "am_adam", "female": "af_bella"}
+
+
+def _role_voices(args: argparse.Namespace) -> dict[str, str | None]:
+    return {
+        "narrator": args.voice_narrator,
+        "male": args.voice_male,
+        "female": args.voice_female,
+    }
+
+
+def synth_multivoice_kokoro(
+    cast: list[tuple[str, str]], args: argparse.Namespace
+) -> tuple[np.ndarray, int]:
+    from kokoro import KPipeline
+
+    voices = _role_voices(args)
+    pipeline = KPipeline(lang_code=args.lang)
+    gap = np.zeros(int(0.2 * 24000), dtype=np.float32)
+    audio: list[np.ndarray] = []
+    for role, segment in cast:
+        voice = voices[role] or _KOKORO_ROLE_DEFAULTS[role]
+        for _gs, _ps, chunk in pipeline(
+            segment, voice=voice, speed=args.speed, split_pattern=r"\n+"
+        ):
+            audio.append(_as_mono_float(chunk))
+        audio.append(gap)
+    return np.concatenate(audio), 24000
+
+
+def synth_multivoice_chatterbox(
+    cast: list[tuple[str, str]], args: argparse.Namespace
+) -> tuple[np.ndarray, int]:
+    from chatterbox.tts import ChatterboxTTS
+
+    voices = _role_voices(args)
+    if not any(voices.values()):
+        print(
+            "warning: no --voice-narrator/--voice-male/--voice-female refs given; "
+            "all roles use Chatterbox's default voice (no distinction).",
+            file=sys.stderr,
+        )
+    model = ChatterboxTTS.from_pretrained(device=_pick_device(args.device))
+    temperature = 0.8 if args.temperature is None else args.temperature
+    sample_rate = int(model.sr)
+    gap = np.zeros(int(0.2 * sample_rate), dtype=np.float32)
+    audio: list[np.ndarray] = []
+    for role, segment in cast:
+        kwargs = {
+            "exaggeration": args.exaggeration,
+            "cfg_weight": args.cfg_weight,
+            "temperature": temperature,
+            "repetition_penalty": args.repetition_penalty,
+            "min_p": args.min_p,
+        }
+        ref = voices[role]
+        if ref:
+            kwargs["audio_prompt_path"] = ref
+        audio.append(_as_mono_float(model.generate(segment, **kwargs)))
+        audio.append(gap)
+    return np.concatenate(audio), sample_rate
+
+
+def synth_multivoice(text: str, args: argparse.Namespace) -> tuple[np.ndarray, int]:
+    cast = cast_segments(text, args.default_speaker)
+    counts = {role: sum(r == role for r, _ in cast) for role in ("narrator", "male", "female")}
+    print(f"cast: {counts['narrator']} narration, "
+          f"{counts['male']} male, {counts['female']} female segments")
+    if args.engine == "kokoro":
+        return synth_multivoice_kokoro(cast, args)
+    if args.engine == "chatterbox":
+        return synth_multivoice_chatterbox(cast, args)
+    raise SystemExit("--multivoice supports kokoro and chatterbox only")
+
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -239,6 +375,19 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--max-new-tokens", type=int, default=2048, help="Higgs token cap.")
 
+    # Multi-voice (kokoro / chatterbox): narrator + male/female by dialogue attribution
+    parser.add_argument("--multivoice", action="store_true",
+                        help="Cast narration vs male/female dialogue to different voices.")
+    parser.add_argument("--voice-narrator",
+                        help="Voice for narration (Kokoro voice id, or Chatterbox ref wav).")
+    parser.add_argument("--voice-male",
+                        help="Voice for male dialogue (Kokoro voice id, or Chatterbox ref wav).")
+    parser.add_argument("--voice-female",
+                        help="Voice for female dialogue (Kokoro voice id, or Chatterbox ref wav).")
+    parser.add_argument("--default-speaker", default="narrator",
+                        choices=["narrator", "male", "female"],
+                        help="Fallback for unattributed quotes (default: narrator).")
+
     args = parser.parse_args(argv)
 
     if args.text and args.text_file:
@@ -255,8 +404,14 @@ def main(argv: list[str] | None = None) -> None:
 
     out_path = args.out or Path(f"out_{args.engine}.wav")
 
+    if args.multivoice and args.engine == "higgs":
+        parser.error("--multivoice supports kokoro and chatterbox only")
+
     start = time.perf_counter()
-    samples, sample_rate = ENGINES[args.engine](text, args)
+    if args.multivoice:
+        samples, sample_rate = synth_multivoice(text, args)
+    else:
+        samples, sample_rate = ENGINES[args.engine](text, args)
     elapsed = time.perf_counter() - start
 
     sf.write(str(out_path), samples, sample_rate)
