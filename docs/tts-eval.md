@@ -20,6 +20,16 @@ demand, so a 24 GB 4090 handles all of them (one at a time).
 - Ultimate TTS Studio: https://github.com/SUP3RMASS1VE/Ultimate-TTS-Studio-SUP3R-Edition
 - Alt (more engines, fiddlier): https://github.com/rsxdalv/TTS-WebUI
 
+For a scriptable, identical-input comparison (instead of a GUI), use
+`scripts/tts_eval.py`, which renders the Tier-1 passage through one engine at a
+time and reports render time + real-time factor:
+
+    python scripts/tts_eval.py --engine kokoro
+    python scripts/tts_eval.py --engine chatterbox --exaggeration 0.8 --cfg-weight 0.3
+    python scripts/tts_eval.py --engine higgs --scene "Quiet room, intimate narration."
+
+Install notes for each engine are in that script's docstring.
+
 ## Candidates
 
 | Engine | Why it's in the running |
