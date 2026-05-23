@@ -112,6 +112,12 @@ First-pass listening (playground defaults) surfaced two recurring problems. Re-t
 tuned settings before scoring -- defaults are not representative.
 
 **Chatterbox: too fast + noise/repetition.**
+- Defaults sound flat on purpose: `exaggeration=0.5` is documented as *neutral*. For emotion
+  raise it to ~0.7-0.9. Bare `model.generate(text)` (no exaggeration, no reference, default
+  voice) is why a local run sounds plainer than the HF Space.
+- Reference clip is the strongest lever for matching a *specific* expressive sound: pass
+  `audio_prompt_path=` / `--ref` with a clip whose delivery you want; Chatterbox transfers
+  its prosody. Output is also stochastic (temp 0.8) -- generate a few and keep the best.
 - Speed: there is no speed knob, but lower `cfg_weight` (~0.3) slows and steadies pacing.
   High `exaggeration` speeds speech up, so pair high exaggeration with low cfg_weight.
   `scripts/tts_eval.py --speed 0.9` adds a pitch-preserving slowdown on top.
