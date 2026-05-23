@@ -106,6 +106,32 @@ That favors a **tag-based engine (Orpheus / Dia)**, or **Kokoro + a stress post-
 over Chatterbox/Higgs whose control is *global* (one slider / one reference clip per render)
 rather than per-line. Weigh this when picking.
 
+## Tuning out artifacts (Tier 1.5)
+
+First-pass listening (playground defaults) surfaced two recurring problems. Re-test with
+tuned settings before scoring -- defaults are not representative.
+
+**Chatterbox: too fast + noise/repetition.**
+- Speed: there is no speed knob, but lower `cfg_weight` (~0.3) slows and steadies pacing.
+  High `exaggeration` speeds speech up, so pair high exaggeration with low cfg_weight.
+  `scripts/tts_eval.py --speed 0.9` adds a pitch-preserving slowdown on top.
+- Repetition/garbling is mostly a long-input failure -- the model is trained on short
+  utterances. The script now chunks by sentence. Also raise `repetition_penalty` (~1.2-1.4),
+  set `min_p` ~0.05, lower temperature, and use a clean reference clip.
+- Trailing noise at clip end is a known bug (resemble-ai #271); trim it, or use the
+  Chatterbox-TTS-Extended fork (auto-chunk + denoise + auto-editor cleanup).
+
+**Higgs: "creepy"/uncanny.**
+- Lower temperature to ~0.1 (range 0.01-0.3). Above that it drifts into incoherent,
+  uncanny output -- playgrounds often default higher.
+- Provide a short, clean reference clip; without one it invents an uncanny voice.
+- Try Higgs v2.5 (Jan 2026): improved intonation + token-level expressiveness tags.
+
+Tuned re-test commands:
+
+    python scripts/tts_eval.py --engine chatterbox --cfg-weight 0.3 --exaggeration 0.5 --speed 0.92
+    python scripts/tts_eval.py --engine higgs --temperature 0.1 --speed 0.95
+
 ## Scoring (1-5 each)
 
 | Engine | Emo (T1 plain) | Emo (T2 directed) | Naturalness | Dialogue | Stability | Speed (s) | Notes |

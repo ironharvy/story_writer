@@ -20,17 +20,30 @@ Install (pick the engine you want to test):
 
 Run:
 
-    python scripts/tts_eval.py --engine kokoro
-    python scripts/tts_eval.py --engine chatterbox --exaggeration 0.8 --cfg-weight 0.3
-    python scripts/tts_eval.py --engine higgs --scene "Quiet room, intimate narration."
+    python scripts/tts_eval.py --engine kokoro --speed 0.9
+    # Chatterbox: lower cfg-weight slows/steadies it; chunking kills repetition
+    python scripts/tts_eval.py --engine chatterbox --cfg-weight 0.3 --speed 0.92
+    # Higgs: low temperature is the fix for uncanny/"creepy" output
+    python scripts/tts_eval.py --engine higgs --temperature 0.1 --speed 0.95
 
 Writes out_<engine>.wav and prints render time + real-time factor (RTF).
 A reference clip enables voice cloning on Chatterbox (--ref voice.wav).
+
+Anti-artifact notes (see docs/tts-eval.md):
+  - Chatterbox repeats/garbles on long text -- it is chunked by sentence here.
+  - --speed slows playback without changing pitch (Kokoro native, others via
+    ffmpeg atempo) for engines that read too fast.
+  - For stubborn Chatterbox artifacts, the Chatterbox-TTS-Extended fork adds a
+    denoise + auto-editor cleanup pass.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
+import re
+import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -70,6 +83,28 @@ def _as_mono_float(samples) -> np.ndarray:
     return samples.squeeze()
 
 
+def _split_sentences(text: str) -> list[str]:
+    """Split into sentence-ish chunks; Chatterbox repeats/garbles on long input."""
+    parts = re.split(r"(?<=[.!?])\s+|\n+", text.strip())
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _apply_speed_ffmpeg(path: Path, speed: float) -> None:
+    """Time-stretch a wav in place without changing pitch (ffmpeg atempo)."""
+    if abs(speed - 1.0) < 1e-3:
+        return
+    if shutil.which("ffmpeg") is None:
+        print("warning: ffmpeg not found; --speed ignored", file=sys.stderr)
+        return
+    tmp = path.with_suffix(".tmp.wav")
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(path),
+         "-filter:a", f"atempo={speed}", str(tmp)],
+        check=True,
+    )
+    os.replace(tmp, path)
+
+
 def synth_kokoro(text: str, args: argparse.Namespace) -> tuple[np.ndarray, int]:
     try:
         from kokoro import KPipeline
@@ -97,11 +132,26 @@ def synth_chatterbox(text: str, args: argparse.Namespace) -> tuple[np.ndarray, i
         ) from exc
 
     model = ChatterboxTTS.from_pretrained(device=_pick_device(args.device))
-    kwargs = {"exaggeration": args.exaggeration, "cfg_weight": args.cfg_weight}
+    temperature = 0.8 if args.temperature is None else args.temperature
+    kwargs = {
+        "exaggeration": args.exaggeration,
+        "cfg_weight": args.cfg_weight,
+        "temperature": temperature,
+        "repetition_penalty": args.repetition_penalty,
+        "min_p": args.min_p,
+    }
     if args.ref:
         kwargs["audio_prompt_path"] = args.ref
-    wav = model.generate(text, **kwargs)
-    return _as_mono_float(wav), int(model.sr)
+
+    pieces = [text] if args.no_chunk else _split_sentences(text)
+    sample_rate = int(model.sr)
+    gap = np.zeros(int(0.15 * sample_rate), dtype=np.float32)
+    audio: list[np.ndarray] = []
+    for index, piece in enumerate(pieces):
+        audio.append(_as_mono_float(model.generate(piece, **kwargs)))
+        if index != len(pieces) - 1:
+            audio.append(gap)
+    return np.concatenate(audio), sample_rate
 
 
 def synth_higgs(text: str, args: argparse.Namespace) -> tuple[np.ndarray, int]:
@@ -130,7 +180,7 @@ def synth_higgs(text: str, args: argparse.Namespace) -> tuple[np.ndarray, int]:
             ]
         ),
         max_new_tokens=args.max_new_tokens,
-        temperature=args.temperature,
+        temperature=0.3 if args.temperature is None else args.temperature,
         top_p=0.95,
         top_k=50,
         stop_strings=["<|end_of_text|>", "<|eot_id|>"],
@@ -152,15 +202,33 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--text-file", type=Path, help="Read text to speak from a file.")
     parser.add_argument("--out", type=Path, help="Output wav path (default out_<engine>.wav).")
     parser.add_argument("--device", default="auto", help="auto | cuda | cpu.")
+    parser.add_argument(
+        "--speed",
+        type=float,
+        default=1.0,
+        help="Playback speed (<1 slower). Kokoro native; others via ffmpeg atempo.",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Sampling temperature (default: chatterbox 0.8, higgs 0.3). "
+        "Lower Higgs to ~0.1 to reduce uncanny output.",
+    )
 
     # Kokoro
     parser.add_argument("--voice", default="af_heart", help="Kokoro voice id.")
     parser.add_argument("--lang", default="a", help="Kokoro lang code ('a' = US English).")
-    parser.add_argument("--speed", type=float, default=1.0, help="Kokoro speed.")
 
     # Chatterbox
     parser.add_argument("--exaggeration", type=float, default=0.5, help="Chatterbox emotion.")
-    parser.add_argument("--cfg-weight", type=float, default=0.5, help="Chatterbox cfg weight.")
+    parser.add_argument("--cfg-weight", type=float, default=0.5,
+                        help="Chatterbox cfg weight; lower (~0.3) slows/steadies pacing.")
+    parser.add_argument("--repetition-penalty", type=float, default=1.2,
+                        help="Chatterbox repetition penalty; raise to ~1.4 if it repeats.")
+    parser.add_argument("--min-p", type=float, default=0.05, help="Chatterbox min_p.")
+    parser.add_argument("--no-chunk", action="store_true",
+                        help="Disable Chatterbox sentence chunking (chunking reduces artifacts).")
     parser.add_argument("--ref", help="Reference wav for voice cloning (Chatterbox).")
 
     # Higgs
@@ -169,7 +237,6 @@ def main(argv: list[str] | None = None) -> None:
         default="Audio is recorded from a quiet room.",
         help="Higgs scene description (its in-text expressiveness control).",
     )
-    parser.add_argument("--temperature", type=float, default=0.3, help="Higgs temperature.")
     parser.add_argument("--max-new-tokens", type=int, default=2048, help="Higgs token cap.")
 
     args = parser.parse_args(argv)
@@ -193,6 +260,8 @@ def main(argv: list[str] | None = None) -> None:
     elapsed = time.perf_counter() - start
 
     sf.write(str(out_path), samples, sample_rate)
+    if args.engine != "kokoro":
+        _apply_speed_ffmpeg(out_path, args.speed)
 
     duration = len(samples) / sample_rate
     rtf = elapsed / duration if duration else float("nan")
