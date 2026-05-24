@@ -95,10 +95,11 @@ def setup_langfuse() -> bool:
     try:
         import litellm
 
-        cbs = set(litellm.callbacks or []) | set(litellm.success_callback or [])
-        if "langfuse" not in cbs:
-            litellm.success_callback = list(set(litellm.success_callback or []) | {"langfuse"})
-            litellm.failure_callback = list(set(litellm.failure_callback or []) | {"langfuse"})
+        # langfuse v4 is OTEL-based; litellm's "langfuse_otel" callback matches it.
+        # The legacy "langfuse" callback targets langfuse v2 and raises on every call
+        # under v4 (langfuse.version was renamed to _version).
+        if "langfuse_otel" not in (litellm.callbacks or []):
+            litellm.callbacks = list(litellm.callbacks or []) + ["langfuse_otel"]
         _LANGFUSE_READY = True
         return True
     except Exception:
