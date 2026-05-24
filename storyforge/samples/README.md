@@ -71,7 +71,7 @@ ship decision.)
 python -m storyforge generate \
   --idea "a memory-eating fog swallows a city; one cartographer still remembers" \
   --genre "literary speculative" --tone "haunting, hopeful" \
-  --pov limited --length standard --model quality --yes
+  --pov limited --length novelette --model quality --yes
 
 python -m storyforge eval runs/<dir>/manuscript.md \
   --idea "…the original idea…" --judge quality --draft-model quality

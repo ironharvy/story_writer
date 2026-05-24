@@ -35,9 +35,28 @@ python -m storyforge generate --idea "a lighthouse keeper at the end of the worl
 python -m storyforge generate \
   --idea "a memory-eating fog swallows a city; one cartographer still remembers" \
   --genre "literary speculative" --tone "haunting, hopeful" \
-  --pov limited --length standard --model fast \
+  --pov limited --length novelette --model fast \
   --eval --judge quality
 ```
+
+### Story length
+
+`--length` is named after the word-count categories writers use; each preset
+keeps chapters inside the eval's 800-2500w band, so bigger stories scale by
+*chapter count*, not chapter size:
+
+| Preset | ≈ Total | Shape |
+|---|---|---|
+| `flash` | ~900w | 1 chapter — flash fiction |
+| `short` | ~5,000w | 4 chapters — short story |
+| `novelette` *(default)* | ~12,000w | 8 chapters |
+| `novella` | ~24,000w | 14 chapters |
+| `novel` | ~50,000w | 28 chapters — a multi-hour local run |
+| `epic` | ~108,000w | 60 chapters — stress test, many hours |
+
+Old names still work as aliases (`standard`→`novelette`, `long`→`novella`). For
+ad-hoc sizes, `--chapters N` and `--words N` override the preset. Long runs write
+incrementally and are resumable with `--resume --run-dir …`.
 
 Output lands in `runs/<slug>-<timestamp>/`:
 

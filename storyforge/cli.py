@@ -21,12 +21,39 @@ from . import config
 from .evaluate import harness
 from .pipeline import Pipeline
 
-LENGTH_PRESETS = {  # name -> (num_chapters, words_per_chapter)
-    "flash": (3, 900),
-    "short": (5, 1000),
-    "standard": (7, 1200),
-    "long": (10, 1500),
+# Length presets named after the word-count categories writers actually use.
+# Each preset's words-per-chapter stays inside the eval's 800-2500w band
+# (see evaluate/tier1.py BAND_LOW/BAND_HIGH), so longer stories come from MORE
+# chapters, not longer ones. Totals are approximate (chapters x words/chapter).
+LENGTH_PRESETS = {  # name -> (num_chapters, words_per_chapter)   ~total
+    "flash":     (1, 900),    # ~900w     flash fiction
+    "short":     (4, 1300),   # ~5,000w   short story
+    "novelette": (8, 1500),   # ~12,000w  novelette
+    "novella":   (14, 1700),  # ~24,000w  novella
+    "novel":     (28, 1800),  # ~50,000w  short novel (hours, local)
+    "epic":      (60, 1800),  # ~108,000w stress test (many hours)
 }
+# Back-compat for the old names so existing commands/docs keep working.
+LENGTH_ALIASES = {"standard": "novelette", "long": "novella"}
+DEFAULT_LENGTH = "novelette"
+# Total >= this many chapters is a long, resumable run worth flagging.
+LONG_RUN_CHAPTERS = 20
+
+
+def _length_dims(name: str | None) -> tuple[int, int]:
+    """Resolve a length name (or alias) to (num_chapters, words_per_chapter).
+
+    Unknown names fall back to the default rather than erroring; the --length
+    flag itself is constrained by argparse `choices`."""
+    key = LENGTH_ALIASES.get(name or "", name or "")
+    return LENGTH_PRESETS.get(key, LENGTH_PRESETS[DEFAULT_LENGTH])
+
+
+def _length_help() -> str:
+    rows = []
+    for name, (nc, wpc) in LENGTH_PRESETS.items():
+        rows.append(f"{name} (~{nc * wpc:,}w)")
+    return "story length: " + ", ".join(rows) + "; aliases: " + ", ".join(LENGTH_ALIASES)
 
 
 def _console():
@@ -64,8 +91,10 @@ def _clarify(idea: str, args) -> dict:
     if pov:
         overrides["pov"] = {"first": "first_person", "limited": "third_person_limited",
                             "omniscient": "third_person_omniscient"}.get(pov, pov)
-    length = _ask("Length (flash/short/standard/long)", args.length or "standard")
-    nc, wpc = LENGTH_PRESETS.get(length, LENGTH_PRESETS["standard"])
+    print("  length: " + ", ".join(f"{n} (~{nc*wpc:,}w)"
+                                    for n, (nc, wpc) in LENGTH_PRESETS.items()))
+    length = _ask("Length", args.length or DEFAULT_LENGTH)
+    nc, wpc = _length_dims(length)
     overrides["num_chapters"], overrides["words_per_chapter"] = nc, wpc
     e = _ask("Ending (kind of ending you want)", args.ending or "")
     if e:
@@ -83,7 +112,7 @@ def _build_overrides(args) -> dict:
         overrides["pov"] = {"first": "first_person", "limited": "third_person_limited",
                             "omniscient": "third_person_omniscient"}.get(args.pov, args.pov)
     if args.length:
-        nc, wpc = LENGTH_PRESETS.get(args.length, LENGTH_PRESETS["standard"])
+        nc, wpc = _length_dims(args.length)
         overrides["num_chapters"], overrides["words_per_chapter"] = nc, wpc
     if args.chapters:
         overrides["num_chapters"] = args.chapters
@@ -130,6 +159,11 @@ def cmd_generate(args) -> int:
 
     interactive = sys.stdin.isatty() and not (args.yes or args.non_interactive)
     overrides = _clarify(idea, args) if (interactive and not args.resume) else _build_overrides(args)
+
+    nc = overrides.get("num_chapters")
+    if nc and nc >= LONG_RUN_CHAPTERS:
+        _emit(console, f"• {nc}-chapter run — this is long; it writes incrementally, so "
+              f"`--resume --run-dir {run_dir}` continues if interrupted.")
 
     pipe = Pipeline(draft_model=draft_model, run_dir=run_dir, use_critic=not args.no_critic,
                     use_derepeat=not args.no_derepeat, console=console)
@@ -183,7 +217,8 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--idea", help="the story idea")
     g.add_argument("--genre"); g.add_argument("--tone"); g.add_argument("--ending")
     g.add_argument("--pov", choices=["first", "limited", "omniscient"])
-    g.add_argument("--length", choices=list(LENGTH_PRESETS))
+    g.add_argument("--length", choices=list(LENGTH_PRESETS) + list(LENGTH_ALIASES),
+                   metavar="LENGTH", help=_length_help())
     g.add_argument("--chapters", type=int, help="override chapter count")
     g.add_argument("--words", type=int, help="override words per chapter")
     g.add_argument("--model", help="draft model: preset (fast/quality/groq/deepseek) or "
