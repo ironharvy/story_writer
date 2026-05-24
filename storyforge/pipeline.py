@@ -25,6 +25,12 @@ def _wc(text: str) -> int:
     return len(_WORD.findall(text))
 
 
+def _as_dict(d: object) -> dict:
+    """Models sometimes emit a bare list/scalar where an object was asked for; the
+    caller can still proceed (with defaults) instead of crashing on `.get`."""
+    return d if isinstance(d, dict) else {}
+
+
 def _s(d: dict, k: str, default: str = "") -> str:
     v = d.get(k, default)
     return v if isinstance(v, str) else (str(v) if v not in (None, {}, []) else default)
@@ -76,8 +82,8 @@ class Pipeline:
     # --- planning gen calls (low temperature, JSON) ---
     def gen_spec(self, idea: str, overrides: dict) -> StorySpec:
         provided = {k: v for k, v in overrides.items() if v}
-        d = llm.complete_json(prompts.infer_spec_prompt(idea, provided), system=prompts.GEN_SYSTEM,
-                              model=self.model, cfg=self.cfg, temperature=0.3, trace_name="spec")
+        d = _as_dict(llm.complete_json(prompts.infer_spec_prompt(idea, provided), system=prompts.GEN_SYSTEM,
+                              model=self.model, cfg=self.cfg, temperature=0.3, trace_name="spec"))
         spec = StorySpec()
         for k in ("genre", "tone", "pov", "ending", "audience"):
             if d.get(k):
@@ -90,14 +96,20 @@ class Pipeline:
         return spec
 
     def gen_premise(self, idea: str, spec: StorySpec) -> Premise:
-        d = llm.complete_json(prompts.premise_prompt(idea, spec), system=prompts.GEN_SYSTEM,
-                              model=self.model, cfg=self.cfg, temperature=0.7, trace_name="premise")
+        d = _as_dict(llm.complete_json(prompts.premise_prompt(idea, spec), system=prompts.GEN_SYSTEM,
+                              model=self.model, cfg=self.cfg, temperature=0.7, trace_name="premise"))
         return Premise(title=_s(d, "title", "Untitled"), logline=_s(d, "logline"),
                        paragraph=_s(d, "paragraph"), theme=_s(d, "theme"))
 
     def gen_bible(self, idea: str, spec: StorySpec, premise: Premise) -> WorldBible:
         d = llm.complete_json(prompts.bible_prompt(idea, spec, premise), system=prompts.GEN_SYSTEM,
                               model=self.model, cfg=self.cfg, temperature=0.6, trace_name="bible")
+        # The model occasionally returns a bare list of characters instead of the
+        # {characters, locations, rules} object — tolerate both (cf. gen_spine).
+        if isinstance(d, list):
+            d = {"characters": d}
+        elif not isinstance(d, dict):
+            d = {}
         chars = []
         for c in (d.get("characters") or []):
             if not isinstance(c, dict) or not c.get("name"):
