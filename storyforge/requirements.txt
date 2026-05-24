@@ -1,0 +1,6 @@
+# StoryForge dependencies (Python 3.10+)
+litellm>=1.86        # unified LLM client: Ollama + Groq + DeepSeek, one call shape
+langfuse>=4.6        # optional LLM-call tracing (enabled when LANGFUSE_* keys present)
+rich>=13             # CLI output
+python-dotenv>=1.0   # load .env (API keys, model config)
+pytest>=8            # tests
