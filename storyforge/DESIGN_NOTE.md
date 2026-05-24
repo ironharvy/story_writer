@@ -172,6 +172,14 @@ assumptions, drove these:
 - **Independent judge:** draft and judge must differ (no self-grading). With a 27B
   draft the local independent judge is `qwen3:latest`; the 8B judge reliably caught
   every blatant Tier-2 defect in the fixtures.
+- **Judge strength matters for the *ship* decision.** On the real 7-chapter draft
+  the 8B judge was both lenient and wrong: it scored the rubric **4.5**, mislabeled
+  a clean third-person book as first person (fooled by first-person *dialogue*), and
+  raised a **false** "hard contradiction" (it read a character *losing her memories*
+  — the story's whole theme — as her death). The hosted **DeepSeek** judge got POV
+  right, found no contradiction, and scored a stricter, more credible **3.5**. This
+  is exactly why the spec wants a stronger independent second opinion at the ship
+  gate — and why the final scorecard here is DeepSeek's, not the 8B's.
 - **Hosted backends (litellm):** **Groq** (`llama-3.3-70b`, `gpt-oss-120b`) is
   sub-second but the free tier caps at **8000 TPM** — fine for small checks, too
   small to judge a whole 7-chapter manuscript in one call. **DeepSeek**
