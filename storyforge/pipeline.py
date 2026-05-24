@@ -238,11 +238,46 @@ class Pipeline:
                         temperature=0.8, max_tokens=8192, trace_name=f"derepeat-ch{ch.number}"))
                 except llm.LLMError:
                     continue
-                if _wc(revised) >= max(700, int(ch.prose and _wc(ch.prose) * 0.7)):
+                if _wc(revised) >= max(700, int(_wc(ch.prose) * 0.7)):
                     ch.prose = revised
                     (self.run_dir / "chapters" / f"ch{ch.number:02d}.md").write_text(
                         f"### Chapter {ch.number}: {ch.title}\n\n{revised}\n")
             self._save(state)
+
+    def polish(self, state: RunState, notes: list[str],
+               climax_numbers: set[int] | None = None) -> Path:
+        """Rubric-driven revision pass: re-edit each chapter against editorial notes,
+        then re-run de-repetition and reassemble. Embodies self-evaluate -> revise."""
+        climax_numbers = climax_numbers or set()
+        spec, premise, bible = state.spec, state.premise, state.bible
+        plan_by_num = {p.number: p for p in state.spine}
+        chaps = sorted(state.chapters, key=lambda c: c.number)
+        for ch in chaps:
+            plan = plan_by_num.get(ch.number) or ChapterPlan(
+                number=ch.number, title=ch.title, pov_character=spec.pov_character)
+            synopsis = "\n".join(f"Ch{c.number} ({c.title}): {c.summary}"
+                                 for c in chaps if c.summary and c.number != ch.number)
+            self._say(f"• Polishing chapter {ch.number}: {ch.title}")
+            try:
+                revised = clean_prose(llm.complete(
+                    prompts.polish_chapter_prompt(spec, premise, bible, plan, ch.prose,
+                                                  synopsis, notes, ch.number in climax_numbers),
+                    system=prompts.GEN_SYSTEM, model=self.model, cfg=self.cfg,
+                    temperature=0.75, max_tokens=8192, trace_name=f"polish-ch{ch.number}"))
+            except llm.LLMError:
+                continue
+            if _wc(revised) >= max(800, int(_wc(ch.prose) * 0.7)):
+                ch.prose = revised
+                (self.run_dir / "chapters" / f"ch{ch.number:02d}.md").write_text(
+                    f"### Chapter {ch.number}: {ch.title}\n\n{revised}\n")
+                self._say(f"    ✓ {_wc(revised)} words")
+            self._save(state)
+        if self.use_derepeat:
+            self.derepeat(state, rounds=3)
+        manuscript = self.assemble(state)
+        (self.run_dir / "manuscript.md").write_text(manuscript)
+        self._say(f"✓ Polished manuscript ({_wc(manuscript)} words)")
+        return self.run_dir / "manuscript.md"
 
     # --- assembly ---
     def assemble(self, state: RunState) -> str:

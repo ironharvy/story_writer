@@ -30,6 +30,19 @@ def test_parser_basic_shape():
     assert m.chapters[0].word_count > 40
 
 
+def test_parser_handles_level2_chapters_and_no_manuscript_section():
+    md = (
+        "# Tideglass\n\n## Premise\nA diver hunts a sunken bell.\n\n"
+        "## Characters\n1. Sel, a pearl diver\n2. Dov, her brother\n\n"
+        "## Chapter 1: Down\nSel dove past the reef while Dov watched the rope.\n\n"
+        "## Chapter 2: Up\nSel surfaced with the bell and found Dov gone.\n"
+    )
+    m = parse.parse_manuscript(md)
+    assert len(m.chapters) == 2
+    assert m.chapters[0].label.startswith("Chapter 1")
+    assert [c.canonical for c in m.characters] == ["Sel", "Dov"]
+
+
 def test_canonical_name_rules():
     assert parse.canonical_name("1. **Cinder**, a runaway") == "Cinder"
     assert parse.canonical_name("- Kaelen Vey — a soldier") == "Kaelen Vey"

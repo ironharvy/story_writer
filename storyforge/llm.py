@@ -97,6 +97,11 @@ def complete(
             last_err = e
             log.warning("%s error (attempt %d/%d): %s", trace_name, attempt, retries,
                         str(e)[:200])
+            # Honor a provider's "try again in Xs" rate-limit hint when present.
+            hint = re.search(r"try again in ([\d.]+)s", str(e))
+            if hint:
+                time.sleep(min(float(hint.group(1)) + 0.5, 30))
+                continue
         time.sleep(min(2 ** attempt, 8))
     raise LLMError(f"{trace_name} failed after {retries} attempts: {last_err}")
 

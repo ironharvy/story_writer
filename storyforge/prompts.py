@@ -165,6 +165,31 @@ def critique_prompt(spec: StorySpec, plan: ChapterPlan, synopsis: str, prose: st
     )
 
 
+def polish_chapter_prompt(spec: StorySpec, premise: Premise, bible: WorldBible,
+                          plan: ChapterPlan, prose: str, synopsis: str,
+                          notes: list[str], is_climax: bool) -> str:
+    rules = "; ".join(bible.rules) if bible.rules else "(none)"
+    note_block = "\n".join(f"  - {n}" for n in notes)
+    climax = ("\n  - This is the CLIMAX: make the confrontation vivid, high-stakes and "
+              "decisive. Do not rush it; give the turning point room to land."
+              if is_climax else "")
+    return (
+        f"You are doing a developmental + line edit of Chapter {plan.number} of a "
+        f"finished manuscript titled “{premise.title}”.\n"
+        f"Theme: {premise.theme}\nWorld rules (keep them CONSISTENT): {rules}\n"
+        f"Cast: {_cast_brief(bible)}\n"
+        f"Story so far (for cohesion): {synopsis or '(opening chapter)'}\n\n"
+        "Editorial notes to address in this chapter:\n" + note_block + climax + "\n\n"
+        f"Chapter {plan.number}: {plan.title}\n\"\"\"\n{prose}\n\"\"\"\n\n"
+        "Revise the chapter to fix the notes while PRESERVING: the point of view "
+        f"({spec.pov_label}, narrated by {plan.pov_character}), every plot fact, all "
+        "character names, and the chapter's role in the arc. Cut meandering or "
+        "repetitive passages; vary imagery and sentence rhythm; remove clichés and any "
+        "phrase you have used elsewhere. Keep length within ~15% of the original.\n"
+        "Output ONLY the revised chapter prose — no heading, no notes, no markdown."
+    )
+
+
 def derepeat_prompt(number: int, prose: str, phrases: list[str]) -> str:
     return (
         f"This is Chapter {number}. The phrasings below were ALSO used in other "

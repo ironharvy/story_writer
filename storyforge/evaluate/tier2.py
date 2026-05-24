@@ -96,7 +96,11 @@ def t2_3_continuity(m: Manuscript, judge: Judge) -> Check:
         "dead or gone in one chapter who acts later; eye/hair color, names, ages, or "
         "relationships that flip; an impossible timeline; TWO DISTINCT characters who "
         "share one name; a location that teleports. Only report genuine contradictions "
-        "supported by the text.\n\n"
+        "supported by the text.\n"
+        "IMPORTANT: a character losing their MEMORIES, history, or sense of self is a "
+        "normal feature of many premises and is NOT death — do not report memory loss "
+        "as a 'dead character still acting' contradiction unless the text explicitly "
+        "states the character died.\n\n"
         'Return JSON: {"contradictions": [{"type": "<kind>", "detail": "<what flips>", '
         '"severity": "hard" | "minor", "chapters": "<where>"}]}. '
         "Empty list if there are none.\n\n" + build_view(m, 1000)

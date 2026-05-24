@@ -148,6 +148,44 @@ result.
 
 ---
 
+## 6. Empirical findings (what the evidence changed)
+
+Measured on this WSL2 box against the live backends — the scorecard, not
+assumptions, drove these:
+
+- **qwen3 is a *thinking* model.** With reasoning on (the default), Ollama puts the
+  chain-of-thought in a separate `thinking` stream and a short `num_predict`
+  budget is consumed before any `content` is emitted — every call came back
+  **empty**. Fix: pass `think=false` to Ollama (litellm forwards it) and strip any
+  stray `<think>…</think>`. This was the first real bug and would silently break
+  any naive integration.
+- **`num_ctx` must be pinned.** Ollama defaults context to 4096, which silently
+  truncates the rolling synopsis + an 8k-token chapter. Set to 24576.
+- **`qwen3:latest` (8B):** ~10 s/chapter (think off); coherent structure, named
+  protagonist, real dialogue — but **parrots its own signature phrasings** across
+  chapters (T1.4 = 25–30 raw). Great for "does it run"; needs the de-repetition
+  pass to approach the ship budget.
+- **The de-repetition pass works:** on the 8B it cut cross-chapter 5-gram reuse
+  25 → 9 in two rounds by rewriting only the later-occurring duplicates.
+- **`qwen3.6:27b` (27B):** ~4 min one-time model load, then ~15–40 s/call; used to
+  validate real prose quality and as the quality drafter.
+- **Independent judge:** draft and judge must differ (no self-grading). With a 27B
+  draft the local independent judge is `qwen3:latest`; the 8B judge reliably caught
+  every blatant Tier-2 defect in the fixtures.
+- **Hosted backends (litellm):** **Groq** (`llama-3.3-70b`, `gpt-oss-120b`) is
+  sub-second but the free tier caps at **8000 TPM** — fine for small checks, too
+  small to judge a whole 7-chapter manuscript in one call. **DeepSeek**
+  (`deepseek-chat`, `deepseek-v4-pro`, `deepseek-reasoner`) handles full context and
+  is the reserved hosted second-opinion / escalation judge.
+- **Observability:** Langfuse v4 is OTEL-based, so litellm's `langfuse_otel`
+  callback is required (the legacy `langfuse` callback crashes on v4). With that,
+  every stage traces to Langfuse under its step name (`draft-ch3`, `critique-ch2`,
+  `t3-rubric`, …).
+
+> The scored sample manuscript and its committed scorecard live in
+> [`samples/`](samples/); the scorecard records exactly which models produced and
+> judged it.
+
 ### Sources
 - Snowflake Method — Randy Ingermanson: https://www.advancedfictionwriting.com/articles/snowflake-method/ ·
   Reedsy summary: https://reedsy.com/blog/snowflake-method/
