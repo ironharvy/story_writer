@@ -1,0 +1,208 @@
+{
+  "source": "runs/fog_v4/manuscript.md",
+  "title": "The Cartographer of Lost Things",
+  "idea": "In a city slowly swallowed by an encroaching fog that erases whatever it touches from memory, a young cartographer who alone can remember what the fog takes must map a route to the last untouched district before it reaches the people she loves.",
+  "draft_model": "deepseek/deepseek-v4-pro",
+  "judge_model": "deepseek/deepseek-chat",
+  "timestamp": "2026-05-24T00:32:56",
+  "word_count": 9258,
+  "chapters": 7,
+  "checks": [
+    {
+      "id": "T1.1",
+      "name": "Chapter length",
+      "severity": "pass",
+      "message": "All 7 chapters within the 800-2500w band.",
+      "details": {
+        "counts": {
+          "Chapter 1: The Edge of White": 1175,
+          "Chapter 2: Fading Lines": 1357,
+          "Chapter 3: The Geometry of Loss": 1366,
+          "Chapter 4: Ink and Echoes": 1378,
+          "Chapter 5: The Blank Page": 1346,
+          "Chapter 6: The Last Coordinate": 1452,
+          "Chapter 7: Sanctuary of Strangers": 1184
+        }
+      }
+    },
+    {
+      "id": "T1.2",
+      "name": "Character presence",
+      "severity": "pass",
+      "message": "All 4 cast members appear in the prose."
+    },
+    {
+      "id": "T1.3",
+      "name": "Name drift",
+      "severity": "warn",
+      "message": "2 possible name variant(s): Keep~Kael, Mama~Mara",
+      "details": {
+        "flags": [
+          {
+            "variant": "Keep",
+            "canonical": "Kael"
+          },
+          {
+            "variant": "Mama",
+            "canonical": "Mara"
+          }
+        ],
+        "budget": 2
+      }
+    },
+    {
+      "id": "T1.4",
+      "name": "Cross-chapter phrase reuse",
+      "severity": "pass",
+      "message": "3 reused 5-gram(s), within budget 5.",
+      "details": {
+        "count": 3,
+        "budget": 5,
+        "examples": [
+          "did not look at the",
+          "elara dropped to her knees",
+          "we have to keep moving"
+        ]
+      }
+    },
+    {
+      "id": "T1.5",
+      "name": "Over-repetition",
+      "severity": "pass",
+      "message": "No content word exceeds 23 occurrences (outside top-20)."
+    },
+    {
+      "id": "T2.1",
+      "name": "POV consistency",
+      "severity": "pass",
+      "message": "Consistent third_person POV across all chapters.",
+      "details": {
+        "dominant": "third_person",
+        "per_chapter": [
+          {
+            "chapter": 1,
+            "pov": "third_person",
+            "note": "Narration follows Elara's actions and perceptions in third person throughout."
+          },
+          {
+            "chapter": 2,
+            "pov": "third_person",
+            "note": "Consistent third-person narration focused on Elara."
+          },
+          {
+            "chapter": 3,
+            "pov": "third_person",
+            "note": "Third-person narration, closely tied to Elara's perspective."
+          },
+          {
+            "chapter": 4,
+            "pov": "third_person",
+            "note": "Third-person narration, centered on Elara."
+          },
+          {
+            "chapter": 5,
+            "pov": "third_person",
+            "note": "Third-person narration, primarily from Elara's viewpoint."
+          },
+          {
+            "chapter": 6,
+            "pov": "third_person",
+            "note": "Third-person narration, consistently following Elara."
+          },
+          {
+            "chapter": 7,
+            "pov": "third_person",
+            "note": "Third-person narration, focused on Elara's experience."
+          }
+        ]
+      }
+    },
+    {
+      "id": "T2.2",
+      "name": "Protagonist naming",
+      "severity": "pass",
+      "message": "Protagonist 'Elara' is named consistently.",
+      "details": {
+        "protagonist": "Elara",
+        "primary_referent": "name",
+        "placeholder_examples": [],
+        "multiple_names": false,
+        "names_used": [
+          "Elara"
+        ]
+      }
+    },
+    {
+      "id": "T2.3",
+      "name": "Continuity",
+      "severity": "pass",
+      "message": "No contradictions found.",
+      "details": {
+        "contradictions": []
+      }
+    },
+    {
+      "id": "T2.4",
+      "name": "Premise fidelity",
+      "severity": "pass",
+      "message": "Story dramatizes the original idea. The manuscript dramatizes the core premise: a cartographer who alone remembers what the fog erases must map a route to the last untouched district to save loved ones. The fog erases memory and physical reality, Elara's memory is the only record, and the climax involves reaching the sanctuary at the cost of her personal history.",
+      "details": {
+        "fidelity": "high",
+        "drift": false,
+        "note": "The manuscript dramatizes the core premise: a cartographer who alone remembers what the fog erases must map a route to the last untouched district to save loved ones. The fog erases memory and physical reality, Elara's memory is the only record, and the climax involves reaching the sanctuary at the cost of her personal history."
+      }
+    },
+    {
+      "id": "T3",
+      "name": "Rubric",
+      "severity": "fail",
+      "message": "Rubric average 3.67 (need >= 4.0); no axis below 3",
+      "details": {
+        "scores": {
+          "arc_structure": 3,
+          "ending": 4,
+          "character_agency": 4,
+          "scene_vs_summary": 4,
+          "prose_quality": 4,
+          "cohesion": 3
+        },
+        "average": 3.67,
+        "justifications": {
+          "arc_structure": "Setup and rising action are clear, but the climax (spending the mother's memory) and resolution (arriving at sanctuary) feel compressed and lack dramatic escalation.",
+          "ending": "The ending lands the premise's promise—Elara reaches safety but loses her memories—though the final beat is slightly abstract and could be more concrete.",
+          "character_agency": "Elara consistently makes active choices (drawing, refusing Kael's path, spending memories) that drive the plot; Jonas and Mara have less agency but serve their roles.",
+          "scene_vs_summary": "Key beats are dramatized in vivid scenes (the hallway, the bridge, the plaza), though some transitions rely on summary.",
+          "prose_quality": "Prose is controlled and varied with strong sensory detail and metaphor; occasional repetition of 'white' and 'void' but no major tics.",
+          "cohesion": "Setups like the blank journal and Mara's advice pay off, but the fog's rules and the cost of memory are inconsistently applied (e.g., why some memories cost more than others)."
+        },
+        "threshold_avg": 4.0,
+        "min_axis": 3
+      }
+    }
+  ],
+  "rubric": {
+    "scores": {
+      "arc_structure": 3,
+      "ending": 4,
+      "character_agency": 4,
+      "scene_vs_summary": 4,
+      "prose_quality": 4,
+      "cohesion": 3
+    },
+    "average": 3.67,
+    "justifications": {
+      "arc_structure": "Setup and rising action are clear, but the climax (spending the mother's memory) and resolution (arriving at sanctuary) feel compressed and lack dramatic escalation.",
+      "ending": "The ending lands the premise's promise—Elara reaches safety but loses her memories—though the final beat is slightly abstract and could be more concrete.",
+      "character_agency": "Elara consistently makes active choices (drawing, refusing Kael's path, spending memories) that drive the plot; Jonas and Mara have less agency but serve their roles.",
+      "scene_vs_summary": "Key beats are dramatized in vivid scenes (the hallway, the bridge, the plaza), though some transitions rely on summary.",
+      "prose_quality": "Prose is controlled and varied with strong sensory detail and metaphor; occasional repetition of 'white' and 'void' but no major tics.",
+      "cohesion": "Setups like the blank journal and Mara's advice pay off, but the fog's rules and the cost of memory are inconsistently applied (e.g., why some memories cost more than others)."
+    },
+    "threshold_avg": 4.0,
+    "min_axis": 3
+  },
+  "ship": false,
+  "ship_blockers": [
+    "T3 FAIL: Rubric average 3.67 (need >= 4.0); no axis below 3"
+  ]
+}

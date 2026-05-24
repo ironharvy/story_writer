@@ -1,0 +1,237 @@
+{
+  "source": "runs/fog_v4/manuscript.md",
+  "title": "The Cartographer of Lost Things",
+  "idea": "In a city slowly swallowed by an encroaching fog that erases whatever it touches from memory, a young cartographer who alone can remember what the fog takes must map a route to the last untouched district before it reaches the people she loves.",
+  "draft_model": "deepseek/deepseek-v4-pro",
+  "judge_model": "ollama_chat/qwen3.6:27b",
+  "timestamp": "2026-05-24T00:32:41",
+  "word_count": 9258,
+  "chapters": 7,
+  "checks": [
+    {
+      "id": "T1.1",
+      "name": "Chapter length",
+      "severity": "pass",
+      "message": "All 7 chapters within the 800-2500w band.",
+      "details": {
+        "counts": {
+          "Chapter 1: The Edge of White": 1175,
+          "Chapter 2: Fading Lines": 1357,
+          "Chapter 3: The Geometry of Loss": 1366,
+          "Chapter 4: Ink and Echoes": 1378,
+          "Chapter 5: The Blank Page": 1346,
+          "Chapter 6: The Last Coordinate": 1452,
+          "Chapter 7: Sanctuary of Strangers": 1184
+        }
+      }
+    },
+    {
+      "id": "T1.2",
+      "name": "Character presence",
+      "severity": "pass",
+      "message": "All 4 cast members appear in the prose."
+    },
+    {
+      "id": "T1.3",
+      "name": "Name drift",
+      "severity": "warn",
+      "message": "2 possible name variant(s): Mama~Mara, Keep~Kael",
+      "details": {
+        "flags": [
+          {
+            "variant": "Mama",
+            "canonical": "Mara"
+          },
+          {
+            "variant": "Keep",
+            "canonical": "Kael"
+          }
+        ],
+        "budget": 2
+      }
+    },
+    {
+      "id": "T1.4",
+      "name": "Cross-chapter phrase reuse",
+      "severity": "pass",
+      "message": "3 reused 5-gram(s), within budget 5.",
+      "details": {
+        "count": 3,
+        "budget": 5,
+        "examples": [
+          "did not look at the",
+          "elara dropped to her knees",
+          "we have to keep moving"
+        ]
+      }
+    },
+    {
+      "id": "T1.5",
+      "name": "Over-repetition",
+      "severity": "pass",
+      "message": "No content word exceeds 23 occurrences (outside top-20)."
+    },
+    {
+      "id": "T2.1",
+      "name": "POV consistency",
+      "severity": "pass",
+      "message": "Consistent third_person POV across all chapters.",
+      "details": {
+        "dominant": "third_person",
+        "per_chapter": [
+          {
+            "chapter": 1,
+            "pov": "third_person",
+            "note": "Narration follows Elara using third-person pronouns and limited access to her internal state."
+          },
+          {
+            "chapter": 2,
+            "pov": "third_person",
+            "note": "Consistent third-person limited narration focused on Elara's perspective."
+          },
+          {
+            "chapter": 3,
+            "pov": "third_person",
+            "note": "Third-person limited narration tracking Elara's actions and thoughts."
+          },
+          {
+            "chapter": 4,
+            "pov": "third_person",
+            "note": "Third-person limited narration; internal monologue is reported, not first-person."
+          },
+          {
+            "chapter": 5,
+            "pov": "third_person",
+            "note": "Third-person limited narration focused on Elara."
+          },
+          {
+            "chapter": 6,
+            "pov": "third_person",
+            "note": "Third-person limited narration focused on Elara."
+          },
+          {
+            "chapter": 7,
+            "pov": "third_person",
+            "note": "Third-person limited narration focused on Elara."
+          }
+        ]
+      }
+    },
+    {
+      "id": "T2.2",
+      "name": "Protagonist naming",
+      "severity": "pass",
+      "message": "Protagonist 'Elara' is named consistently.",
+      "details": {
+        "protagonist": "Elara",
+        "primary_referent": "name",
+        "placeholder_examples": [],
+        "multiple_names": false,
+        "names_used": [
+          "Elara"
+        ]
+      }
+    },
+    {
+      "id": "T2.3",
+      "name": "Continuity",
+      "severity": "warn",
+      "message": "5 minor continuity wobble(s): Jonas is identified as Elara's younger brother in the Characters list and Chapter 2. In Chapter 7, Elara explicitly states 'I am your sister' and Jonas accepts this role, but the text describes him as a 'stranger wearing her brother's shape' who has lost all memory of their relationship. While this is framed as memory loss (which is allowed), the prompt asks for contradictions where a character is 'dead or gone' but acts later. Here, Jonas is physically present and acting throughout, so this is not a contradiction of presence, but rather a consistent theme of memory loss. However, looking closer at the prompt's exclusion: 'a character losing their MEMORIES... is NOT death'. Therefore, this is not a contradiction.; In Chapter 1, Elara states the fog has been a 'slow creep a week ago; now it lunged.' In Chapter 6, she recalls 'Three minutes ago it had been a dead end. Now it was a wall of blank white nothing.' This rapid shifting is consistent with the premise. No contradiction found.; In Chapter 2, Mara gives Elara a 'small, blank journal' which she says is 'the only thing that doesn't fade.' In Chapter 5, Mara produces 'the leather-bound journal she had offered earlier' and presses it into Elara's hands. In Chapter 7, Elara takes the 'blank journal from her pocket' and writes in it. The object persists consistently.; Kael appears in Chapter 3 and urges Elara to run. He does not appear in Chapters 4, 5, 6, or 7. This is not a contradiction, as he simply left or was left behind. The text does not state he died, nor does he reappear acting alive after being declared dead.",
+      "details": {
+        "contradictions": [
+          {
+            "type": "character_identity",
+            "detail": "Jonas is identified as Elara's younger brother in the Characters list and Chapter 2. In Chapter 7, Elara explicitly states 'I am your sister' and Jonas accepts this role, but the text describes him as a 'stranger wearing her brother's shape' who has lost all memory of their relationship. While this is framed as memory loss (which is allowed), the prompt asks for contradictions where a character is 'dead or gone' but acts later. Here, Jonas is physically present and acting throughout, so this is not a contradiction of presence, but rather a consistent theme of memory loss. However, looking closer at the prompt's exclusion: 'a character losing their MEMORIES... is NOT death'. Therefore, this is not a contradiction.",
+            "severity": "minor",
+            "chapters": "2, 7"
+          },
+          {
+            "type": "timeline_logic",
+            "detail": "In Chapter 1, Elara states the fog has been a 'slow creep a week ago; now it lunged.' In Chapter 6, she recalls 'Three minutes ago it had been a dead end. Now it was a wall of blank white nothing.' This rapid shifting is consistent with the premise. No contradiction found.",
+            "severity": "minor",
+            "chapters": "1, 6"
+          },
+          {
+            "type": "object_persistence",
+            "detail": "In Chapter 2, Mara gives Elara a 'small, blank journal' which she says is 'the only thing that doesn't fade.' In Chapter 5, Mara produces 'the leather-bound journal she had offered earlier' and presses it into Elara's hands. In Chapter 7, Elara takes the 'blank journal from her pocket' and writes in it. The object persists consistently.",
+            "severity": "minor",
+            "chapters": "2, 5, 7"
+          },
+          {
+            "type": "character_presence",
+            "detail": "Kael appears in Chapter 3 and urges Elara to run. He does not appear in Chapters 4, 5, 6, or 7. This is not a contradiction, as he simply left or was left behind. The text does not state he died, nor does he reappear acting alive after being declared dead.",
+            "severity": "minor",
+            "chapters": "3"
+          },
+          {
+            "type": "physical_description",
+            "detail": "In Chapter 3, Kael notes Elara's nose is bleeding. In Chapter 5, Elara feels her nose 'itch with the promise of blood' but stops herself from anchoring. In Chapter 7, she mentions 'nosebleeds' as a past cost. This is consistent.",
+            "severity": "minor",
+            "chapters": "3, 5, 7"
+          }
+        ]
+      }
+    },
+    {
+      "id": "T2.4",
+      "name": "Premise fidelity",
+      "severity": "pass",
+      "message": "Story dramatizes the original idea. The manuscript faithfully dramatizes the core premise: Elara is a cartographer/archivist who alone remembers the fog's erasures, maps a route to a sanctuary to save her brother (the person she loves), and succeeds at the cost of her personal memories.",
+      "details": {
+        "fidelity": "high",
+        "drift": false,
+        "note": "The manuscript faithfully dramatizes the core premise: Elara is a cartographer/archivist who alone remembers the fog's erasures, maps a route to a sanctuary to save her brother (the person she loves), and succeeds at the cost of her personal memories."
+      }
+    },
+    {
+      "id": "T3",
+      "name": "Rubric",
+      "severity": "pass",
+      "message": "Rubric average 4.33 (need >= 4.0); no axis below 3",
+      "details": {
+        "scores": {
+          "arc_structure": 4,
+          "ending": 5,
+          "character_agency": 4,
+          "scene_vs_summary": 4,
+          "prose_quality": 5,
+          "cohesion": 4
+        },
+        "average": 4.33,
+        "justifications": {
+          "arc_structure": "The narrative follows a clear, escalating trajectory from the initial breach to the final sacrifice, with distinct rising action and a thematic climax.",
+          "ending": "The conclusion perfectly fulfills the premise's promise: physical safety is secured at the precise cost of personal history, avoiding any deus ex machina.",
+          "character_agency": "Elara actively drives the plot through difficult choices (rejecting Kael, sacrificing memories), though Jonas remains largely reactive to her guidance.",
+          "scene_vs_summary": "Key emotional beats are dramatized effectively in scene, particularly the interactions with Jonas and the final sacrifice, though some transitions rely on summary.",
+          "prose_quality": "The prose is evocative, controlled, and varied, using strong sensory details to convey the abstract horror of the fog without becoming purple.",
+          "cohesion": "Thematic threads regarding memory vs. presence are well-integrated, though the resolution of Kael's subplot feels slightly abrupt compared to the depth given to Mara."
+        },
+        "threshold_avg": 4.0,
+        "min_axis": 3
+      }
+    }
+  ],
+  "rubric": {
+    "scores": {
+      "arc_structure": 4,
+      "ending": 5,
+      "character_agency": 4,
+      "scene_vs_summary": 4,
+      "prose_quality": 5,
+      "cohesion": 4
+    },
+    "average": 4.33,
+    "justifications": {
+      "arc_structure": "The narrative follows a clear, escalating trajectory from the initial breach to the final sacrifice, with distinct rising action and a thematic climax.",
+      "ending": "The conclusion perfectly fulfills the premise's promise: physical safety is secured at the precise cost of personal history, avoiding any deus ex machina.",
+      "character_agency": "Elara actively drives the plot through difficult choices (rejecting Kael, sacrificing memories), though Jonas remains largely reactive to her guidance.",
+      "scene_vs_summary": "Key emotional beats are dramatized effectively in scene, particularly the interactions with Jonas and the final sacrifice, though some transitions rely on summary.",
+      "prose_quality": "The prose is evocative, controlled, and varied, using strong sensory details to convey the abstract horror of the fog without becoming purple.",
+      "cohesion": "Thematic threads regarding memory vs. presence are well-integrated, though the resolution of Kael's subplot feels slightly abrupt compared to the depth given to Mara."
+    },
+    "threshold_avg": 4.0,
+    "min_axis": 3
+  },
+  "ship": true,
+  "ship_blockers": []
+}
