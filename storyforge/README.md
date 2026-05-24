@@ -82,8 +82,21 @@ the local models can't clear the bar. The eval judge is **independent** of the
 drafter to avoid self-preference bias; the scorecard always records which models
 were used.
 
-Model presets (use with `--model` / `--judge`): `fast` (qwen3:latest),
-`quality` (qwen3.6:27b), `groq`, `deepseek`. Any litellm model id also works.
+### Choosing a model
+
+`--model` and `--judge` each accept either form:
+
+- **A preset**, when you don't care about the exact id: `fast` (qwen3:latest),
+  `quality` (qwen3.6:27b), `groq`, `deepseek`.
+- **An explicit `provider/model`**, e.g. `ollama/qwen3.6:27b`,
+  `deepseek/deepseek-chat`, `groq/llama-3.3-70b-versatile`, or any other litellm
+  id. The natural `ollama/…` prefix is normalized to litellm's chat endpoint
+  (`ollama_chat/…`) automatically, so `--model ollama/qwen3.6:27b` just works.
+
+A bare name with no provider (e.g. `qwen3.6:27b`) is passed through unchanged and
+will error unless it's a preset — name the provider explicitly. The resolved
+model is printed at startup (`• Drafting with …`) so you can confirm what was
+picked.
 
 ## Layout
 

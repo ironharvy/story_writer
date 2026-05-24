@@ -43,11 +43,28 @@ DEFAULT_DRAFT = os.getenv("SF_DRAFT_MODEL", PRESETS["fast"])
 DEFAULT_JUDGE = os.getenv("SF_JUDGE_MODEL", PRESETS["quality"])
 
 
+def _normalize_model(model: str) -> str:
+    """Accept the natural `ollama/` prefix and map it to litellm's chat endpoint.
+
+    This pipeline sends system+user chat messages, so the right litellm provider
+    is `ollama_chat/` (the `/api/chat` endpoint); plain `ollama/` would use
+    `/api/generate`. Idempotent: an already-correct `ollama_chat/…` is untouched.
+    """
+    if model.startswith("ollama/"):
+        return "ollama_chat/" + model[len("ollama/"):]
+    return model
+
+
 def resolve_model(name: str | None, fallback: str) -> str:
-    """Resolve a preset name or a raw litellm model string."""
-    if not name:
-        return fallback
-    return PRESETS.get(name, name)
+    """Resolve a preset name or a raw `provider/model` litellm string.
+
+    Presets (fast/quality/groq/deepseek) expand to their litellm ids; anything
+    else is treated as a litellm id and passed through (after `ollama/`
+    normalization). A bare token with no provider is left as-is — litellm will
+    error if it isn't a real id.
+    """
+    raw = PRESETS.get(name, name) if name else fallback
+    return _normalize_model(raw)
 
 
 def is_ollama(model: str) -> bool:

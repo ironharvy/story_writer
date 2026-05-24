@@ -92,13 +92,27 @@ def _build_overrides(args) -> dict:
     return overrides
 
 
+def _emit(console, msg: str) -> None:
+    (console.print if console else print)(msg)
+
+
+def _warn_if_bare(model: str) -> None:
+    """A resolved model with no provider prefix is usually a typo or a missing
+    provider; warn rather than let litellm fail cryptically downstream."""
+    if "/" not in model:
+        print(f"note: '{model}' has no provider prefix; passing to litellm as-is",
+              file=sys.stderr)
+
+
 def cmd_generate(args) -> int:
     console = _console()
     config.configure_logging(args.verbose)
     if config.setup_langfuse():
-        (console.print if console else print)("• Langfuse tracing enabled")
+        _emit(console, "• Langfuse tracing enabled")
 
     draft_model = config.resolve_model(args.model, config.DEFAULT_DRAFT)
+    _warn_if_bare(draft_model)
+    _emit(console, f"• Drafting with {draft_model}")
 
     if args.resume:
         if not args.run_dir:
@@ -125,8 +139,8 @@ def cmd_generate(args) -> int:
         state = json.loads((run_dir / "state.json").read_text())
         idea = idea or state.get("idea", "")
         judge_model = config.resolve_model(args.judge, config.DEFAULT_JUDGE)
-        (console.print if console else print)(
-            f"\n• Evaluating with judge {judge_model} (tier1_only={args.tier1_only})…")
+        _warn_if_bare(judge_model)
+        _emit(console, f"\n• Evaluating with judge {judge_model} (tier1_only={args.tier1_only})…")
         sc = harness.evaluate_file(ms_path, idea, draft_model=draft_model,
                                    judge_model=judge_model, tier1_only=args.tier1_only)
         harness.write_scorecard(sc, run_dir / "scorecard.json")
@@ -150,6 +164,8 @@ def cmd_eval(args) -> int:
         idea = parse_manuscript(path.read_text()).premise
     judge_model = config.resolve_model(args.judge, config.DEFAULT_JUDGE)
     draft_model = config.resolve_model(args.draft_model, "unknown")
+    _warn_if_bare(judge_model)
+    _emit(console, f"• Judge {judge_model} · recorded draft model {draft_model}")
     sc = harness.evaluate_file(path, idea, draft_model=draft_model, judge_model=judge_model,
                                tier1_only=args.tier1_only)
     out = Path(args.out) if args.out else path.with_suffix(".scorecard.json")
@@ -170,7 +186,8 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--length", choices=list(LENGTH_PRESETS))
     g.add_argument("--chapters", type=int, help="override chapter count")
     g.add_argument("--words", type=int, help="override words per chapter")
-    g.add_argument("--model", help="draft model: preset (fast/quality/groq/deepseek) or litellm id")
+    g.add_argument("--model", help="draft model: preset (fast/quality/groq/deepseek) or "
+                   "provider/model (e.g. ollama/qwen3.6:27b, deepseek/deepseek-chat)")
     g.add_argument("--run-dir", help="output dir (also used with --resume)")
     g.add_argument("--resume", action="store_true", help="resume an interrupted run")
     g.add_argument("--no-critic", action="store_true", help="skip the critic->revise pass (faster)")
@@ -179,7 +196,8 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--yes", "--non-interactive", dest="non_interactive", action="store_true",
                    help="don't ask clarifying questions; infer missing choices")
     g.add_argument("--eval", action="store_true", help="evaluate after generating")
-    g.add_argument("--judge", help="judge model for --eval")
+    g.add_argument("--judge", help="judge model for --eval: preset or provider/model "
+                   "(e.g. ollama/qwen3.6:27b)")
     g.add_argument("--tier1-only", action="store_true", help="eval: deterministic checks only")
     g.add_argument("--verbose", action="store_true")
     g.set_defaults(func=cmd_generate, yes=False)
@@ -187,8 +205,9 @@ def build_parser() -> argparse.ArgumentParser:
     e = sub.add_parser("eval", help="evaluate an existing manuscript")
     e.add_argument("manuscript")
     e.add_argument("--idea", help="original idea (for premise-fidelity); defaults to the premise")
-    e.add_argument("--judge", help="judge model: preset or litellm id")
-    e.add_argument("--draft-model", help="record which model wrote it")
+    e.add_argument("--judge", help="judge model: preset (fast/quality/groq/deepseek) or "
+                   "provider/model (e.g. ollama/qwen3.6:27b, deepseek/deepseek-chat)")
+    e.add_argument("--draft-model", help="record which model wrote it (preset or provider/model)")
     e.add_argument("--tier1-only", action="store_true")
     e.add_argument("--out", help="scorecard output path")
     e.add_argument("--verbose", action="store_true")
