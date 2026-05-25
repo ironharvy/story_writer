@@ -1,5 +1,13 @@
 # Story Writer
 
+> **New from-scratch implementation: [`storyforge/`](storyforge/).** Built to the
+> `/goal` brief in [`STORY_GOAL_PROMPT.md`](STORY_GOAL_PROMPT.md), it is an
+> outline-first generator plus a runnable evaluation harness implementing
+> [`STORY_EVAL_SPEC.md`](STORY_EVAL_SPEC.md) (deterministic + LLM-judge tiers, a
+> JSON scorecard, and a ship gate). Start at **[storyforge/README.md](storyforge/README.md)**
+> and the design rationale in **[storyforge/DESIGN_NOTE.md](storyforge/DESIGN_NOTE.md)**.
+> The sections below describe the earlier DSPy pipeline.
+
 A local-first DSPy pipeline that turns a one-line idea into a multi-chapter story.
 Runs against Ollama (or any DSPy-supported LLM), with optional Langfuse tracing.
 
