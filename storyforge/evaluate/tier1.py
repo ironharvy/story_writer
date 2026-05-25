@@ -15,6 +15,16 @@ LENGTH_FLOOR = 300
 BAND_LOW, BAND_HIGH = 800, 2500
 NAME_DRIFT_BUDGET = 2
 PHRASE_REUSE_BUDGET = 5
+# Pairwise 5-gram Jaccard above this reads as two chapters staging the same scene.
+DUPLICATE_SCENE_JACCARD = 0.18
+# Trailing characters that mark a deliberately completed sentence.
+_TERMINAL_PUNCT = set(".!?")
+# A final word that leaves the sentence hanging => truncation, not a stylistic ending.
+_DANGLING_WORDS = {
+    "and", "or", "but", "nor", "yet", "so", "because", "that", "which", "while",
+    "as", "if", "then", "than", "the", "a", "an", "to", "of", "with", "for",
+    "into", "onto", "from", "at", "by", "in", "on", "his", "her", "their", "its",
+}
 
 _STOP = set(
     """the a an and or but nor for so yet of to in on at by with from into onto over under
@@ -194,6 +204,73 @@ def t1_5_over_repetition(m: Manuscript) -> Check:
                  f"No content word exceeds {threshold} occurrences (outside top-20).")
 
 
+def t1_6_duplicate_scene(m: Manuscript) -> Check:
+    """Near-duplicate chapters: pairwise 5-gram Jaccard overlap (world/premise
+    n-grams excluded). WARN on any pair above threshold — the deterministic
+    signature of a scene staged twice (e.g. a climax written in two chapters)."""
+    context = _ngrams(_words(m.world_text))
+    per = [_ngrams(_words(c.prose)) - context for c in m.chapters]
+    pairs: list[dict] = []
+    for i in range(len(per)):
+        for j in range(i + 1, len(per)):
+            a, b = per[i], per[j]
+            union = len(a | b)
+            if not union:
+                continue
+            jac = len(a & b) / union
+            if jac >= DUPLICATE_SCENE_JACCARD:
+                pairs.append({"a": m.chapters[i].label, "b": m.chapters[j].label,
+                              "jaccard": round(jac, 3)})
+    if pairs:
+        pairs.sort(key=lambda p: -p["jaccard"])
+        detail = ", ".join(f"{p['a']}~{p['b']} ({p['jaccard']})" for p in pairs[:5])
+        return Check("T1.6", "Duplicate scene", WARN,
+                     f"{len(pairs)} chapter pair(s) overlap heavily (5-gram Jaccard >= "
+                     f"{DUPLICATE_SCENE_JACCARD}): {detail}",
+                     {"threshold": DUPLICATE_SCENE_JACCARD, "pairs": pairs})
+    return Check("T1.6", "Duplicate scene", PASS,
+                 f"No chapter pair exceeds {DUPLICATE_SCENE_JACCARD} 5-gram overlap.",
+                 {"threshold": DUPLICATE_SCENE_JACCARD})
+
+
+def t1_7_ending_completeness(m: Manuscript) -> Check:
+    """Final chapter must actually END — not get cut off mid-thought. Deterministic
+    (immune to judge hallucination): FAIL true truncation (dangling conjunction or
+    comma / no terminal punctuation); WARN stylistic dash/ellipsis. Absolute length
+    is left to T1.1 (which already gates every chapter's 300-word floor)."""
+    if not m.chapters:
+        return Check("T1.7", "Ending completeness", WARN, "No chapters to check.")
+    last = m.chapters[-1]
+    text = last.prose.strip()
+    wc = last.word_count
+    details = {"final_chapter": last.label, "word_count": wc}
+    if not text:
+        return Check("T1.7", "Ending completeness", FAIL,
+                     f"Final chapter ({last.label}) has no prose.", details)
+    # Strip trailing closing quotes/brackets to find the real sentence terminator.
+    stripped = text.rstrip("\"'”’) ")
+    last_char = stripped[-1] if stripped else ""
+    words = _WORD.findall(stripped.lower())
+    last_word = words[-1] if words else ""
+    details["tail"] = text[-60:]
+    if last_char in _TERMINAL_PUNCT:
+        return Check("T1.7", "Ending completeness", PASS,
+                     f"Final chapter ends on a complete sentence ('…{stripped[-24:]}').",
+                     details)
+    if last_char in "—–" or stripped.endswith("...") or last_char == "…":
+        return Check("T1.7", "Ending completeness", WARN,
+                     f"Final chapter ends on a dash/ellipsis ('…{text[-24:]}') — "
+                     "stylistic; verify it is intentional.", details)
+    if last_char == "," or last_word in _DANGLING_WORDS:
+        return Check("T1.7", "Ending completeness", FAIL,
+                     f"Final chapter ends mid-thought with no terminal punctuation "
+                     f"('…{text[-40:]}') — the ending appears truncated.", details)
+    return Check("T1.7", "Ending completeness", WARN,
+                 f"Final chapter does not end with terminal punctuation "
+                 f"('…{text[-40:]}').", details)
+
+
 def run_tier1(m: Manuscript) -> list[Check]:
     return [t1_1_length(m), t1_2_presence(m), t1_3_name_drift(m),
-            t1_4_phrase_reuse(m), t1_5_over_repetition(m)]
+            t1_4_phrase_reuse(m), t1_5_over_repetition(m),
+            t1_6_duplicate_scene(m), t1_7_ending_completeness(m)]

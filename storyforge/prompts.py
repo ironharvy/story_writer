@@ -83,14 +83,20 @@ def spine_prompt(spec: StorySpec, premise: Premise, bible: WorldBible) -> str:
         '"conflict": "<what opposes it>", '
         '"outcome": "<how it ends and shifts want/need>", '
         '"characters_present": ["<names>"], '
+        '"structural_role": "setup | rising | midpoint | lowest_point | climax | resolution", '
         f'"word_target": {spec.words_per_chapter}}}]}}\n\n'
         "Constraints:\n"
         f"- Exactly {spec.num_chapters} chapters, numbered 1..{spec.num_chapters}.\n"
         "- EVERY named character in the cast must appear in characters_present of at "
         "least one chapter.\n"
         "- Events must follow cause->effect; the protagonist's CHOICES (not luck) drive "
-        "each turn. The penultimate chapter is the lowest point / hardest choice; the "
-        "final chapter is climax + resolution (no new characters, no deus ex machina)."
+        "each turn.\n"
+        "- Assign exactly ONE chapter the structural_role 'climax'; ONLY that chapter "
+        "resolves the central conflict. Every chapter before it ends UNRESOLVED. The "
+        "'lowest_point' chapter ends in defeat — the protagonist has NOT yet won. NO two "
+        "chapters depict the same event or stage the same confrontation twice.\n"
+        "- The penultimate chapter is the lowest point / hardest choice; the final "
+        "chapter is climax + resolution (no new characters, no deus ex machina)."
     )
 
 
@@ -101,7 +107,7 @@ def _cast_brief(bible: WorldBible) -> str:
 
 def draft_chapter_prompt(spec: StorySpec, premise: Premise, bible: WorldBible,
                          plan: ChapterPlan, synopsis: str, prev_tail: str,
-                         avoid: list[str]) -> str:
+                         avoid: list[str], next_plan: ChapterPlan | None = None) -> str:
     rules = "; ".join(bible.rules) if bible.rules else "(none)"
     avoid_block = ""
     if avoid:
@@ -112,10 +118,34 @@ def draft_chapter_prompt(spec: StorySpec, premise: Premise, bible: WorldBible,
         context += f"\nStory so far:\n{synopsis}"
     if prev_tail:
         context += f"\nThe previous chapter ended:\n\"…{prev_tail}\""
+    reserved = ""
+    if next_plan is not None:
+        reserved = (
+            "\nReserved for LATER chapters (do NOT write or pre-empt these events now):\n"
+            f"  - Chapter {next_plan.number}: {next_plan.title} — {next_plan.summary} "
+            f"(outcome: {next_plan.outcome})")
+    role = (plan.structural_role or "").lower().strip()
+    is_climax = role in ("climax", "resolution")
+    role_guard = (
+        "- Cover ONLY this chapter's beats. Do NOT re-narrate or summarize events from "
+        "earlier chapters, and do NOT pull forward events reserved for later chapters.\n")
+    if not is_climax:
+        role_guard += (
+            "- This is NOT the climax: leave the central conflict UNRESOLVED. Do NOT "
+            "defeat the antagonist, resolve the core question, or deliver the ending. "
+            "End on a turn or hook that propels the story forward.\n")
+    if role == "lowest_point":
+        role_guard += (
+            "- This is the LOWEST POINT: it must end in defeat or the hardest choice — "
+            "the protagonist has NOT yet won.\n")
+    if is_climax:
+        role_guard += (
+            "- This IS the climax/resolution: stage the decisive confrontation and earn "
+            "the ending here; give the turning point room to land.\n")
     return (
         f"Title: {premise.title}\nLogline: {premise.logline}\nTheme: {premise.theme}\n"
         f"World rules: {rules}\nCast:\n{_cast_brief(bible)}\n"
-        f"{context}\n{avoid_block}\n\n"
+        f"{context}{reserved}\n{avoid_block}\n\n"
         f"=== Write Chapter {plan.number}: {plan.title} ===\n"
         f"Plan — summary: {plan.summary}\n"
         f"goal: {plan.goal} | conflict: {plan.conflict} | outcome: {plan.outcome}\n"
@@ -123,6 +153,7 @@ def draft_chapter_prompt(spec: StorySpec, premise: Premise, bible: WorldBible,
         f"characters present: {', '.join(plan.characters_present) or 'as needed'}\n\n"
         "Write the chapter prose now. Rules:\n"
         f"- Output ONLY the prose. No heading, no chapter number, no notes, no markdown.\n"
+        + role_guard +
         f"- Point of view: {spec.pov_label}; the narrating consciousness is "
         f"{plan.pov_character}. Never shift POV within the chapter.\n"
         f"- Refer to {plan.pov_character} by name. NEVER use placeholders like 'the "
@@ -138,6 +169,42 @@ def draft_chapter_prompt(spec: StorySpec, premise: Premise, bible: WorldBible,
         "every chapter.\n"
         "- Advance goal->conflict->outcome through the character's choices, and end on a "
         "turn or hook."
+    )
+
+
+def scene_prompt(spec: StorySpec, premise: Premise, bible: WorldBible, plan: ChapterPlan,
+                 synopsis: str, running_tail: str, avoid: list[str], beat: str,
+                 index: int, total: int, next_plan: ChapterPlan | None = None) -> str:
+    """One scene unit of a chapter, written from a single beat. Stitched by the
+    pipeline into a full chapter (scene/sequel structure, more dramatized prose)."""
+    rules = "; ".join(bible.rules) if bible.rules else "(none)"
+    avoid_block = ""
+    if avoid:
+        avoid_block = ("\nAvoid reusing these phrasings:\n"
+                       + "\n".join(f'  - "{a}"' for a in avoid[:8]))
+    role = (plan.structural_role or "").lower().strip()
+    is_climax = role in ("climax", "resolution")
+    resolve_guard = (
+        "" if is_climax else
+        "\n- This scene is NOT the climax: do not resolve the central conflict or deliver "
+        "the ending here.")
+    tail = f"\nThe story so far ends:\n\"…{running_tail}\"" if running_tail else ""
+    return (
+        f"Title: {premise.title}\nTheme: {premise.theme}\nWorld rules: {rules}\n"
+        f"Cast:\n{_cast_brief(bible)}\n"
+        f"Story so far:\n{synopsis or '(opening)'}{tail}{avoid_block}\n\n"
+        f"You are writing Chapter {plan.number}: {plan.title}, as a sequence of scenes. "
+        f"This is scene {index} of {total}.\n"
+        f"Chapter goal: {plan.goal} | conflict: {plan.conflict} | outcome: {plan.outcome}\n"
+        f"Write ONLY this beat as a fully dramatized scene:\n  \"{beat}\"\n\n"
+        "Rules:\n"
+        f"- Point of view: {spec.pov_label}, narrated by {plan.pov_character}; refer to "
+        f"{plan.pov_character} by name, never a placeholder.\n"
+        "- DRAMATIZE in scene: concrete action, dialogue, sensory detail, interiority. "
+        "Do not summarize.\n"
+        "- Continue seamlessly from the story so far; do not repeat earlier events."
+        + resolve_guard + "\n"
+        "- Output ONLY the scene prose — no heading, no labels, no markdown."
     )
 
 

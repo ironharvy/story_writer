@@ -71,6 +71,18 @@ def is_ollama(model: str) -> bool:
     return model.startswith("ollama")
 
 
+def pick_independent_judge(draft_model: str) -> str:
+    """Choose a *local* judge that differs from the drafter, so the judge never
+    self-grades. Swaps fast<->quality; a hosted/unknown drafter defaults to the
+    strong local 'quality' preset (still independent of that drafter)."""
+    draft = _normalize_model(draft_model)
+    fast = _normalize_model(PRESETS["fast"])
+    quality = _normalize_model(PRESETS["quality"])
+    if draft == quality:
+        return fast
+    return quality
+
+
 @dataclass
 class RunConfig:
     draft_model: str

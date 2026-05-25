@@ -57,7 +57,8 @@ def clean_prose(text: str) -> str:
 
 class Pipeline:
     def __init__(self, draft_model: str, run_dir: Path, cfg: config.RunConfig | None = None,
-                 use_critic: bool = True, use_derepeat: bool = True, console=None):
+                 use_critic: bool = True, use_derepeat: bool = True, console=None,
+                 climax_model: str = "", scene_level: bool = False):
         self.model = draft_model
         self.cfg = cfg or config.RunConfig(draft_model=draft_model, judge_model=draft_model,
                                            temperature=0.8)
@@ -65,7 +66,17 @@ class Pipeline:
         self.use_critic = use_critic
         self.use_derepeat = use_derepeat
         self.console = console
+        # Optional escalation: a stronger model used ONLY for the climax chapter,
+        # bounding cost to one chapter while lifting the most important scene.
+        self.climax_model = climax_model
+        self.scene_level = scene_level
         (self.run_dir / "chapters").mkdir(parents=True, exist_ok=True)
+
+    def _chapter_model(self, plan: ChapterPlan) -> str:
+        """The model to draft a given chapter — escalate the climax if configured."""
+        if self.climax_model and (plan.structural_role or "").lower() in ("climax", "resolution"):
+            return self.climax_model
+        return self.model
 
     # --- io ---
     def _say(self, msg: str) -> None:
@@ -150,18 +161,28 @@ class Pipeline:
                 summary=_s(c, "summary"), beats=_slist(c, "beats"),
                 goal=_s(c, "goal"), conflict=_s(c, "conflict"), outcome=_s(c, "outcome"),
                 characters_present=_slist(c, "characters_present") or [protagonist],
+                structural_role=_s(c, "structural_role").lower().strip(),
                 word_target=max(900, wt)))
         plans.sort(key=lambda p: p.number)
         for i, p in enumerate(plans, 1):
             p.number = i
+        # Guarantee exactly one climax: if the model assigned none (or several),
+        # the final chapter is the climax+resolution per the spine prompt.
+        if sum(1 for p in plans if p.structural_role == "climax") != 1 and plans:
+            for p in plans:
+                if p.structural_role == "climax":
+                    p.structural_role = "rising"
+            plans[-1].structural_role = "climax"
         return plans
 
     # --- drafting ---
     def draft_chapter(self, spec: StorySpec, premise: Premise, bible: WorldBible,
                       plan: ChapterPlan, synopsis: str, prev_tail: str,
-                      avoid: list[str]) -> str:
-        prompt = prompts.draft_chapter_prompt(spec, premise, bible, plan, synopsis, prev_tail, avoid)
-        prose = clean_prose(llm.complete(prompt, system=prompts.GEN_SYSTEM, model=self.model,
+                      avoid: list[str], next_plan: ChapterPlan | None = None) -> str:
+        model = self._chapter_model(plan)
+        prompt = prompts.draft_chapter_prompt(spec, premise, bible, plan, synopsis,
+                                              prev_tail, avoid, next_plan)
+        prose = clean_prose(llm.complete(prompt, system=prompts.GEN_SYSTEM, model=model,
                                          cfg=self.cfg, temperature=0.85, max_tokens=8192,
                                          trace_name=f"draft-ch{plan.number}"))
         # Word-floor guard: expand if the model came in thin.
@@ -174,11 +195,42 @@ class Pipeline:
                 prompt + f"\n\nYour draft was too short. Expand it to about "
                 f"{plan.word_target} words by deepening scenes (more action, dialogue, "
                 "sensory detail) — do not summarize. Output ONLY the prose.",
-                system=prompts.GEN_SYSTEM, model=self.model, cfg=self.cfg, temperature=0.85,
+                system=prompts.GEN_SYSTEM, model=model, cfg=self.cfg, temperature=0.85,
                 max_tokens=8192, trace_name=f"draft-ch{plan.number}-expand"))
         if self.use_critic:
             prose = self._critic_pass(spec, plan, synopsis, prose)
         return prose
+
+    def draft_chapter_scenes(self, spec: StorySpec, premise: Premise, bible: WorldBible,
+                             plan: ChapterPlan, synopsis: str, prev_tail: str,
+                             avoid: list[str], next_plan: ChapterPlan | None = None) -> str:
+        """Scene-level redraft: write each beat as its own dramatized scene, then
+        stitch. Lifts scene_vs_summary / character_agency at the cost of more LLM
+        calls — gated behind --scene-level / auto-triggered on a persistently low axis."""
+        beats = [b for b in (plan.beats or []) if b.strip()] or [plan.summary or plan.title]
+        model = self._chapter_model(plan)
+        scenes: list[str] = []
+        running = prev_tail
+        for i, beat in enumerate(beats, 1):
+            try:
+                prose = clean_prose(llm.complete(
+                    prompts.scene_prompt(spec, premise, bible, plan, synopsis, running,
+                                         avoid, beat, i, len(beats), next_plan),
+                    system=prompts.GEN_SYSTEM, model=model, cfg=self.cfg, temperature=0.85,
+                    max_tokens=4096, trace_name=f"scene-ch{plan.number}-{i}"))
+            except llm.LLMError:
+                continue
+            if prose:
+                scenes.append(prose)
+                running = " ".join(prose.split()[-120:])
+        stitched = "\n\n".join(scenes).strip()
+        if not stitched:
+            # Fall back to the single-shot drafter if scene assembly produced nothing.
+            return self.draft_chapter(spec, premise, bible, plan, synopsis, prev_tail,
+                                      avoid, next_plan)
+        if self.use_critic:
+            stitched = self._critic_pass(spec, plan, synopsis, stitched)
+        return stitched
 
     def _critic_pass(self, spec: StorySpec, plan: ChapterPlan, synopsis: str, prose: str) -> str:
         try:
@@ -274,7 +326,7 @@ class Pipeline:
                 revised = clean_prose(llm.complete(
                     prompts.polish_chapter_prompt(spec, premise, bible, plan, ch.prose,
                                                   synopsis, notes, ch.number in climax_numbers),
-                    system=prompts.GEN_SYSTEM, model=self.model, cfg=self.cfg,
+                    system=prompts.GEN_SYSTEM, model=self._chapter_model(plan), cfg=self.cfg,
                     temperature=0.75, max_tokens=8192, trace_name=f"polish-ch{ch.number}"))
             except llm.LLMError:
                 continue
@@ -289,6 +341,35 @@ class Pipeline:
         manuscript = self.assemble(state)
         (self.run_dir / "manuscript.md").write_text(manuscript)
         self._say(f"✓ Polished manuscript ({_wc(manuscript)} words)")
+        return self.run_dir / "manuscript.md"
+
+    def redraft_scene_level(self, state: RunState) -> Path:
+        """Rebuild every chapter scene-by-scene from the existing spine. Used as an
+        auto-escalation when scene_vs_summary / character_agency stay below floor."""
+        spec, premise, bible = state.spec, state.premise, state.bible
+        spine_by_num = {p.number: p for p in state.spine}
+        rebuilt: list[Chapter] = []
+        for plan in sorted(state.spine, key=lambda p: p.number):
+            synopsis = "\n".join(f"Ch{c.number} ({c.title}): {c.summary}"
+                                 for c in rebuilt if c.summary)
+            prev_tail = " ".join(rebuilt[-1].prose.split()[-120:]) if rebuilt else ""
+            avoid = self._avoid_list(RunState(idea=state.idea, chapters=list(rebuilt)))
+            self._say(f"• Scene-level redraft chapter {plan.number}: {plan.title}")
+            prose = self.draft_chapter_scenes(spec, premise, bible, plan, synopsis,
+                                              prev_tail, avoid, spine_by_num.get(plan.number + 1))
+            summary = self.summarize_chapter(plan, prose)
+            rebuilt.append(Chapter(number=plan.number, title=plan.title, prose=prose,
+                                   summary=summary))
+            (self.run_dir / "chapters" / f"ch{plan.number:02d}.md").write_text(
+                f"### Chapter {plan.number}: {plan.title}\n\n{prose}\n")
+            self._save(state)
+        state.chapters = rebuilt
+        self._save(state)
+        if self.use_derepeat:
+            self.derepeat(state, rounds=2)
+        manuscript = self.assemble(state)
+        (self.run_dir / "manuscript.md").write_text(manuscript)
+        self._say(f"✓ Scene-level redraft complete ({_wc(manuscript)} words)")
         return self.run_dir / "manuscript.md"
 
     # --- assembly ---
@@ -380,6 +461,7 @@ class Pipeline:
         self._say(f"  {len(state.spine)} chapters planned")
 
         done = state.drafted_numbers()
+        spine_by_num = {p.number: p for p in state.spine}
         for plan in state.spine:
             if plan.number in done:
                 continue
@@ -387,8 +469,11 @@ class Pipeline:
             prev_tail = ""
             if state.chapters:
                 prev_tail = " ".join(state.chapters[-1].prose.split()[-120:])
-            prose = self.draft_chapter(spec, state.premise, state.bible, plan,
-                                       state.synopsis(), prev_tail, self._avoid_list(state))
+            next_plan = spine_by_num.get(plan.number + 1)
+            drafter = self.draft_chapter_scenes if self.scene_level else self.draft_chapter
+            prose = drafter(spec, state.premise, state.bible, plan,
+                            state.synopsis(), prev_tail, self._avoid_list(state),
+                            next_plan)
             summary = self.summarize_chapter(plan, prose)
             ch = Chapter(number=plan.number, title=plan.title, prose=prose, summary=summary)
             state.chapters.append(ch)

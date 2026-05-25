@@ -19,6 +19,13 @@ def test_tier1_only_cannot_ship_but_reports_checks():
     assert sc["rubric"] == {}
 
 
+def test_t1_7_truncated_ending_is_a_ship_blocker():
+    sc = harness.evaluate((FIX / "truncated_ending.md").read_text(), "a dying queen's decree",
+                          draft_model="x", judge_model="y", tier1_only=True)
+    assert sc["ship"] is False
+    assert any(b.startswith("T1.7 FAIL") for b in sc["ship_blockers"])
+
+
 def test_soft_budget_blockers():
     over_drift = {"T1.3": Check("T1.3", "Name drift", WARN, "", {"flags": [1, 2, 3]})}
     assert harness._soft_budget_blockers(over_drift)  # 3 > 2

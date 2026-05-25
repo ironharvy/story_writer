@@ -149,3 +149,27 @@ def test_t1_5_over_repetition_warns():
 
 def test_t1_5_clean_passes():
     assert tier1.t1_5_over_repetition(load("clean_small.md")).severity == PASS
+
+
+# --- T1.6 duplicate scene -----------------------------------------------------
+
+def test_t1_6_duplicate_scene_warns():
+    c = tier1.t1_6_duplicate_scene(load("duplicate_scene.md"))
+    assert c.severity == WARN
+    assert c.details["pairs"]
+    assert c.details["pairs"][0]["jaccard"] >= tier1.DUPLICATE_SCENE_JACCARD
+
+
+def test_t1_6_clean_passes():
+    assert tier1.t1_6_duplicate_scene(load("clean_small.md")).severity == PASS
+
+
+# --- T1.7 ending completeness -------------------------------------------------
+
+def test_t1_7_truncated_ending_fails():
+    c = tier1.t1_7_ending_completeness(load("truncated_ending.md"))
+    assert c.severity == FAIL
+
+
+def test_t1_7_clean_passes():
+    assert tier1.t1_7_ending_completeness(load("clean_small.md")).severity == PASS

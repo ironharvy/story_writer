@@ -1,7 +1,7 @@
 """Run all tiers, assemble the JSON scorecard, and decide ship: true|false.
 
 Ship gate (STORY_EVAL_SPEC.md):
-  1. zero Tier-1 FAIL (T1.1 length floor, T1.2 character presence)
+  1. zero Tier-1 FAIL (T1.1 length floor, T1.2 character presence, T1.7 ending)
   2. zero Tier-2 FAIL (T2.1 POV, T2.2 naming, T2.3 contradictions, T2.4 fidelity)
   3. Tier-3 rubric average >= 4.0, no axis < 3
   4. soft budgets: name-drift <= 2, phrase-reuse <= 5, no over-repetition flagged
@@ -65,7 +65,7 @@ def evaluate(
 
     # --- ship gate ---
     blockers: list[str] = []
-    for gate in ("T1.1", "T1.2"):
+    for gate in ("T1.1", "T1.2", "T1.7"):
         c = by_id.get(gate)
         if c and c.severity == FAIL:
             blockers.append(f"{gate} FAIL: {c.message}")

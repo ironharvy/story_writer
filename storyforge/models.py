@@ -72,6 +72,8 @@ class ChapterPlan:
     outcome: str = ""        # how it shifts the story (and the want/need)
     characters_present: list[str] = field(default_factory=list)
     word_target: int = 1200
+    # setup | rising | midpoint | lowest_point | climax | resolution
+    structural_role: str = ""
 
 
 @dataclass

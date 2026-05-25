@@ -39,3 +39,27 @@ def test_empty_or_none_uses_normalized_fallback():
 def test_normalized_ollama_is_still_detected_as_ollama():
     assert config.is_ollama(config.resolve_model("ollama/qwen3:latest", "X"))
     assert config.is_ollama(config.resolve_model("quality", "X"))
+
+
+# --- independent judge selection (no self-grading) ----------------------------
+
+def test_pick_independent_judge_never_equals_draft():
+    fast = config.resolve_model("fast", "X")
+    quality = config.resolve_model("quality", "X")
+    # draft fast -> judge quality; draft quality -> judge fast; neither equals draft
+    assert config.pick_independent_judge(fast) == quality
+    assert config.pick_independent_judge(quality) == fast
+    assert config.pick_independent_judge(fast) != fast
+    assert config.pick_independent_judge(quality) != quality
+
+
+def test_pick_independent_judge_hosted_defaults_to_local_quality():
+    quality = config.resolve_model("quality", "X")
+    assert config.pick_independent_judge("deepseek/deepseek-chat") == quality
+    assert config.pick_independent_judge("groq/llama-3.3-70b-versatile") == quality
+
+
+def test_pick_independent_judge_handles_ollama_prefix():
+    # the bare ollama/ form of the draft must still resolve to a different judge
+    quality = config.resolve_model("quality", "X")
+    assert config.pick_independent_judge("ollama/qwen3:latest") == quality

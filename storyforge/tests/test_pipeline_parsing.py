@@ -7,7 +7,7 @@ requested. The pipeline must degrade gracefully instead of crashing with
 from __future__ import annotations
 
 from storyforge import config, llm, pipeline
-from storyforge.models import Premise, StorySpec
+from storyforge.models import Character, Premise, StorySpec, WorldBible
 
 
 def _pipe(tmp_path):
@@ -38,3 +38,38 @@ def test_gen_premise_tolerates_non_dict(tmp_path, monkeypatch):
     monkeypatch.setattr(llm, "complete_json", lambda *a, **k: "oops not json object")
     prem = _pipe(tmp_path).gen_premise("idea", StorySpec())
     assert prem.title == "Untitled"
+
+
+def _bible():
+    return WorldBible(characters=[Character(name="Mara", role="protagonist"),
+                                  Character(name="Tomas", role="ally")])
+
+
+def _spine_rows(roles):
+    return {"chapters": [
+        {"number": i, "title": f"Ch{i}", "summary": "s", "beats": ["b"],
+         "structural_role": role} for i, role in enumerate(roles, 1)]}
+
+
+def test_gen_spine_records_structural_role(tmp_path, monkeypatch):
+    roles = ["setup", "rising", "midpoint", "lowest_point", "climax"]
+    monkeypatch.setattr(llm, "complete_json", lambda *a, **k: _spine_rows(roles))
+    spine = _pipe(tmp_path).gen_spine(StorySpec(), Premise(title="T"), _bible())
+    assert [p.structural_role for p in spine] == roles
+
+
+def test_gen_spine_forces_exactly_one_climax_when_model_omits_it(tmp_path, monkeypatch):
+    # Model assigned no climax at all -> the final chapter must become the climax.
+    roles = ["setup", "rising", "midpoint", "lowest_point", "rising"]
+    monkeypatch.setattr(llm, "complete_json", lambda *a, **k: _spine_rows(roles))
+    spine = _pipe(tmp_path).gen_spine(StorySpec(), Premise(title="T"), _bible())
+    climaxes = [p.number for p in spine if p.structural_role == "climax"]
+    assert climaxes == [spine[-1].number]
+
+
+def test_gen_spine_collapses_multiple_climaxes(tmp_path, monkeypatch):
+    # Two climaxes -> exactly one remains (the last chapter).
+    roles = ["setup", "climax", "midpoint", "climax", "resolution"]
+    monkeypatch.setattr(llm, "complete_json", lambda *a, **k: _spine_rows(roles))
+    spine = _pipe(tmp_path).gen_spine(StorySpec(), Premise(title="T"), _bible())
+    assert sum(1 for p in spine if p.structural_role == "climax") == 1
