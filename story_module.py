@@ -20,7 +20,8 @@ from dataclasses import dataclass
 import dspy
 
 from _compat import observe
-from story import PlanEntry, WorldBible, act_hint_for_chapter
+from core.foundation import act_hint_for_chapter
+from core.types import PlanEntry, WorldBible
 
 logger = logging.getLogger(__name__)
 

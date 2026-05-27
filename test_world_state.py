@@ -1,4 +1,4 @@
-from world_state import WorldState, render_world_state
+from core.types import WorldState, render_world_state
 
 
 def test_world_state_recent_events_defaults_empty():

@@ -1,66 +1,27 @@
-"""Mutable world state that evolves chapter-by-chapter.
+"""Variant B (world-state) chapter drafting.
 
-The *world bible* (rules, character/location profiles, backstory timeline) is
-the static canon produced before drafting begins. ``WorldState`` is the part
-that *changes* as the story unfolds: where characters are and what they know,
-how locations have changed, which plot threads are open, where we are on the
-story clock, and what happened in recent chapters.
+Carries a structured :class:`~core.types.WorldState` across chapters instead
+of variant A's freeform ``story_so_far`` summary. The world bible is the
+static canon; ``WorldState`` is what mutates: where characters are and what
+they know, how locations have changed, open plot threads, the story clock,
+recent events.
 
-This module is a parallel alternative to the freeform ``story_so_far`` summary
-used by :mod:`pipeline`; it reuses :func:`story.act_hint_for_chapter` and the
-:class:`story.WorldBible` produced by :func:`pipeline.build_world_bible`.
+Foundation stages (idea/premise/spine/world-bible/chapter-plan) live in
+``core.foundation``; the ``WorldState`` dataclass and renderer live in
+``core.types``. Once the registry refactor (Phase 7) lands, this file
+becomes ``generators/world_state.py``.
 """
 
 import logging
-from dataclasses import dataclass, field
 
 import dspy
 
 import ui
 from _compat import observe
-from story import WorldBible, act_hint_for_chapter
+from core.foundation import act_hint_for_chapter
+from core.types import WorldBible, WorldState, render_world_state
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class WorldState:
-    """A snapshot of everything that changes while the story is being told."""
-
-    story_clock: str
-    characters: list[str]
-    locations: list[str]
-    plot_threads: list[str]
-    key_objects: list[str]
-    recent_events: list[str] = field(default_factory=list)
-
-
-def render_world_state(state: WorldState) -> str:
-    """Render a ``WorldState`` as a human-readable markdown block."""
-
-    def _bullets(items: list[str]) -> str:
-        return "\n".join(f"- {item}" for item in items) if items else "- (none)"
-
-    return "\n".join(
-        [
-            f"**Story clock:** {state.story_clock}",
-            "",
-            "**Characters (current state):**",
-            _bullets(state.characters),
-            "",
-            "**Locations (current state):**",
-            _bullets(state.locations),
-            "",
-            "**Open plot threads:**",
-            _bullets(state.plot_threads),
-            "",
-            "**Key objects:**",
-            _bullets(state.key_objects),
-            "",
-            "**Recent events:**",
-            _bullets(state.recent_events),
-        ]
-    )
 
 
 @observe()

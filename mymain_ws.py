@@ -8,7 +8,7 @@ import logging
 
 from dotenv import load_dotenv
 
-from artifact import initialize_artifact, update_artifact
+from core.artifact import initialize_artifact, update_artifact
 from mymain import (
     configure_logging,
     configure_runtime,

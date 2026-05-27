@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 from dspy_runtime import DSPyConfig, configure_dspy
 from logging_config import setup_logging
-from artifact import update_artifact, initialize_artifact
+from core.artifact import initialize_artifact, update_artifact
 from pipeline import write
 
 

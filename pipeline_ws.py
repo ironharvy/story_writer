@@ -1,49 +1,32 @@
-"""Story pipeline variant that tracks a structured world state.
+"""Variant B (world-state) pipeline: foundation → world state → drafting loop.
 
-Identical to :mod:`pipeline` up to and including :func:`pipeline.build_world_bible`.
-From there it maintains a :class:`world_state.WorldState` instead of a freeform
-``story_so_far`` summary: the world bible is the static canon, and the world
-state is what mutates chapter by chapter.
+Shares the foundation (idea/premise/spine/world-bible) with variants A and C
+via :func:`core.foundation.build_foundation`, then maintains a structured
+:class:`~core.types.WorldState` across chapters instead of A's freeform
+``story_so_far`` summary.
+
+Once the registry refactor (Phase 7) lands, the body of :func:`write` becomes
+the entry point of ``generators/world_state.py``.
 """
 
 import logging
 
 from _compat import observe
-from artifact import update_artifact
-from pipeline import _snip, build_world_bible
-from story import (
-    run_clarify_idea,
+from core.artifact import update_artifact
+from core.foundation import (
+    _snip,
+    build_foundation,
     run_generate_chapters_plan,
-    run_generate_core_premise,
-    run_generate_spine,
     sanity_check,
 )
+from core.types import render_world_state
 from world_state import (
-    render_world_state,
     run_advance_world_state,
     run_draft_chapter_with_state,
     run_init_world_state,
 )
 
 logger = logging.getLogger(__name__)
-
-
-@observe()
-def _build_foundation(idea: str, title: str, output_file: str):
-    """Run the shared idea → premise → spine → world bible steps."""
-    updated_idea, story_title = run_clarify_idea(idea, title)
-    update_artifact(output_file, "Story Title", story_title)
-
-    core_premise = run_generate_core_premise(updated_idea)
-    update_artifact(output_file, "Core Premise", core_premise)
-    logger.info("STEP core_premise | output=%s", _snip(core_premise, 600))
-
-    spine = run_generate_spine(updated_idea, core_premise)
-    update_artifact(output_file, "Spine", spine)
-    logger.info("STEP spine | output=%s", _snip(spine, 800))
-
-    world_bible = build_world_bible(updated_idea, story_title, spine, output_file)
-    return updated_idea, story_title, spine, world_bible
 
 
 @observe()
@@ -129,7 +112,7 @@ def _draft_chapters(
 @observe()
 def write(idea: str, title: str, output_file: str, number_of_chapters: int = 7) -> None:
     """Run the world-state story pipeline end to end."""
-    updated_idea, story_title, spine, world_bible = _build_foundation(
+    updated_idea, story_title, spine, world_bible = build_foundation(
         idea, title, output_file
     )
 
