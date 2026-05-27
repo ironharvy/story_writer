@@ -41,19 +41,18 @@ ruff format --check .                 # Check formatting without changes
 
 ### Running the Application
 ```bash
-python main.py                        # Basic run with default model
-python main.py --enable-images       # With image generation
-python main.py -v                    # Verbose (INFO)
-python main.py -vv                   # LLM debug logging
-python main.py -vvv                  # Full HTTP+LLM firehose
+python main.py --list-strategies                          # See registered generators
+python main.py --idea "..." --title "..." -v              # Run with default (baseline)
+python main.py --strategy world_state --idea "..." -vv    # LLM debug
+python main.py --strategy dspy_module -vvv                # Full HTTP+LLM firehose
 ```
 
 ### Code Quality Checks
 ```bash
-pylint main.py story_modules.py        # Design smell detection
-radon cc main.py -s -n C               # Cyclomatic complexity (flag C and worse)
-radon mi main.py -s                     # Maintainability index
-vulture . --min-confidence 80           # Dead code detection
+pylint main.py core/foundation.py generators/baseline.py    # Design smell detection
+radon cc main.py core/foundation.py -s -n C                 # Cyclomatic complexity (flag C and worse)
+radon mi main.py -s                                         # Maintainability index
+vulture . --min-confidence 80                               # Dead code detection
 ```
 
 ### DSPy Pipeline Optimization
@@ -62,6 +61,12 @@ python scripts/optimize_text_pipeline.py \
   --model openai/gpt-4o-mini \
   --manifest .tmp/dspy_optimized/text_pipeline_manifest.json
 ```
+
+### Benchmark Harness (Goal Function)
+```bash
+python -m bench.criteria .tmp/story.md     # Tier-1 deterministic scorecard against bench/eval-spec.md
+```
+Full multi-fixture / multi-generator harness lives in `bench/` (in progress).
 
 ## Architecture & Design Rules
 
@@ -94,6 +99,50 @@ refactor violations when touching existing code.
 
 ### Module Size
 - **One module, one domain.** If a file exceeds ~300 lines or contains more than one conceptual domain (e.g., Pydantic models + DSPy modules + text utilities), split it. A file named `story_modules.py` should not also be the home of generic text-cleaning utilities.
+
+### Generator Lifecycle (variant retirement policy)
+
+Chapter-drafting variants live under `generators/` as registered plug-ins
+(see `generators/__init__.py`). Each generator carries a **status** that
+determines how it's surfaced and when it's retired.
+
+- **`experimental`** — new variant. Run only via explicit `--strategy <id>`;
+  included in benchmark sweeps. Owner has ~4 weeks to promote or it
+  auto-deprecates. Ships with at least one bench fixture covering the
+  niche it claims and a smoke test under `tests/generators/`.
+- **`promoted`** — eligible to be the default. Must win the goal function
+  (see `bench/eval-spec.md`) on ≥ 50% of fixtures against the existing
+  promoted set, or fill a documented niche (e.g. fastest path, or the
+  only one with structured continuity carry).
+- **`deprecated`** — kept registered for one release cycle so users on
+  `--strategy <id>` get a deprecation warning. **Deleted** (not archived)
+  after that cycle. The git history is the archive.
+
+**Cap: 4 promoted concurrently.** Adding a fifth forces a retirement
+decision before the fifth can be promoted.
+
+**Adding a generator:**
+1. New file under `generators/<id>.py` with `@register(id, status="experimental", description)`.
+2. Implement `draft(self, inp: DraftingInput) -> DraftingOutput`.
+3. Smoke test under `tests/generators/test_<id>.py`.
+4. At least one bench fixture under `bench/fixtures/` that exercises the
+   variant's claimed niche.
+5. Run the benchmark harness against the new generator + the current
+   promoted set; ship the scorecard with the PR.
+
+**Promoting:** edit `status="promoted"` in the `@register(...)` call and
+in the class-level `status` attribute. Document the promotion criterion
+that was met.
+
+**Deprecating:** edit `status="deprecated"`. Open a follow-up tracking
+issue with the deletion date.
+
+**Deleting:** rip out the file. No special process — the registry is
+file-discovered (`pkgutil.iter_modules`) so deletion is the retirement.
+
+Closed PRs for variants that were prototyped as sibling pipelines (rather
+than registry plug-ins) are tracked in `docs/deferred-generators.md` with
+re-land checklists keyed to this lifecycle.
 
 ## Code Style Guidelines
 
@@ -234,24 +283,46 @@ def test_specific_function():
 ```
 
 ### File Organization
-- `main.py` - Thin CLI entry point (parse args, setup, run, save)
-- `cli.py` - Argument parsing (`build_arg_parser`)
-- `models.py` - Pipeline dataclasses (`GenerationParams`, `ImageArtifacts`, `StoryFoundation`, `StoryRunArtifacts`)
-- `pipeline.py` - Orchestration with `@observe()` tracing and feedback loops
-- `ui.py` - Rich-based interactive UI (no business logic)
-- `output.py` - Incremental `update_artifact()` and final `save_story_output()`
-- `qa.py` - Post-generation quality checks
-- `story_modules.py` - Core story generation modules
-- `world_bible_modules.py` - World bible generation
-- `world_bible.py` - Structured `WorldBible` Pydantic model
-- `image_gen.py` - Replicate image generation
-- `logging_config.py` - Centralized logging setup
-- `dspy_runtime.py` - Shared DSPy LM configuration
-- `dspy_optimization.py` - Module loading/optimization
-- `_compat.py` - Compatibility shims (Langfuse `@observe()` fallback)
-- `exceptions.py` - Recoverable exception definitions
-- `postprocessing.py` - Post-generation text utilities
-- `test_*.py` - Test files (mirror module structure)
+
+**Top-level orchestrator + shared runtime:**
+- `main.py` — single CLI entry point; selects a generator via `--strategy` and orchestrates foundation → chapters_plan → dispatch.
+- `dspy_runtime.py` — `DSPyConfig` + `configure_dspy`. Provider-agnostic.
+- `logging_config.py` — centralised logging setup (verbosity levels, file handler).
+- `ui.py` — Rich-based interactive UI; *only* the orchestrator and (currently) the foundation `run_*` stages talk to it. Business logic must not import `rich`.
+- `_compat.py` — Langfuse `@observe()` fallback shim.
+- `exceptions.py` — recoverable exception tuples consumed by `dspy_runtime`.
+
+**`core/` — shared foundation (one module, one domain):**
+- `core/types.py` — `WorldBible`, `PlanEntry`, `Character`, `WorldState`, `render_world_state`, the generator-protocol dataclasses (`DraftingInput`, `DraftingOutput`, `DraftedChapter`) and the `StoryGenerator` `Protocol`.
+- `core/artifact.py` — incremental markdown writer (`initialize_artifact`, `update_artifact`).
+- `core/foundation.py` — idea → premise → spine → world-bible → chapter-plan stages, the act/spine slicer, `sanity_check`, `build_foundation`, `build_world_bible`.
+
+**`generators/` — registered drafting variants:**
+- `generators/__init__.py` — registry, `@register`, `get(id)`, `promoted()`, auto-discovery via `pkgutil`.
+- `generators/baseline.py` — variant A (rolling story-so-far summary). Reuses `story.run_enhance_chapter` + `story.run_generate_story_so_far`.
+- `generators/world_state.py` — variant B (structured `WorldState` carry). Reuses `world_state.run_init_world_state` + `run_advance_world_state` + `run_draft_chapter_with_state`.
+- `generators/dspy_module.py` — variant C (per-chapter `ChainOfThought(DraftChapter)`, no continuity carry). Reuses `story_module.DraftChapter`.
+
+**Per-variant helpers (used by generators, not directly callable):**
+- `story.py` — variant-A drafting helpers (`run_enhance_chapter`, `run_generate_story_so_far`).
+- `world_state.py` — variant-B drafting helpers (`run_init_world_state`, `run_advance_world_state`, `run_draft_chapter_with_state`).
+- `story_module.py` — `DraftChapter` / `StoryOutline` / `WriteStory` signatures + module.
+
+**Goal function & benchmark:**
+- `bench/eval-spec.md` — Tier-1/2/3 evaluation spec (the objective function).
+- `bench/criteria.py` — Tier-1 deterministic runner; wraps `qa.run_all` with the spec's 300-word floor + budgets.
+- `bench/rubric.md` — Tier-3 qualitative rubric.
+
+**Post-generation analysis:**
+- `qa.py` — name-drift, character-presence, chapter-length, cross-chapter 5-gram phrase reuse, content-word over-repetition.
+- `pov_check.py` — LLM-judged POV consistency.
+- `story_linter.py` — placeholder/canonical-name lint pass.
+- `scripts/` — CLI wrappers (`run_qa.py`, `check_pov.py`, `lint_story.py`, `word_count.py`, `render_story.py`, `optimize_text_pipeline.py`, `fetch_langfuse_traces.py`).
+
+**Tests** (`tests/`):
+- `tests/test_registry.py` — registry/protocol contract (no LLM).
+- `tests/test_generators.py` — structural smoke: every variant registers + exposes protocol metadata.
+- Top-level `test_*.py` — qa / pov / linter / world-state / story_module fixtures.
 
 ### Docstrings
 ```python
