@@ -99,5 +99,5 @@ python -m bench.criteria path/to/story.md            # apply bench/eval-spec.md 
 ## Tests
 
 ```bash
-pytest --ignore=archive -q
+pytest -q
 ```
