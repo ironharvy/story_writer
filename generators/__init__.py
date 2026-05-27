@@ -76,3 +76,15 @@ def get(id: str) -> GeneratorEntry:
 def promoted() -> list[GeneratorEntry]:
     """All currently-promoted generators, in registration order."""
     return [e for e in REGISTRY.values() if e.status == "promoted"]
+
+
+# --- auto-discovery ---------------------------------------------------------
+# Importing this package walks its submodules so every variant registers
+# itself, regardless of what the caller imports explicitly. This makes
+# `generators.REGISTRY` correct from a fresh interpreter without the caller
+# having to remember the file names.
+import importlib as _importlib
+import pkgutil as _pkgutil
+
+for _finder, _name, _ispkg in _pkgutil.iter_modules(__path__):
+    _importlib.import_module(f"{__name__}.{_name}")
