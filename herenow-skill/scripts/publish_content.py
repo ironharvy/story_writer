@@ -27,7 +27,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 HERENOW_BASE = "https://here.now"
 HERENOW_HOST = "here.now"
@@ -44,7 +44,7 @@ EXTRA_TYPES = {
 }
 
 
-def die(msg: str) -> "NoReturn":  # type: ignore[name-defined]
+def die(msg: str) -> NoReturn:
     # msg here is always locally constructed, never server-supplied.
     print(json.dumps({"ok": False, "stage": "client", "error_summary": msg}), file=sys.stdout)
     sys.exit(1)

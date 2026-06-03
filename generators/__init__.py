@@ -28,6 +28,8 @@ Adding a generator:
 """
 from __future__ import annotations
 
+import importlib
+import pkgutil
 from dataclasses import dataclass
 from typing import Callable, Type
 
@@ -79,12 +81,9 @@ def promoted() -> list[GeneratorEntry]:
 
 
 # --- auto-discovery ---------------------------------------------------------
-# Importing this package walks its submodules so every variant registers
-# itself, regardless of what the caller imports explicitly. This makes
-# `generators.REGISTRY` correct from a fresh interpreter without the caller
-# having to remember the file names.
-import importlib as _importlib
-import pkgutil as _pkgutil
-
-for _finder, _name, _ispkg in _pkgutil.iter_modules(__path__):
-    _importlib.import_module(f"{__name__}.{_name}")
+# Walks this package's submodules so every variant registers itself,
+# regardless of what the caller imports explicitly. This makes
+# `generators.REGISTRY` correct from a fresh interpreter without the
+# caller having to remember the file names.
+for _finder, _name, _ispkg in pkgutil.iter_modules(__path__):
+    importlib.import_module(f"{__name__}.{_name}")

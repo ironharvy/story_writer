@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-import generators  # auto-loads variants into REGISTRY
+import generators  # noqa: F401 — populates REGISTRY for select_generators()
 from bench.criteria import Scorecard
 from bench.run import Fixture, load_fixtures, select_generators
 from bench.score import render_fixture_table, walk_run_root
