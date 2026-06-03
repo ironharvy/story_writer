@@ -13,8 +13,8 @@ not formal traceability.
 
 ## User stories
 
-- As an author, I give a one-line idea and get a multi-chapter story file.
-- As an author, I review and correct each foundation step before it locks in.
+- As an author, I give an idea and get a multi-chapter story file.
+- As an author, I can review and correct each foundation step before it locks in.
 - As an author, an interrupted run keeps everything produced so far.
 - As a tinkerer, I run the same idea through different models/variants and get a
   comparable QA report for each.
@@ -22,7 +22,7 @@ not formal traceability.
 ## Functional requirements
 
 **Input & config**
-- FR-1 Accept a story idea, optional title, and chapter count (default 7).
+- FR-1 Accept a story idea, optional title, and story size (short story, novellette, novella, novel).
 - FR-2 Accept model / provider / token / context / cache config via CLI flags
   and `.env`; default to local Ollama.
 
