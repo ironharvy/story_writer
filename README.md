@@ -1,7 +1,7 @@
 # Story Writer
 
-A local-first DSPy pipeline that turns a one-line idea into a multi-chapter
-story. Runs against Ollama (or any DSPy-supported LLM), with optional Langfuse
+A DSPy pipeline that turns users idea into a multi-chapter
+story. Runs against any DSPy-supported LLM, with optional Langfuse
 tracing.
 
 > The contributor guide is **[AGENTS.md](AGENTS.md)**. Pre-rewrite code lives
