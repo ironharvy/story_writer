@@ -30,7 +30,7 @@ jobs:
         run: ruff check .
 
       - name: Pylint (design smells)
-        run: pylint --fail-under=8.0 mymain.py story.py pipeline.py
+        run: pylint --fail-under=8.0 main.py core/foundation.py generators/baseline.py generators/world_state.py generators/dspy_module.py
 
       - name: Radon (cyclomatic complexity)
         run: radon cc . -s -n C --exclude ".venv/*,archive/*" --no-assert

@@ -27,14 +27,14 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 HERENOW_BASE = "https://here.now"
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 KEY_NAME = "HERENOW_API_KEY"
 
 
-def fail(msg: str) -> "NoReturn":  # type: ignore[name-defined]
+def fail(msg: str) -> NoReturn:
     print(f"error: {msg}", file=sys.stderr)
     sys.exit(1)
 
