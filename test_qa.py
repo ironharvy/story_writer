@@ -2,9 +2,12 @@ from qa import (
     PROPER_NOUN_RE,
     canonical_name,
     character_bullets,
+    check_chapter_band,
     check_chapter_length,
     check_character_presence,
     check_name_drift,
+    check_placeholder_protagonist,
+    check_structure,
     split_chapters,
 )
 
@@ -205,3 +208,82 @@ def test_split_chapters_round_trip():
     chapters = split_chapters(story)
     assert list(chapters.keys()) == ["Chapter 1: Open", "Chapter 2: Mid"]
     assert chapters["Chapter 1: Open"].startswith("alpha")
+
+
+# --- check_structure --------------------------------------------------------
+
+def test_structure_passes_complete_story():
+    story = _story({"Chapter 1": _make_prose(120)})
+    findings = check_structure(story)
+    assert [f.severity for f in findings] == ["info"]
+
+
+def test_structure_fails_missing_final_story():
+    story = "\n".join([
+        "# Story",
+        "",
+        "## World bible",
+        "",
+        "### Characters",
+        "",
+        "1. Cinder, the protagonist",
+    ])
+    findings = check_structure(story)
+    fails = [f for f in findings if f.severity == "fail"]
+    assert len(fails) == 1
+    assert "Final Story" in fails[0].message
+
+
+def test_structure_fails_final_story_without_chapters():
+    story = _story({})  # has the headings but no '### Chapter' bodies
+    findings = check_structure(story)
+    fails = [f for f in findings if f.severity == "fail"]
+    assert any("no '### Chapter'" in f.message for f in fails)
+
+
+# --- check_placeholder_protagonist ------------------------------------------
+
+def test_placeholder_protagonist_fails_on_literal():
+    story = _story({"Chapter 1": "The protagonist drew a blade. " + _make_prose(80)})
+    findings = check_placeholder_protagonist(story)
+    fails = [f for f in findings if f.severity == "fail"]
+    assert len(fails) == 1
+    assert "Chapter 1" in fails[0].message
+
+
+def test_placeholder_protagonist_passes_clean_prose():
+    story = _story({"Chapter 1": "Cinder drew a blade. " + _make_prose(80)})
+    findings = check_placeholder_protagonist(story)
+    assert [f.severity for f in findings] == ["info"]
+
+
+# --- check_chapter_band -----------------------------------------------------
+
+def test_chapter_band_warns_thin_chapter():
+    story = _story({"Chapter 1": _make_prose(120)})  # >= 80 floor, < 300 band
+    findings = check_chapter_band(story)
+    warns = [f for f in findings if f.severity == "warn"]
+    assert len(warns) == 1
+    assert "thin" in warns[0].message
+
+
+def test_chapter_band_warns_bloated_chapter():
+    story = _story({"Chapter 1": _make_prose(2600)})
+    findings = check_chapter_band(story)
+    warns = [f for f in findings if f.severity == "warn"]
+    assert len(warns) == 1
+    assert "bloated" in warns[0].message
+
+
+def test_chapter_band_passes_in_band():
+    story = _story({"Chapter 1": _make_prose(400), "Chapter 2": _make_prose(900)})
+    findings = check_chapter_band(story)
+    assert [f.severity for f in findings] == ["info"]
+
+
+def test_chapter_band_skips_below_hard_floor():
+    # A 40-word chapter is a hard FAIL elsewhere; the band must not also warn
+    # it as "thin" (no double-reporting).
+    story = _story({"Chapter 1": _make_prose(40)})
+    findings = check_chapter_band(story)
+    assert [f.severity for f in findings] == ["info"]

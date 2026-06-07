@@ -7,32 +7,62 @@ How we decide a run — and the system — is good enough.
 A run on the recommended config is acceptable when:
 
 1. It **completes without crashing** and writes all artifact sections.
-2. It produces **N non-empty chapters** (none below the length floor, 80 words).
+2. It produces **N non-empty chapters** (none below the hard floor of 80 words;
+   thin `<300` / bloated `>2500` chapters warn but don't block).
 3. The **protagonist is named** in chapter 1 (no "the protagonist"/"the child"
    placeholders left in prose).
 4. The story has a **real ending** (the spine's final beats are dramatized, not
-   gestured at).
+   gestured at). *Not automatable yet — a `manual` check pending the Tier-3
+   judge.*
 5. The **QA suite reports no real fails** (parser-artifact fails don't count).
 6. **Narration POV is consistent** across chapters (no unexplained drift).
 
-## QA gates (automated)
+## The unified scorecard (executable Definition of Done)
 
-Run after generation:
+One command turns the list above into a machine-readable verdict:
 
 ```bash
-python scripts/run_qa.py path/to/story.md      # phrase reuse, name drift, presence, length
-python scripts/check_pov.py path/to/story.md    # LLM POV consistency
-python scripts/lint_story.py path/to/story.md   # placeholder/misspelling fixes (writes sidecar)
-python scripts/word_count.py path/to/story.md   # top repeated content words
+python scripts/evaluate.py path/to/story.md             # Tier-1 only (no model)
+python scripts/evaluate.py path/to/story.md --with-llm  # + Tier-2 POV & prose lint
+python -m bench.evaluate   path/to/story.md             # Tier-1 only, no dspy needed (JSON)
 ```
 
-| Gate | Source | Pass condition |
-|---|---|---|
-| Chapter length | `qa.check_chapter_length` | every chapter ≥ 80 words |
-| Character presence | `qa.check_character_presence` | every canonical character appears in prose |
-| Name drift | `qa.check_name_drift` | no real misspelled-name variants (warn-level) |
-| Phrase reuse | `qa.check_cross_chapter_phrase_reuse` | repeated-5-gram count low (warn-level) |
-| POV consistency | `pov_check` | no `mixed` chapter; none disagreeing with the dominant POV |
+It runs the deterministic Tier-1 gates plus (with `--with-llm`) the LLM-backed
+Tier-2 gates, and writes a `<story>.scorecard.json` sidecar. Three top-level
+verdicts:
+
+- **`tier1_clean`** — no deterministic FAIL and budgets respected.
+- **`complete`** — every required gate actually ran (Tier-2 not skipped).
+- **`ship`** — `tier1_clean` **and** `complete`. A deterministic-only run is
+  honest: `ship=false` because POV couldn't be checked.
+
+Each Definition-of-Done item maps to a gate:
+
+| DoD item | Gate | Tier | Severity |
+|---|---|---|---|
+| All required sections present | `structure` | 1 | fail |
+| N non-empty chapters (≥ 80 words) | `chapter_length` | 1 | fail |
+| Chapters in target band (300–2500) | `chapter_band` | 1 | warn |
+| Protagonist named (no placeholders) | `placeholder_protagonist` | 1 | fail |
+| Every cast member appears | `character_presence` | 1 | fail |
+| No misspelled-name drift | `name_drift` | 1 | warn (budget ≤ 2) |
+| Low cross-chapter phrase reuse | `cross_chapter_phrase_reuse` | 1 | warn (budget ≤ 5) |
+| POV consistent across chapters | `pov_consistency` | 2 | fail |
+| Placeholders / canonical-name lint | `prose_linter` | 2 | warn (advisory) |
+| **Real ending dramatizes the spine** | — | 3 | **manual** |
+
+Length thresholds live in `qa.py` (`CHAPTER_MIN_WORDS` = 80 hard floor;
+`CHAPTER_TARGET_BAND` = 300–2500) — the single source of truth shared by
+`bench/criteria.py`, `bench/evaluate.py`, and `bench/eval-spec.md`.
+
+### Lower-level tools (building blocks)
+
+```bash
+python scripts/run_qa.py path/to/story.md      # the original 4 deterministic checks
+python scripts/check_pov.py path/to/story.md    # LLM POV consistency only
+python scripts/lint_story.py path/to/story.md   # placeholder/misspelling fixes (writes + applies)
+python scripts/word_count.py path/to/story.md   # top repeated content words
+```
 
 Severity meaning: `fail` = must fix, `warn` = inspect, `info` = context.
 

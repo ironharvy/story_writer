@@ -44,13 +44,16 @@ surrounding `*`/`_` emphasis stripped (`**Cinder**, a runaway` → `Cinder`).
 
 Fast, free, reproducible. These are gates: a `FAIL` here blocks shipping.
 
-### T1.1 Chapter length — `FAIL`
-Every chapter's prose must be at least a hard floor and should fall in a
-target band.
-- **Hard floor (gate): 300 words.** Below this the chapter is empty/truncated.
-- **Target band (warn outside): 800–2500 words.** Thin ~250-word chapters
-  are the classic fast-model failure; bloated >3000-word chapters usually
-  mean the outline collapsed into one chapter.
+### T1.1 Chapter length — `FAIL` (floor) / `WARN` (band)
+Every chapter's prose must clear a hard floor and should fall in a target band.
+- **Hard floor (gate, `FAIL`): 80 words.** Below this the chapter is
+  empty/truncated/broken. (Source of truth: `qa.CHAPTER_MIN_WORDS`.)
+- **Target band (`WARN` outside): 300–2500 words.** (`qa.CHAPTER_TARGET_BAND`.)
+  Thin `<300`-word chapters are the classic fast-model output; bloated
+  `>2500` chapters usually mean the outline collapsed into one chapter. These
+  warn but do **not** block shipping — `qwen3:latest` writes ~250-word
+  chapters and is a supported smoke model, so "thin" is a quality signal, not
+  "broken". Tighten the band per project if you want a stricter quality bar.
 
 ### T1.2 Character presence — `FAIL`
 Every canonical character must appear in the manuscript prose at least once.
@@ -87,6 +90,13 @@ Heuristics can't read. Use the local Ollama model as the judge first;
 only escalate to the hosted fallback if the local judge gives
 unstable/garbled verdicts. Always feed the judge the *narration only*
 instruction so quoted dialogue doesn't confound it.
+
+> **Status.** `bench/evaluate.py` (CLI: `scripts/evaluate.py --with-llm`)
+> wires **T2.1 POV consistency** (via `pov_check.py`) and the advisory prose
+> linter (via `story_linter.py`). The *literal* half of **T2.2** (the bare
+> word "protagonist" in prose) is caught deterministically in Tier-1
+> (`qa.check_placeholder_protagonist`); the subtler naming cases plus **T2.3
+> continuity** and **T2.4 premise fidelity** are not implemented yet.
 
 ### T2.1 POV / narrator consistency — `FAIL` on within-chapter shift
 Ask the judge to classify each chapter's **dominant narration POV** —
@@ -142,6 +152,14 @@ A draft is shippable iff **all** hold:
 
 Emit one machine-readable scorecard per draft (JSON: each check → severity
 + message, plus rubric scores and a final `ship: true|false`).
+
+> **Implemented today** (`bench/evaluate.py`): the Tier-1 gates + budgets,
+> Tier-2 POV (T2.1), and the advisory linter. The scorecard reports `ship`
+> over the *automated* gates plus a `complete` flag (false until every
+> required gate runs) — so a deterministic-only pass reports
+> `tier1_clean=true, complete=false, ship=false`. T2.3/T2.4 and the full
+> Tier-3 rubric are pending; "real ending" is surfaced as a `manual` check
+> until the Tier-3 judge lands.
 
 ---
 

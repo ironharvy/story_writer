@@ -64,7 +64,10 @@ python scripts/optimize_text_pipeline.py \
 
 ### Benchmark Harness (Goal Function)
 ```bash
-python -m bench.criteria .tmp/story.md     # Tier-1 deterministic scorecard against bench/eval-spec.md
+python scripts/evaluate.py .tmp/story.md             # unified scorecard (Tier-1; no model)
+python scripts/evaluate.py .tmp/story.md --with-llm   # + Tier-2 POV / prose lint (needs DSPy)
+python -m bench.evaluate .tmp/story.md               # Tier-1 JSON only, no dspy import
+python -m bench.criteria .tmp/story.md               # Tier-1 deterministic scorecard
 ```
 Full multi-fixture / multi-generator harness lives in `bench/` (in progress).
 
@@ -310,14 +313,15 @@ def test_specific_function():
 
 **Goal function & benchmark:**
 - `bench/eval-spec.md` — Tier-1/2/3 evaluation spec (the objective function).
-- `bench/criteria.py` — Tier-1 deterministic runner; wraps `qa.run_all` with the spec's 300-word floor + budgets.
+- `bench/criteria.py` — Tier-1 deterministic runner; wraps `qa.run_all` + the structure/placeholder/word-band checks with the spec's soft budgets (length thresholds live in `qa.py`).
+- `bench/evaluate.py` — the **unified scorecard** (executable Definition of Done): Tier-1 + the LLM-backed Tier-2 POV / prose-lint gates → one JSON `FullScorecard` with `ship` / `complete`.
 - `bench/rubric.md` — Tier-3 qualitative rubric.
 
 **Post-generation analysis:**
-- `qa.py` — name-drift, character-presence, chapter-length, cross-chapter 5-gram phrase reuse, content-word over-repetition.
+- `qa.py` — deterministic checks: chapter-length (+ word-band), character-presence, name-drift, cross-chapter 5-gram phrase reuse, structural completeness, protagonist-placeholder.
 - `pov_check.py` — LLM-judged POV consistency.
 - `story_linter.py` — placeholder/canonical-name lint pass.
-- `scripts/` — CLI wrappers (`run_qa.py`, `check_pov.py`, `lint_story.py`, `word_count.py`, `render_story.py`, `optimize_text_pipeline.py`, `fetch_langfuse_traces.py`).
+- `scripts/` — CLI wrappers (`evaluate.py` [unified scorecard], `run_qa.py`, `check_pov.py`, `lint_story.py`, `word_count.py`, `render_story.py`, `optimize_text_pipeline.py`, `fetch_langfuse_traces.py`).
 
 **Tests** (`tests/`):
 - `tests/test_registry.py` — registry/protocol contract (no LLM).

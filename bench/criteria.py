@@ -1,13 +1,14 @@
 """Deterministic Tier-1 checks from bench/eval-spec.md.
 
-Thin wrapper over the existing `qa.py` and `pov_check.py` modules — those
-already implement the same algorithms (chapter length, character presence,
-name drift, cross-chapter phrase reuse, POV classification). This module
-applies the spec's thresholds (hard floor 300 words vs qa.py's runtime
-default 80, 5-gram budget of 5, etc.) and emits a scorecard.
+Thin wrapper over the deterministic checks in `qa.py` (chapter length + word
+band, character presence, name drift, cross-chapter phrase reuse, structural
+completeness, protagonist-placeholder). The length thresholds live in `qa.py`
+(the single source of truth): a hard floor of 80 words FAILs as broken, and
+the 300–2500 target band WARNs as thin/bloated. This module bundles those into
+a scorecard with the spec's soft budgets.
 
-Tier-2/Tier-3 LLM-judge checks are out of scope here — they'll plug in
-later via a `bench/judge.py` once the prompt + judge model are chosen.
+The LLM-backed gates (Tier-2 POV / prose lint, Tier-3 rubric) are out of scope
+here. `bench/evaluate.py` is the unified scorecard that adds them.
 """
 from __future__ import annotations
 
@@ -17,9 +18,8 @@ from pathlib import Path
 
 import qa
 
-# Thresholds from bench/eval-spec.md
-HARD_CHAPTER_FLOOR = 300         # T1.1 gate
-TARGET_CHAPTER_BAND = (800, 2500)  # T1.1 warn outside (not yet enforced)
+# Soft budgets from bench/eval-spec.md (T1.3 / T1.4). Length thresholds are
+# qa.CHAPTER_MIN_WORDS (hard floor) and qa.CHAPTER_TARGET_BAND (warn band).
 NAME_DRIFT_BUDGET = 2            # T1.3
 PHRASE_REUSE_BUDGET = 5          # T1.4
 
@@ -42,10 +42,13 @@ def score(story_md_path: Path) -> Scorecard:
     Returns a Scorecard with separated FAILs and WARNs plus per-budget
     counts. `ship=True` only if zero Tier-1 FAILs and every budget respected.
     """
-    findings = qa.run_all(story_md_path)
-    # T1.1 in qa.py uses default min_words=80; re-run with spec floor of 300
+    # run_all covers length (hard floor 80), presence, drift, phrase reuse.
+    # The remaining deterministic gates from the spec are added explicitly.
     text = Path(story_md_path).read_text(encoding="utf-8")
-    findings.extend(qa.check_chapter_length(text, min_words=HARD_CHAPTER_FLOOR))
+    findings = qa.run_all(story_md_path)
+    findings.extend(qa.check_structure(text))
+    findings.extend(qa.check_placeholder_protagonist(text))
+    findings.extend(qa.check_chapter_band(text))
 
     fails: list[dict] = []
     warns: list[dict] = []
@@ -54,9 +57,10 @@ def score(story_md_path: Path) -> Scorecard:
 
     for f in findings:
         record = {"check": f.check, "severity": f.severity, "message": f.message}
-        if f.check == "name_drift":
+        # Count only real (warn-level) budget hits, not the "no drift" info line.
+        if f.check == "name_drift" and f.severity == "warn":
             drift_count += 1
-        if f.check == "cross_chapter_phrase_reuse":
+        if f.check == "cross_chapter_phrase_reuse" and f.severity == "warn":
             reuse_count += 1
         if f.severity == "fail":
             fails.append(record)

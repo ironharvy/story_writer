@@ -35,6 +35,11 @@ from pathlib import Path
 
 NGRAM = 5
 CHAPTER_MIN_WORDS = 80
+# Target word band for a chapter. Below the hard floor (CHAPTER_MIN_WORDS) a
+# chapter FAILs as broken/truncated; within the floor but outside this band it
+# WARNs as thin/bloated. This is the single source of truth for the length
+# thresholds — see docs/07-acceptance-and-quality.md and bench/eval-spec.md.
+CHAPTER_TARGET_BAND = (300, 2500)
 WORD_RE = re.compile(r"[A-Za-z']+")
 # Proper-noun matcher: 1–3 capitalised tokens joined by spaces/tabs only.
 # Newlines are excluded so a paragraph break can't merge two separate names
@@ -312,6 +317,133 @@ def check_chapter_length(text: str, min_words: int = CHAPTER_MIN_WORDS) -> list[
             check="chapter_length",
             severity="info",
             message=f"all {len(chapters)} chapters >= {min_words} words",
+        ))
+    return findings
+
+
+# --- check 5: structural completeness ---------------------------------------
+
+# (level, heading) sections every finished artifact must contain. Missing any
+# of these means the heading-coupled parsers above are mis-reading the file
+# (risk R-8), so the other checks' results can't be trusted.
+REQUIRED_SECTIONS = (
+    (2, "World bible"),
+    (3, "Characters"),
+    (2, "Final Story"),
+)
+
+
+def _heading_present(text: str, level: int, heading: str) -> bool:
+    """True if a ``<level> heading`` line exists in ``text``."""
+    target = f"{'#' * level} {heading}"
+    return any(line.strip() == target for line in text.splitlines())
+
+
+def check_structure(text: str) -> list[Finding]:
+    """Fail when a required artifact section is missing or empty of chapters.
+
+    Guards the heading-coupled parsers: a layout drift (renamed or omitted
+    section) otherwise makes the other checks silently mis-parse."""
+    findings: list[Finding] = []
+    missing = [
+        f"{'#' * level} {heading}"
+        for level, heading in REQUIRED_SECTIONS
+        if not _heading_present(text, level, heading)
+    ]
+    for heading in missing:
+        findings.append(Finding(
+            check="structure",
+            severity="fail",
+            message=f"required section missing: '{heading}'",
+        ))
+    chapters = split_chapters(text)
+    if _heading_present(text, 2, "Final Story") and not chapters:
+        findings.append(Finding(
+            check="structure",
+            severity="fail",
+            message="'## Final Story' present but contains no '### Chapter' sections",
+        ))
+    if not findings and chapters:
+        findings.append(Finding(
+            check="structure",
+            severity="info",
+            message=f"all required sections present ({len(chapters)} chapters)",
+        ))
+    return findings
+
+
+# --- check 6: protagonist placeholder ---------------------------------------
+
+# Only high-precision literals are gated deterministically: the bare word
+# "protagonist" essentially never appears in real narrative prose, so its
+# presence is the unnamed-cold-open defect. Subtler placeholders ("the child",
+# "the boy") are left to the LLM linter (story_linter.py), which can tell a
+# placeholder from a legitimate unnamed minor character.
+_PROTAGONIST_PLACEHOLDERS = ("protagonist",)
+
+
+def check_placeholder_protagonist(
+    text: str,
+    placeholders: tuple[str, ...] = _PROTAGONIST_PLACEHOLDERS,
+) -> list[Finding]:
+    """Fail chapters whose prose uses a placeholder term instead of a name."""
+    chapters = split_chapters(text)
+    patterns = {
+        p: re.compile(rf"\b{re.escape(p)}\b", re.IGNORECASE) for p in placeholders
+    }
+    findings: list[Finding] = []
+    for title, body in chapters.items():
+        hits = sorted(p for p, pat in patterns.items() if pat.search(body))
+        if hits:
+            findings.append(Finding(
+                check="placeholder_protagonist",
+                severity="fail",
+                message=f"chapter '{title}' uses placeholder term(s) {hits} instead of a name",
+            ))
+    if not findings and chapters:
+        findings.append(Finding(
+            check="placeholder_protagonist",
+            severity="info",
+            message="no protagonist-placeholder terms in chapter prose",
+        ))
+    return findings
+
+
+# --- check 7: chapter word band ---------------------------------------------
+
+def check_chapter_band(
+    text: str,
+    lo: int = CHAPTER_TARGET_BAND[0],
+    hi: int = CHAPTER_TARGET_BAND[1],
+) -> list[Finding]:
+    """Warn chapters outside the target word band (thin / bloated).
+
+    Chapters below the hard floor are already a FAIL from
+    :func:`check_chapter_length`, so they're skipped here rather than
+    double-reported as "thin"."""
+    chapters = split_chapters(text)
+    findings: list[Finding] = []
+    for title, body in chapters.items():
+        n = len(_words(body))
+        if n < CHAPTER_MIN_WORDS:
+            continue
+        if n < lo:
+            findings.append(Finding(
+                check="chapter_band",
+                severity="warn",
+                message=f"chapter '{title}' is thin: {n} words (target >= {lo})",
+            ))
+        elif n > hi:
+            findings.append(Finding(
+                check="chapter_band",
+                severity="warn",
+                message=f"chapter '{title}' is bloated: {n} words (target <= {hi})",
+            ))
+    if not findings and chapters:
+        findings.append(Finding(
+            check="chapter_band",
+            severity="info",
+            message=f"all chapters within target band {lo}-{hi} words",
         ))
     return findings
 

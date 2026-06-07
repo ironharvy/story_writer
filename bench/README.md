@@ -15,15 +15,16 @@ checks + Tier-3 qualitative rubric) lives in [`eval-spec.md`](eval-spec.md).
 | `eval-spec.md` | The spec — what "good" means. Source of truth. |
 | `rubric.md` | Tier-3 qualitative axes for the LLM judge. |
 | `criteria.py` | Tier-1 deterministic runner (wraps `qa.py`); emits a JSON `Scorecard`. |
+| `evaluate.py` | **Unified scorecard** for one draft: Tier-1 + LLM Tier-2 (POV + prose lint) → a `FullScorecard` with `ship`/`complete`. The executable Definition of Done. |
 | `fixtures/` | Idea fixtures: one JSON per (title, idea, chapter count, niche). |
 | `run.py` | Drives `(fixture × strategy)` end-to-end against your configured LLM. |
 | `score.py` | Walks a run directory, applies `criteria.py`, writes `results.md`. |
 
-Tier-2 / Tier-3 LLM-judge implementations are stubs — the harness today
-scores deterministic gates only. The Tier-1 budgets (chapter length,
-character presence, name drift, phrase reuse) catch the most common
-failure modes well enough to start ranking. The judge wiring is the
-next obvious extension.
+`criteria.py` / `score.py` stay **deterministic-only** — they rank many
+stories fast without a model. `evaluate.py` is the **single-draft, full-DoD**
+verdict: it adds the Tier-2 POV check (`pov_check.py`) and the advisory prose
+linter (`story_linter.py`). T2.3 continuity, T2.4 premise fidelity, and the
+Tier-3 rubric are still stubs — that judge wiring is the next extension.
 
 ## Quickstart
 
