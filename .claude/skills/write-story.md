@@ -8,18 +8,99 @@ Use when the user wants to write a story, create a narrative, or says `/write-st
 
 ## Pipeline Overview
 
-The story is built through these sequential stages — each stage feeds into the next. You MUST follow every stage in order and present results to the user between stages.
+The story is built through 12 sequential stages — each feeds into the next. Follow every stage in order and present results to the user between stages.
+
+1. Get the Story Idea
+2. Interrogative Questions
+3. Core Premise
+4. Narrative Spine
+5. World Bible Questions
+6. World Bible
+7. Chapter Plan
+8. Enhancers Guide
+9. Editor-in-Chief: Pre-Production Review
+10. Write Chapters
+11. Editor-in-Chief: Manuscript Review
+12. Compile and Save
+
+## Progress Reporting
+
+At the start of every stage, output a single-line marker so the user can track progress in any host (Claude Code, Codex, etc.):
+
+```
+=== Stage N/12: <stage name> ===
+```
+
+In Stage 10, emit `--- Chapter K/<total>: <title> ---` before writing each chapter.
+
+## Checkpointing
+
+Save state often so progress survives interruptions and the user can read intermediate output at any time.
+
+After **every stage** (and after **every chapter** in Stage 10):
+
+1. Write `.tmp/story_state.json` containing all accumulated variables collected so far. Possible keys:
+   - Plain strings: `IDEA`, `CORE_PREMISE`, `SPINE_TEMPLATE`, `WORLD_BIBLE`, `CHAPTER_PLAN`, `ENHANCERS_GUIDE`.
+   - Q&A blocks: `QA_PAIRS`, `WORLD_BIBLE_QA`.
+   - `CHAPTERS`: list of `{title, prose}`.
+   - `CHAPTERS_PRIOR`: list of `{chapter_index, title, prose}` snapshots saved before each Stage 11 revision (recovery state, not rendered to `story_output.md`).
+   - `PREPRO_NOTES` / `EDITOR_NOTES`: structured as
+     ```
+     {
+       "notes":   ["1. ...", "2. ...", ...],   // numbered strings as presented to the user
+       "applied": [1, 3],                       // indices the user accepted
+       "ignored": [2, 4, 5]                     // remainder
+     }
+     ```
+     If the editor produced no notes, store `{"notes": [], "applied": [], "ignored": []}`.
+2. Rebuild `.tmp/story_output.md` from current state using the format in Stage 12, omitting sections that don't yet exist. The user should always have a readable artifact on disk reflecting the latest progress.
+
+Create `.tmp/` if it doesn't exist. Note "checkpoint saved" once per stage so the user knows.
+
+The load-half of this is **Stage 0** below — at skill start, check for an existing checkpoint and offer to resume.
 
 ## Instructions
 
-### Stage 1: Get the Story Idea
+### Stage 0: Resume or Start Fresh
+
+Before Stage 1, check whether `.tmp/story_state.json` exists.
+
+- **If it does not exist:** skip Stage 0 silently and proceed to Stage 1.
+- **If it exists:** parse it and infer the last completed stage from which keys are populated:
+
+  | Last completed stage | Detect by                                                              |
+  |----------------------|------------------------------------------------------------------------|
+  | 1                    | `IDEA` present, `QA_PAIRS` absent                                      |
+  | 2                    | `QA_PAIRS` present, `CORE_PREMISE` absent                              |
+  | 3                    | `CORE_PREMISE` present, `SPINE_TEMPLATE` absent                        |
+  | 4                    | `SPINE_TEMPLATE` present, `WORLD_BIBLE_QA` absent                      |
+  | 5                    | `WORLD_BIBLE_QA` present, `WORLD_BIBLE` absent                         |
+  | 6                    | `WORLD_BIBLE` present, `CHAPTER_PLAN` absent                           |
+  | 7                    | `CHAPTER_PLAN` present, `ENHANCERS_GUIDE` absent                       |
+  | 8                    | `ENHANCERS_GUIDE` present, `PREPRO_NOTES` absent                       |
+  | 9                    | `PREPRO_NOTES` present, `CHAPTERS` empty/absent                        |
+  | 10 (partial)         | `CHAPTERS` non-empty but shorter than the chapter plan, no `EDITOR_NOTES` |
+  | 10 (complete)        | `CHAPTERS` length matches chapter plan, `EDITOR_NOTES` absent          |
+  | 11                   | `EDITOR_NOTES` present                                                 |
+
+  Use `AskUserQuestion`:
+  - "Found a saved story in progress (last completed: **Stage X — \<name\>**). What would you like to do?"
+    - "Resume from Stage X+1"
+    - "Show me what's saved first"
+    - "Start fresh — discard checkpoint"
+
+  - **Resume:** hydrate every variable found in the JSON into working state, emit `=== Resuming from Stage X+1 ===`, then jump straight to that stage's marker. For partial Stage 10, resume by writing the next un-written chapter (do not re-write existing entries in `CHAPTERS`).
+  - **Show me what's saved first:** render the current `.tmp/story_output.md` (or rebuild it from state if missing) for the user, then re-ask the same question.
+  - **Start fresh:** delete `.tmp/story_state.json` and `.tmp/story_output.md`, then proceed to Stage 1.
+
+### Stage 1/12: Get the Story Idea
 
 Use `AskUserQuestion` to ask the user:
 - "What is your initial story idea or premise? Describe it in a few sentences."
 
-Store their response as `IDEA`.
+Store their response as `IDEA`. Checkpoint.
 
-### Stage 2: Generate Interrogative Questions
+### Stage 2/12: Generate Interrogative Questions
 
 Generate exactly **5 interrogative questions** that probe and challenge the user's idea to flesh it out into a full story foundation. Each question must include a **proposed answer** that you think fits the idea.
 
@@ -33,9 +114,9 @@ Present all 5 questions and proposed answers to the user. For each question, use
 
 If they choose to provide their own, use `AskUserQuestion` to collect it.
 
-Store the final Q&A pairs as `QA_PAIRS`.
+Store the final Q&A pairs as `QA_PAIRS`. Checkpoint.
 
-### Stage 3: Generate Core Premise
+### Stage 3/12: Generate Core Premise
 
 Using `IDEA` and `QA_PAIRS`, synthesize a **Core Premise** — a detailed paragraph that summarizes the foundation of the story including:
 - The central conflict
@@ -46,14 +127,14 @@ Using `IDEA` and `QA_PAIRS`, synthesize a **Core Premise** — a detailed paragr
 
 Present the Core Premise to the user, then ask via `AskUserQuestion`:
 - "Are you happy with this Core Premise?"
-  - "Yes, continue" 
+  - "Yes, continue"
   - "No, I want to refine it"
 
 If they want to refine, ask what changes they'd like, regenerate incorporating their feedback, and ask again. Loop until satisfied.
 
-Store as `CORE_PREMISE`.
+Store as `CORE_PREMISE`. Checkpoint.
 
-### Stage 4: Generate Narrative Spine
+### Stage 4/12: Generate Narrative Spine
 
 Using `CORE_PREMISE`, generate a **Narrative Spine Template** following the classic structure:
 
@@ -64,9 +145,9 @@ Using `CORE_PREMISE`, generate a **Narrative Spine Template** following the clas
 - **Because of that...** (escalation / complications)
 - **Until finally...** (the climax / resolution)
 
-Present the spine to the user. Store as `SPINE_TEMPLATE`.
+Present the spine to the user. Store as `SPINE_TEMPLATE`. Checkpoint.
 
-### Stage 5: World Bible Questions
+### Stage 5/12: World Bible Questions
 
 Using `CORE_PREMISE` and `SPINE_TEMPLATE`, generate **3 follow-up questions** with proposed answers to flesh out the world-building. These should focus on:
 - The rules and systems of the world (magic, technology, society)
@@ -75,9 +156,9 @@ Using `CORE_PREMISE` and `SPINE_TEMPLATE`, generate **3 follow-up questions** wi
 
 Present and collect answers the same way as Stage 2 (accept or provide own).
 
-Store as `WORLD_BIBLE_QA`.
+Store as `WORLD_BIBLE_QA`. Checkpoint.
 
-### Stage 6: Generate World Bible
+### Stage 6/12: Generate World Bible
 
 Using all accumulated context (`CORE_PREMISE`, `SPINE_TEMPLATE`, `WORLD_BIBLE_QA`), generate a comprehensive **World Bible** with these four sections:
 
@@ -101,9 +182,9 @@ All significant places in the story:
 #### 6d: Plot Timeline
 A chronological sequence of major events, from backstory through the story's conclusion.
 
-Present the complete World Bible to the user. Store as `WORLD_BIBLE`.
+Present the complete World Bible to the user. Store as `WORLD_BIBLE`. Checkpoint.
 
-### Stage 7: Generate Chapter Plan
+### Stage 7/12: Generate Chapter Plan
 
 Using `CORE_PREMISE` and `WORLD_BIBLE`, generate a chapter plan across **3 acts**:
 
@@ -113,9 +194,9 @@ Using `CORE_PREMISE` and `WORLD_BIBLE`, generate a chapter plan across **3 acts*
 
 For each act, generate 3-5 chapter descriptions (so roughly 9-15 chapters total). Each chapter description should be a concise sentence describing the key event/purpose of that chapter.
 
-Present the full chapter plan to the user. Store as `CHAPTER_PLAN`.
+Present the full chapter plan to the user. Store as `CHAPTER_PLAN`. Checkpoint.
 
-### Stage 8: Generate Enhancers Guide
+### Stage 8/12: Generate Enhancers Guide
 
 Using `WORLD_BIBLE` and `CHAPTER_PLAN`, evaluate which **story enhancers** should be applied to specific chapters:
 
@@ -127,37 +208,90 @@ Using `WORLD_BIBLE` and `CHAPTER_PLAN`, evaluate which **story enhancers** shoul
 - **Twist Generator** — where surprises or reversals should land
 - **Easter Egg Injector** — subtle callbacks or hidden connections
 
-Present the enhancers guide. Store as `ENHANCERS_GUIDE`.
+Present the enhancers guide. Store as `ENHANCERS_GUIDE`. Checkpoint.
 
-### Stage 9: Write the Story
+### Stage 9/12: Editor-in-Chief — Pre-Production Review
+
+Before any prose is written, do a critical pass over everything assembled so far: `CORE_PREMISE`, `SPINE_TEMPLATE`, `WORLD_BIBLE`, `CHAPTER_PLAN`, and `ENHANCERS_GUIDE`. Adopt the voice of a hard-nosed editor-in-chief — your job is to find problems now, while they're cheap to fix.
+
+Look for:
+- **Plot holes & logic gaps** — does the chapter plan actually flow from the premise? Are there unmotivated jumps between chapters?
+- **Character motivation** — does the protagonist have a clear arc? Are antagonists' goals coherent and consistent with their established traits?
+- **World-rule consistency** — does the chapter plan respect the rules established in the World Bible? Any chapter rely on something the world doesn't allow?
+- **Setup/payoff balance** — every setup in the Enhancers Guide should have a planned payoff in `CHAPTER_PLAN`, and every major payoff should have a setup. Flag orphans on either side.
+- **Pacing** — is Act 2 doing real work or sagging? Is the climax positioned correctly? Any act feel underweight?
+- **Theme alignment** — is the thematic undercurrent surfaced across the chapter plan, not just declared once?
+- **Stakes escalation** — do the stakes meaningfully rise across acts, or stay flat?
+
+Produce a numbered list of notes. If everything checks out, say "no notes" — don't manufacture problems. Present the notes to the user.
+
+Use `AskUserQuestion`:
+- "How should I act on these notes?"
+  - "Apply all"
+  - "Apply selected (tell me which numbers)"
+  - "Ignore — keep current plan"
+
+If applying, regenerate the affected artifacts (any of `CORE_PREMISE`, `WORLD_BIBLE`, `CHAPTER_PLAN`, `ENHANCERS_GUIDE`) incorporating the accepted notes, present the updated versions, and overwrite the same variables.
+
+Store as `PREPRO_NOTES` using the `{notes, applied, ignored}` schema defined in the Checkpointing section. Checkpoint.
+
+### Stage 10/12: Write the Story
 
 Now write each chapter one at a time. For each chapter:
 
-1. **Random Detail Injection (35% chance per chapter):** Roll a mental dice. Roughly 1 in 3 chapters should receive a creative flourish — one of these types:
+1. **Progress marker:** emit `--- Chapter K/<total>: <title> ---` before writing.
+
+2. **Random Detail Injection (35% chance per chapter):** Roll a mental dice. Roughly 1 in 3 chapters should receive a creative flourish — one of these types:
    - A vivid, unusually long description of scenery or environment
    - A quirky or unexpected object placed naturally in the scene
    - A strange but fitting atmospheric detail (sounds, smells, textures)
    - An unusual yet revealing character habit, tic, or physical detail
    - A brief, surprising background element enriching the world
 
-2. **Write the chapter** using:
+3. **Write the chapter** using:
    - `WORLD_BIBLE` for consistency
    - `CHAPTER_PLAN` for structure
    - `ENHANCERS_GUIDE` for what narrative techniques to apply
    - Summary of previous chapters for continuity
    - The random detail (if triggered) woven naturally into the prose
 
-3. Each chapter should include:
+4. Each chapter should include:
    - A creative chapter title
    - Rich, immersive prose with dialogue and description
    - Consistent characterization and world details
    - Natural pacing appropriate to its position in the story
 
-After writing each chapter, briefly note which chapter you just completed, then continue to the next. Do NOT ask for confirmation between chapters — write them all in sequence.
+5. **Checkpoint immediately** after the chapter — append `{title, prose}` to `CHAPTERS`, then write `.tmp/story_state.json` and rebuild `.tmp/story_output.md`. This way an interruption at chapter 8 of 12 doesn't lose chapters 1-7.
 
-### Stage 10: Compile and Save Output
+Do NOT ask for confirmation between chapters — write them all in sequence.
 
-After all chapters are written, compile everything into a single markdown file at `.tmp/story_output.md`:
+### Stage 11/12: Editor-in-Chief — Manuscript Review
+
+Now critique the actual prose. Read across all chapters and build a numbered notes list covering:
+
+- **Continuity breaks** — names, ages, locations, world rules contradicted between chapters
+- **Character voice drift** — does each character sound consistent across chapters?
+- **Unfired setups** — anything from `ENHANCERS_GUIDE` or earlier chapters that lacks payoff in the prose as written
+- **Pacing dead spots** — chapters that don't move the plot or reveal character
+- **Repetition** — repeated phrases, near-duplicate sentences, overused words. (Mirrors the spirit of `qa.py`'s sentence-similarity check — flag any near-duplicates you notice.)
+- **Show vs. tell** — exposition dumps that should have been scenes
+- **Climax & resolution** — does the ending land? Are loose threads tied?
+
+Present numbered notes to the user. Say "no notes" if there are none.
+
+Use `AskUserQuestion`:
+- "How should I act on these notes?"
+  - "Apply all"
+  - "Apply selected (tell me which numbers)"
+  - "Ignore — keep manuscript as-is"
+
+For accepted notes, revise the affected chapters. **Before overwriting `CHAPTERS[i]`, append the existing entry to `CHAPTERS_PRIOR` as `{chapter_index: i, title, prose}`** so the pre-revision prose is recoverable if the editor over-corrects. Then replace `CHAPTERS[i]` with the revised `{title, prose}`. Briefly summarize what was changed per chapter. Checkpoint after each revision.
+
+Store as `EDITOR_NOTES` using the `{notes, applied, ignored}` schema defined in the Checkpointing section.
+
+### Stage 12/12: Compile and Save Output
+
+Rebuild `.tmp/story_output.md` one last time as the canonical artifact:
 
 ```markdown
 # Story Output
@@ -177,11 +311,19 @@ After all chapters are written, compile everything into a single markdown file a
 ## Enhancers Guide
 {ENHANCERS_GUIDE}
 
+## Pre-Production Editor Notes
+{PREPRO_NOTES}
+
 ## Final Story
-{All chapters with titles and prose}
+{All chapters — title + prose}
+
+## Manuscript Editor Notes
+{EDITOR_NOTES}
 ```
 
-Create the `.tmp` directory if it doesn't exist. Tell the user the file path when done.
+For both `## Pre-Production Editor Notes` and `## Manuscript Editor Notes`: render each entry from `notes` tagged `(applied)` if its index is in `applied`, otherwise `(not applied)`. If `notes` is empty, render `_No notes._` under the header. `CHAPTERS_PRIOR` is recovery state and is **not** rendered to `story_output.md`.
+
+Confirm the file path to the user.
 
 ## Important Guidelines
 
@@ -191,3 +333,5 @@ Create the `.tmp` directory if it doesn't exist. Tell the user the file path whe
 - **Each chapter should be substantial** — aim for rich, detailed writing (not just a paragraph per chapter).
 - **Respect user choices** — the user's answers to questions override your proposed answers. Build the story around their vision, not yours.
 - **Keep the user informed** — at each stage, clearly present what was generated before moving to the next stage.
+- **Save often** — checkpoint after every stage and every chapter. The user should never lose more than one chapter's worth of work to an interruption.
+- **Editor passes are honest, not performative** — if there are no real problems, say "no notes" and move on. Don't invent issues to look thorough.
