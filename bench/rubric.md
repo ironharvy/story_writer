@@ -1,7 +1,7 @@
 # Tier-3 Qualitative Rubric (LLM judge, 1–5)
 
-Used by the (stubbed) Tier-3 judge in the bench harness. Threshold to ship:
-**average ≥ 4.0 with no axis below 3.**
+Implemented by the Tier-3 judge in `bench/judge.py` (`QualitativeRubric`).
+Threshold to ship: **average ≥ 4.0 with no axis below 3.**
 
 | Axis | 1 | 5 |
 |---|---|---|

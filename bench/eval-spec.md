@@ -12,7 +12,8 @@ and signature phrases repeated in every chapter. Each one exists because a
 model actually shipped that defect.
 
 This file is the source of truth that `bench/criteria.py` (deterministic
-Tier-1 checks) and the (still-stubbed) LLM judge for Tier-2/3 implement.
+Tier-1 checks) and `bench/judge.py` (the LLM judge for Tier-2/3, wired in via
+`bench/score.py --llm-judge`) implement.
 
 ---
 

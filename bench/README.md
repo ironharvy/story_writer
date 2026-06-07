@@ -17,13 +17,16 @@ checks + Tier-3 qualitative rubric) lives in [`eval-spec.md`](eval-spec.md).
 | `criteria.py` | Tier-1 deterministic runner (wraps `qa.py`); emits a JSON `Scorecard`. |
 | `fixtures/` | Idea fixtures: one JSON per (title, idea, chapter count, niche). |
 | `run.py` | Drives `(fixture × strategy)` end-to-end against your configured LLM. |
-| `score.py` | Walks a run directory, applies `criteria.py`, writes `results.md`. |
+| `score.py` | Walks a run directory, applies `criteria.py`, writes `results.md`. `--llm-judge` adds Tier-2/3. |
+| `judge.py` | Tier-2/Tier-3 LLM judge (POV, protagonist naming, contradictions, premise fidelity, 1–5 rubric). |
 
-Tier-2 / Tier-3 LLM-judge implementations are stubs — the harness today
-scores deterministic gates only. The Tier-1 budgets (chapter length,
-character presence, name drift, phrase reuse) catch the most common
-failure modes well enough to start ranking. The judge wiring is the
-next obvious extension.
+Tier-1 runs on every draft (fast, deterministic, no model). Tier-2/Tier-3
+are LLM-judged and **off by default**: pass `--llm-judge` to `bench.score`
+to run them against a local Ollama model. The judge reuses `pov_check`'s
+classifier for POV (T2.1) and adds protagonist-naming, contradiction,
+premise-fidelity, and the 1–5 rubric checks, folding everything into the
+same `Scorecard` (ship then also requires zero Tier-2 FAILs and a Tier-3
+average ≥ 4.0 with no axis below 3).
 
 ## Quickstart
 
@@ -31,8 +34,11 @@ next obvious extension.
 # Run all promoted generators on all fixtures against local Ollama.
 python -m bench.run --model qwen3:latest --provider ollama
 
-# Score the results.
+# Score the results (Tier-1 only, fast).
 python -m bench.score .tmp/bench/<run-id>
+
+# Score with the Tier-2/Tier-3 LLM judge (needs a local Ollama model).
+python -m bench.score .tmp/bench/<run-id> --llm-judge --judge-model qwen3:latest
 ```
 
 `bench.run` writes one story per `(fixture, strategy)` under
