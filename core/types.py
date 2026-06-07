@@ -14,8 +14,15 @@ the variant chose to carry across chapters).
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import ClassVar, Protocol
+
+# A reviewer turns a (label, draft) pair into (possibly-edited text, accepted?).
+# The orchestrator injects the interactive `ui.review_answer`; pipeline stages
+# that receive `None` skip the review loop and return their first draft, so
+# business logic never imports the UI layer.
+Reviewer = Callable[[str, str], tuple[str, bool]]
 
 
 @dataclass
@@ -74,6 +81,12 @@ class DraftingInput:
     lifting I/O entirely into the orchestrator is a follow-up; for now the
     Protocol's contract is "produces these chapters + this continuity
     artifact", not "owns disk I/O".
+
+    `reviewer` is the optional interactive review callback the orchestrator
+    injects (the same one threaded through the foundation stages). When it is
+    `None` the variant's drafting loop returns each chapter's first draft
+    instead of looping on user feedback, so a generator can run head-less
+    (benchmarks, tests) without a TTY.
     """
 
     idea: str
@@ -83,6 +96,7 @@ class DraftingInput:
     chapters_plan: list[PlanEntry]
     output_file: str
     number_of_chapters: int
+    reviewer: Reviewer | None = None
 
 
 @dataclass

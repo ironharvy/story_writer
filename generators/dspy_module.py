@@ -7,11 +7,12 @@ DSPy's ``DraftArticle`` example.
 
 Behaviour difference from the pre-refactor ``pipeline_module.write``: the
 chapter outline is now the orchestrator-supplied ``chapters_plan`` (same
-plan every variant draws from), not :class:`story_module.WriteStory`'s
-internal ``StoryOutline``. This makes variants directly comparable in the
-benchmark; if the per-variant outline ever needs to come back, do it as
-a distinct generator id (e.g. ``dspy_module_outlined``) rather than
-re-conflating the two.
+plan every variant draws from), not the ``WriteStory`` module's internal
+``StoryOutline`` (that pure reference module is kept in
+``generators/_dspy_module_impl.py``). This makes variants directly
+comparable in the benchmark; if the per-variant outline ever needs to come
+back, do it as a distinct generator id (e.g. ``dspy_module_outlined``) rather
+than re-conflating the two.
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ from core.artifact import update_artifact
 from core.foundation import act_hint_for_chapter
 from core.types import DraftedChapter, DraftingInput, DraftingOutput
 from generators import register
-from story_module import DraftChapter
+from generators._dspy_module_impl import DraftChapter
 
 logger = logging.getLogger(__name__)
 

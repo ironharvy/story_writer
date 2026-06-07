@@ -22,6 +22,7 @@ import os
 from dotenv import load_dotenv
 
 import generators  # auto-discovers and registers every variant in generators/
+import ui
 from core.artifact import initialize_artifact, update_artifact
 from core.foundation import (
     build_foundation,
@@ -146,8 +147,10 @@ def run_pipeline(args: argparse.Namespace) -> None:
         args.output_file, "Generation Parameters", format_generation_parameters(args),
     )
 
+    reviewer = ui.review_answer
+    idea = args.idea or ui.ask_idea()
     updated_idea, story_title, spine, world_bible = build_foundation(
-        args.idea, args.title, args.output_file,
+        idea, args.title, args.output_file, reviewer=reviewer,
     )
     if not sanity_check(updated_idea, story_title, spine, world_bible):
         logger.error("Idea, spine, and world bible are not consistent")
@@ -155,6 +158,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
     chapters_plan = run_generate_chapters_plan(
         updated_idea, story_title, spine, world_bible, args.number_of_chapters,
+        reviewer=reviewer,
     )
     _record_chapters_plan(args.output_file, chapters_plan)
 
@@ -174,6 +178,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
             chapters_plan=chapters_plan,
             output_file=args.output_file,
             number_of_chapters=args.number_of_chapters,
+            reviewer=reviewer,
         )
     )
     logger.info(

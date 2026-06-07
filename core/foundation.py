@@ -2,9 +2,11 @@
 
 Every chapter-drafting generator consumes the output of this module — the
 variants differ only in how they turn (spine, world_bible, chapters_plan)
-into prose. All `run_*` stages here are still interactive (they call into
-`ui.review_answer` and loop on user feedback); decoupling UI from these
-stages so the orchestrator can inject the reviewer is a follow-up.
+into prose. Each `run_*` stage takes an optional `reviewer` callback: the
+orchestrator injects the interactive `ui.review_answer` so the stage loops on
+user feedback, while passing `None` (benchmarks, tests) returns the first
+draft without looping. No UI module is imported here — business logic stays
+free of Rich per AGENTS.md.
 """
 from __future__ import annotations
 
@@ -13,10 +15,9 @@ import math
 
 import dspy
 
-import ui
 from _compat import observe
 from core.artifact import update_artifact
-from core.types import PlanEntry, WorldBible
+from core.types import PlanEntry, Reviewer, WorldBible
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,11 @@ def _snip(value, limit: int = 240) -> str:
 
 
 @observe()
-def run_clarify_idea(story_idea: str = None, story_title: str = None) -> tuple[str, str]:
+def run_clarify_idea(
+    story_idea: str = None,
+    story_title: str = None,
+    reviewer: Reviewer | None = None,
+) -> tuple[str, str]:
     class ClarifyStoryIdea(dspy.Signature):
         """Generate questions to clarify the story story_idea"""
 
@@ -56,18 +61,12 @@ def run_clarify_idea(story_idea: str = None, story_title: str = None) -> tuple[s
         story_idea: str = dspy.InputField()
         story_title: str = dspy.OutputField()
 
-    if not story_idea:
-        story_idea = ui.ask_idea()
-
     clarify_idea = dspy.ChainOfThought(ClarifyStoryIdea)
     result = clarify_idea(story_idea=story_idea, story_title=story_title)
     qas = []
-    for i in range(len(result.questions)):
-        proposed_answer, _ = ui.review_answer(
-            result.questions[i],
-            result.proposed_answers[i],
-        )
-        qas.append(f"question: {result.questions[i]}\nproposed_answer: {proposed_answer}")
+    for question, proposed in zip(result.questions, result.proposed_answers):
+        answer = proposed if reviewer is None else reviewer(question, proposed)[0]
+        qas.append(f"question: {question}\nproposed_answer: {answer}")
 
     update_idea = dspy.ChainOfThought(UpdateIdea)
     updated_idea = update_idea(story_idea=story_idea, qas=qas).updated_idea
@@ -79,7 +78,7 @@ def run_clarify_idea(story_idea: str = None, story_title: str = None) -> tuple[s
 
 
 @observe()
-def run_generate_core_premise(story_idea: str) -> str:
+def run_generate_core_premise(story_idea: str, reviewer: Reviewer | None = None) -> str:
     class GenerateCorePremise(dspy.Signature):
         """Generate a core premise for the story"""
 
@@ -97,16 +96,19 @@ def run_generate_core_premise(story_idea: str) -> str:
         generate_core_premise = core_prem_func(story_idea=story_idea, previous_result=previous_result, feedback=feedback)
 
         previous_result = generate_core_premise.core_premise
-        feedback, is_correct = ui.review_answer(
-            "Core premise:",
-            previous_result,
-        )
+        if reviewer is None:
+            return previous_result
+        feedback, is_correct = reviewer("Core premise:", previous_result)
         if is_correct:
             return feedback
 
 
 @observe()
-def run_generate_spine(story_idea: str, core_premise: str) -> str:
+def run_generate_spine(
+    story_idea: str,
+    core_premise: str,
+    reviewer: Reviewer | None = None,
+) -> str:
     class GenerateStorySpine(dspy.Signature):
         """Generate a a structured story story_spine using pixar's 7 step formula for building a compelling narrative arc"""
 
@@ -147,10 +149,9 @@ def run_generate_spine(story_idea: str, core_premise: str) -> str:
             ]
         )
 
-        feedback, is_correct = ui.review_answer(
-            "spine:",
-            previous_result,
-        )
+        if reviewer is None:
+            return previous_result
+        feedback, is_correct = reviewer("spine:", previous_result)
         if is_correct:
             return previous_result
 
@@ -159,7 +160,12 @@ def run_generate_spine(story_idea: str, core_premise: str) -> str:
 
 
 @observe()
-def run_generate_rules_of_the_world(story_idea: str, story_title: str, story_spine: str) -> list[str]:
+def run_generate_rules_of_the_world(
+    story_idea: str,
+    story_title: str,
+    story_spine: str,
+    reviewer: Reviewer | None = None,
+) -> list[str]:
     class GenerateRulesOfTheWorld(dspy.Signature):
         """Generate rules of the world for the story based on the story_idea and story_spine"""
 
@@ -186,16 +192,21 @@ def run_generate_rules_of_the_world(story_idea: str, story_title: str, story_spi
 
         rules_list = list(rules_of_the_world.rules_of_the_world)
         previous_result = "\n".join(rules_list)
-        feedback, is_correct = ui.review_answer(
-            "Rules of the world:",
-            previous_result,
-        )
+        if reviewer is None:
+            return rules_list
+        feedback, is_correct = reviewer("Rules of the world:", previous_result)
         if is_correct:
             return rules_list
 
 
 @observe()
-def run_generate_characters(story_idea: str, story_title: str, story_spine: str, rules_of_the_world: str) -> list[str]:
+def run_generate_characters(
+    story_idea: str,
+    story_title: str,
+    story_spine: str,
+    rules_of_the_world: str,
+    reviewer: Reviewer | None = None,
+) -> list[str]:
     class GenerateCharacters(dspy.Signature):
         """Generate characters for the story based on the story_idea, story_spine and rules of the world"""
 
@@ -225,7 +236,9 @@ def run_generate_characters(story_idea: str, story_title: str, story_spine: str,
         )
 
         previous_result = "\n".join([f"{i+1}. {chr}" for i, chr in enumerate(characters.characters)])
-        feedback, is_correct = ui.review_answer("Characters:", previous_result)
+        if reviewer is None:
+            return characters.characters
+        feedback, is_correct = reviewer("Characters:", previous_result)
         if is_correct:
             return characters.characters
 
@@ -237,6 +250,7 @@ def run_enhance_character(
     story_title: str,
     story_spine: str,
     rules_of_the_world: str,
+    reviewer: Reviewer | None = None,
 ) -> str:
     class EnhanceCharacter(dspy.Signature):
         """Enhance the character with more details, background, motivation, and personality."""
@@ -265,7 +279,9 @@ def run_enhance_character(
             feedback=feedback,
         )
 
-        feedback, is_correct = ui.review_answer(
+        if reviewer is None:
+            return enhanced_character.enhanced_character
+        feedback, is_correct = reviewer(
             "Enhanced character:",
             enhanced_character.enhanced_character,
         )
@@ -279,6 +295,7 @@ def run_generate_locations(
     story_title: str,
     story_spine: str,
     rules_of_the_world: str,
+    reviewer: Reviewer | None = None,
 ) -> list[str]:
     class GenerateLocations(dspy.Signature):
         """Generate locations for the story based on the story_idea, story_spine and rules of the world"""
@@ -311,7 +328,9 @@ def run_generate_locations(
         )
 
         locations_str += "\n".join(locations.locations) + "\n"
-        feedback, is_correct = ui.review_answer("Locations:", locations_str)
+        if reviewer is None:
+            return locations.locations
+        feedback, is_correct = reviewer("Locations:", locations_str)
         if is_correct:
             return locations.locations
 
@@ -323,6 +342,7 @@ def run_enhance_location(
     story_title: str,
     story_spine: str,
     rules_of_the_world: str,
+    reviewer: Reviewer | None = None,
 ) -> str:
     class EnhanceLocation(dspy.Signature):
         """Enhance the location given with more details"""
@@ -339,8 +359,6 @@ def run_enhance_location(
             desc="Elaborate description of the location",
         )
 
-    ui.print_status(f"Enhancing location {location}...")
-
     feedback = ""
     enhance_location_func = dspy.ChainOfThought(EnhanceLocation)
     while True:
@@ -353,7 +371,9 @@ def run_enhance_location(
             feedback=feedback,
         )
 
-        feedback, is_correct = ui.review_answer(
+        if reviewer is None:
+            return enhanced_location.enhanced_location
+        feedback, is_correct = reviewer(
             "Enhanced location:",
             enhanced_location.enhanced_location,
         )
@@ -368,6 +388,7 @@ def run_generate_timeline(
     story_spine: str,
     rules_of_the_world: list[str],
     locations: list[str],
+    reviewer: Reviewer | None = None,
 ) -> list[str]:
     class GenerateTimeline(dspy.Signature):
         """Generate a timeline for the story based on the story_idea, story_spine, rules of the world and locations"""
@@ -399,7 +420,9 @@ def run_generate_timeline(
 
         timeline_list = list(timeline.timeline)
         timeline_str = "\n".join(timeline_list)
-        feedback, is_correct = ui.review_answer("Timeline:", timeline_str)
+        if reviewer is None:
+            return timeline_list
+        feedback, is_correct = reviewer("Timeline:", timeline_str)
         if is_correct:
             return timeline_list
 
@@ -411,7 +434,8 @@ def run_generate_chapters_plan(
     story_spine: str,
     world_bible: WorldBible,
     number_of_chapters: int = 7,
-):
+    reviewer: Reviewer | None = None,
+) -> list[PlanEntry]:
     class GenerateChaptersPlan(dspy.Signature):
         """Generate chapters for the story based on the story_idea, story_spine and world bible"""
 
@@ -444,7 +468,9 @@ def run_generate_chapters_plan(
         )
 
         plan_str = "\n".join([chapter.chapter_title + "\n" + chapter.chapter_beats for chapter in chapters.chapters])
-        feedback, is_correct = ui.review_answer("Chapters:", plan_str)
+        if reviewer is None:
+            return chapters.chapters
+        feedback, is_correct = reviewer("Chapters:", plan_str)
         if is_correct:
             return chapters.chapters
 
@@ -529,11 +555,19 @@ def sanity_check(story_idea: str, story_title: str, story_spine: str, world_bibl
 
 
 @observe()
-def build_world_bible(updated_idea: str, story_title: str, spine: str, output_file: str) -> WorldBible:
+def build_world_bible(
+    updated_idea: str,
+    story_title: str,
+    spine: str,
+    output_file: str,
+    reviewer: Reviewer | None = None,
+) -> WorldBible:
     # 1. Generate rules of the world
     logger.info("STEP rules_of_the_world | inputs idea=%s | title=%s | spine=%s",
                 _snip(updated_idea), _snip(story_title, 80), _snip(spine))
-    rules_of_the_world = run_generate_rules_of_the_world(updated_idea, story_title, spine)
+    rules_of_the_world = run_generate_rules_of_the_world(
+        updated_idea, story_title, spine, reviewer=reviewer,
+    )
     logger.info("STEP rules_of_the_world | output=%s", _snip(rules_of_the_world, 600))
     update_artifact(output_file, "World bible", "", level=2)
     rules_str = "\n".join([f"- {rule}" for rule in rules_of_the_world])
@@ -543,7 +577,9 @@ def build_world_bible(updated_idea: str, story_title: str, spine: str, output_fi
     # 2. Generate locations
     logger.info("STEP locations | inputs idea=%s | title=%s | spine=%s | rules=%s",
                 _snip(updated_idea), _snip(story_title, 80), _snip(spine), _snip(rules_of_the_world))
-    locations = run_generate_locations(updated_idea, story_title, spine, rules_of_the_world)
+    locations = run_generate_locations(
+        updated_idea, story_title, spine, rules_of_the_world, reviewer=reviewer,
+    )
     logger.info("STEP locations | output count=%d list=%s", len(locations), _snip(locations))
     updated_locations = []
     locations_str = "\n".join([f"- {loc}" for i, loc in enumerate(locations)])
@@ -551,7 +587,9 @@ def build_world_bible(updated_idea: str, story_title: str, spine: str, output_fi
 
     for i, location in enumerate(locations, 1):
         logger.info("STEP enhance_location[%d] | location=%s", i, _snip(location))
-        updated_location = run_enhance_location(location, updated_idea, story_title, spine, rules_of_the_world)
+        updated_location = run_enhance_location(
+            location, updated_idea, story_title, spine, rules_of_the_world, reviewer=reviewer,
+        )
         logger.info("STEP enhance_location[%d] | output=%s", i, _snip(updated_location, 400))
         updated_locations.append(updated_location)
         update_artifact(output_file, f"Location {i}", updated_location, level=4)
@@ -561,7 +599,9 @@ def build_world_bible(updated_idea: str, story_title: str, spine: str, output_fi
     logger.info("STEP timeline | inputs idea=%s | title=%s | spine=%s | rules=%s | locations_count=%d",
                 _snip(updated_idea), _snip(story_title, 80), _snip(spine),
                 _snip(rules_of_the_world), len(updated_locations))
-    timeline = run_generate_timeline(updated_idea, story_title, spine, rules_of_the_world, updated_locations)
+    timeline = run_generate_timeline(
+        updated_idea, story_title, spine, rules_of_the_world, updated_locations, reviewer=reviewer,
+    )
     logger.info("STEP timeline | output=%s", _snip(timeline, 600))
     timeline_str = "\n".join([f"- {event}" for event in timeline])
     update_artifact(output_file, "Timeline", timeline_str, level=3)
@@ -570,7 +610,9 @@ def build_world_bible(updated_idea: str, story_title: str, spine: str, output_fi
     # 4. Generate characters
     logger.info("STEP characters | inputs idea=%s | title=%s | spine=%s | rules=%s",
                 _snip(updated_idea), _snip(story_title, 80), _snip(spine), _snip(rules_of_the_world))
-    characters = run_generate_characters(updated_idea, story_title, spine, rules_of_the_world)
+    characters = run_generate_characters(
+        updated_idea, story_title, spine, rules_of_the_world, reviewer=reviewer,
+    )
     logger.info("STEP characters | output count=%d list=%s", len(characters), _snip(characters))
     updated_characters = []
     characters_str = "\n".join([f"{i+1}. {char}" for i, char in enumerate(characters)])
@@ -578,7 +620,9 @@ def build_world_bible(updated_idea: str, story_title: str, spine: str, output_fi
 
     for i, character in enumerate(characters, 1):
         logger.info("STEP enhance_character[%d] | character=%s", i, _snip(character))
-        updated_character = run_enhance_character(character, updated_idea, story_title, spine, rules_of_the_world)
+        updated_character = run_enhance_character(
+            character, updated_idea, story_title, spine, rules_of_the_world, reviewer=reviewer,
+        )
         logger.info("STEP enhance_character[%d] | output=%s", i, _snip(updated_character, 400))
         updated_characters.append(updated_character)
         update_artifact(output_file, f"Character {i}", updated_character, level=4)
@@ -594,22 +638,28 @@ def build_world_bible(updated_idea: str, story_title: str, spine: str, output_fi
 
 
 @observe()
-def build_foundation(idea: str, title: str, output_file: str):
+def build_foundation(
+    idea: str,
+    title: str,
+    output_file: str,
+    reviewer: Reviewer | None = None,
+) -> tuple[str, str, str, WorldBible]:
     """Run the shared idea → premise → spine → world bible steps.
 
     Returns ``(updated_idea, story_title, spine, world_bible)``. Each variant's
-    drafting pipeline starts from this 4-tuple.
+    drafting pipeline starts from this 4-tuple. ``reviewer`` is threaded into
+    every stage; pass ``None`` to run non-interactively (first draft per stage).
     """
-    updated_idea, story_title = run_clarify_idea(idea, title)
+    updated_idea, story_title = run_clarify_idea(idea, title, reviewer=reviewer)
     update_artifact(output_file, "Story Title", story_title)
 
-    core_premise = run_generate_core_premise(updated_idea)
+    core_premise = run_generate_core_premise(updated_idea, reviewer=reviewer)
     update_artifact(output_file, "Core Premise", core_premise)
     logger.info("STEP core_premise | output=%s", _snip(core_premise, 600))
 
-    spine = run_generate_spine(updated_idea, core_premise)
+    spine = run_generate_spine(updated_idea, core_premise, reviewer=reviewer)
     update_artifact(output_file, "Spine", spine)
     logger.info("STEP spine | output=%s", _snip(spine, 800))
 
-    world_bible = build_world_bible(updated_idea, story_title, spine, output_file)
+    world_bible = build_world_bible(updated_idea, story_title, spine, output_file, reviewer=reviewer)
     return updated_idea, story_title, spine, world_bible

@@ -1,4 +1,4 @@
-from story_module import DraftedChapter, WriteStory
+from generators._dspy_module_impl import DraftedChapter, WriteStory
 
 
 def test_drafted_chapter_holds_outline_entry_and_prose():

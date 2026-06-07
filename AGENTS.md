@@ -288,25 +288,21 @@ def test_specific_function():
 - `main.py` — single CLI entry point; selects a generator via `--strategy` and orchestrates foundation → chapters_plan → dispatch.
 - `dspy_runtime.py` — `DSPyConfig` + `configure_dspy`. Provider-agnostic.
 - `logging_config.py` — centralised logging setup (verbosity levels, file handler).
-- `ui.py` — Rich-based interactive UI; *only* the orchestrator and (currently) the foundation `run_*` stages talk to it. Business logic must not import `rich`.
+- `ui.py` — Rich-based interactive UI; *only* the orchestrator (`main.py`) talks to it. Pipeline stages receive an injected `reviewer` callback (`core.types.Reviewer`) instead of importing `ui`; business logic must not import `rich`.
 - `_compat.py` — Langfuse `@observe()` fallback shim.
 - `exceptions.py` — recoverable exception tuples consumed by `dspy_runtime`.
 
 **`core/` — shared foundation (one module, one domain):**
-- `core/types.py` — `WorldBible`, `PlanEntry`, `Character`, `WorldState`, `render_world_state`, the generator-protocol dataclasses (`DraftingInput`, `DraftingOutput`, `DraftedChapter`) and the `StoryGenerator` `Protocol`.
+- `core/types.py` — `WorldBible`, `PlanEntry`, `Character`, `WorldState`, `render_world_state`, the `Reviewer` callback alias, the generator-protocol dataclasses (`DraftingInput`, `DraftingOutput`, `DraftedChapter`) and the `StoryGenerator` `Protocol`.
 - `core/artifact.py` — incremental markdown writer (`initialize_artifact`, `update_artifact`).
-- `core/foundation.py` — idea → premise → spine → world-bible → chapter-plan stages, the act/spine slicer, `sanity_check`, `build_foundation`, `build_world_bible`.
+- `core/foundation.py` — idea → premise → spine → world-bible → chapter-plan stages, the act/spine slicer, `sanity_check`, `build_foundation`, `build_world_bible`. Every `run_*` takes an optional `reviewer`; `None` returns the first draft (no UI).
 
-**`generators/` — registered drafting variants:**
+**`generators/` — registered drafting variants (each owns its drafting helpers):**
 - `generators/__init__.py` — registry, `@register`, `get(id)`, `promoted()`, auto-discovery via `pkgutil`.
-- `generators/baseline.py` — variant A (rolling story-so-far summary). Reuses `story.run_enhance_chapter` + `story.run_generate_story_so_far`.
-- `generators/world_state.py` — variant B (structured `WorldState` carry). Reuses `world_state.run_init_world_state` + `run_advance_world_state` + `run_draft_chapter_with_state`.
-- `generators/dspy_module.py` — variant C (per-chapter `ChainOfThought(DraftChapter)`, no continuity carry). Reuses `story_module.DraftChapter`.
-
-**Per-variant helpers (used by generators, not directly callable):**
-- `story.py` — variant-A drafting helpers (`run_enhance_chapter`, `run_generate_story_so_far`).
-- `world_state.py` — variant-B drafting helpers (`run_init_world_state`, `run_advance_world_state`, `run_draft_chapter_with_state`).
-- `story_module.py` — `DraftChapter` / `StoryOutline` / `WriteStory` signatures + module.
+- `generators/baseline.py` — variant A (rolling story-so-far summary). Defines `run_enhance_chapter` + `run_generate_story_so_far` inline.
+- `generators/world_state.py` — variant B (structured `WorldState` carry). Defines `run_init_world_state` + `run_advance_world_state` + `run_draft_chapter_with_state` inline.
+- `generators/dspy_module.py` — variant C (per-chapter `ChainOfThought(DraftChapter)`, no continuity carry). Imports its `DraftChapter` signature from `generators/_dspy_module_impl.py`.
+- `generators/_dspy_module_impl.py` — variant-C signatures (`DraftChapter`, `StoryOutline`) plus the pure `WriteStory` reference module (the `DraftArticle`-style two-stage program). Not registered; kept separate because its 3-field `DraftedChapter` and the generator-unused `WriteStory` would otherwise collide with `core.types.DraftedChapter` if folded into `dspy_module.py`.
 
 **Goal function & benchmark:**
 - `bench/eval-spec.md` — Tier-1/2/3 evaluation spec (the objective function).
