@@ -43,6 +43,7 @@ class Baseline:
                 story_so_far,
                 chapter_index=i,
                 total_chapters=total,
+                reviewer=inp.reviewer,
             )
             update_artifact(
                 inp.output_file, f"Chapter {i}: {ch.chapter_title}", prose, level=3,

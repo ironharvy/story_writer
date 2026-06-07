@@ -18,10 +18,9 @@ import random
 
 import dspy
 
-import ui
 from _compat import observe
 from core.foundation import act_hint_for_chapter
-from core.types import WorldBible
+from core.types import Reviewer, WorldBible
 
 
 @observe()
@@ -34,7 +33,8 @@ def run_enhance_chapter(
     story_so_far: str,
     chapter_index: int = 1,
     total_chapters: int = 1,
-):
+    reviewer: Reviewer | None = None,
+) -> str:
     class DraftChapter(dspy.Signature):
         """Write the chapter prose.
 
@@ -119,7 +119,9 @@ and including the current act — treat anything beyond it as not yet decided.
             story_so_far=story_so_far,
         )
 
-        feedback, is_correct = ui.review_answer(
+        if reviewer is None:
+            return result.prose
+        feedback, is_correct = reviewer(
             "Drafted Chapter:",
             result.prose,
         )

@@ -32,7 +32,9 @@ class WorldStateGenerator:
     description = "Structured WorldState carried across chapters (clock, characters, threads)."
 
     def draft(self, inp: DraftingInput) -> DraftingOutput:
-        world_state = run_init_world_state(inp.idea, inp.title, inp.spine, inp.world_bible)
+        world_state = run_init_world_state(
+            inp.idea, inp.title, inp.spine, inp.world_bible, reviewer=inp.reviewer,
+        )
         update_artifact(
             inp.output_file, "World State (initial)", render_world_state(world_state), level=3,
         )
@@ -52,6 +54,7 @@ class WorldStateGenerator:
                 world_state,
                 chapter_index=i,
                 total_chapters=total,
+                reviewer=inp.reviewer,
             )
             update_artifact(
                 inp.output_file, f"Chapter {i}: {ch.chapter_title}", prose, level=3,

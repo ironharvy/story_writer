@@ -16,10 +16,9 @@ import logging
 
 import dspy
 
-import ui
 from _compat import observe
 from core.foundation import act_hint_for_chapter
-from core.types import WorldBible, WorldState, render_world_state
+from core.types import Reviewer, WorldBible, WorldState, render_world_state
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +29,7 @@ def run_init_world_state(
     story_title: str,
     story_spine: str,
     world_bible: WorldBible,
+    reviewer: Reviewer | None = None,
 ) -> WorldState:
     """Derive the opening world state from the world bible, before Chapter 1."""
 
@@ -69,7 +69,9 @@ def run_init_world_state(
             feedback=feedback,
         )
         previous_result = render_world_state(result.world_state)
-        feedback, is_correct = ui.review_answer("Initial world state:", previous_result)
+        if reviewer is None:
+            return result.world_state
+        feedback, is_correct = reviewer("Initial world state:", previous_result)
         if is_correct:
             return result.world_state
 
@@ -133,6 +135,7 @@ def run_draft_chapter_with_state(
     world_state: WorldState,
     chapter_index: int = 1,
     total_chapters: int = 1,
+    reviewer: Reviewer | None = None,
 ) -> str:
     """Draft chapter prose from the static world bible plus the current state."""
 
@@ -184,6 +187,8 @@ def run_draft_chapter_with_state(
             chapter=chapter,
             feedback=feedback,
         )
-        feedback, is_correct = ui.review_answer("Drafted Chapter:", result.prose)
+        if reviewer is None:
+            return result.prose
+        feedback, is_correct = reviewer("Drafted Chapter:", result.prose)
         if is_correct:
             return result.prose
