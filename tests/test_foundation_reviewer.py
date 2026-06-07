@@ -12,9 +12,8 @@ import dspy
 from dspy.utils import DummyLM
 
 import core.foundation as foundation
-import story
-import world_state
 from core.types import WorldBible
+from generators import baseline, world_state
 
 SPINE = "s1\ns2\ns3\ns4\ns5\ns6\ns7"
 
@@ -86,12 +85,12 @@ def test_clarify_idea_none_uses_proposed_answers():
 
 def test_enhance_chapter_none_returns_first_draft(monkeypatch):
     # Force the optional random-detail branch off so exactly one draft call runs.
-    monkeypatch.setattr(story.random, "random", lambda: 0.99)
+    monkeypatch.setattr(baseline.random, "random", lambda: 0.99)
     _configure(
         {"reasoning": "r", "prose": "PROSE_ONE"},
         {"reasoning": "r", "prose": "PROSE_TWO"},
     )
-    out = story.run_enhance_chapter(
+    out = baseline.run_enhance_chapter(
         "Ch1\nbeats", "idea", "T", SPINE, _world_bible(), "",
         chapter_index=1, total_chapters=3, reviewer=None,
     )
