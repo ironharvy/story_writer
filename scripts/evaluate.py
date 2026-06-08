@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 # Add repo root so top-level modules import when run from anywhere.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from bench.evaluate import FullScorecard, evaluate_path  # noqa: E402
+from bench.evaluate import FullScorecard, JudgeInputs, evaluate_path  # noqa: E402
 from logging_config import setup_logging  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--with-llm",
         action="store_true",
-        help="Also run the Tier-2 LLM gates (POV consistency + prose lint).",
+        help="Also run the Tier-2/3 LLM gates (POV, prose lint, continuity, "
+        "premise fidelity, rubric).",
+    )
+    parser.add_argument(
+        "--idea",
+        default=None,
+        help="The original story idea — required for the premise-fidelity gate.",
+    )
+    parser.add_argument(
+        "--rubric-samples",
+        type=int,
+        default=1,
+        help="Score the Tier-3 rubric N times and take the per-axis median.",
     )
     parser.add_argument(
         "--no-sidecar",
@@ -118,13 +130,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.with_llm:
         _configure_llm(args)
 
+    judge = JudgeInputs(
+        idea=args.idea,
+        run_llm=args.with_llm,
+        rubric_samples=args.rubric_samples,
+    )
     exit_code = 0
     for path in args.paths:
         if not path.is_file():
             logger.error("not a file: %s", path)
             exit_code = max(exit_code, 1)
             continue
-        card = evaluate_path(path, run_llm=args.with_llm)
+        card = evaluate_path(path, judge)
         print(_render(path, card))
         if not args.no_sidecar:
             _sidecar_path(path).write_text(card.to_json(), encoding="utf-8")

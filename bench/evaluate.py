@@ -1,19 +1,23 @@
 """Unified story scorecard — the executable Definition of Done.
 
 Composes the deterministic Tier-1 checks (:mod:`qa`) with the LLM-backed
-Tier-2 checks (:mod:`pov_check` POV consistency and :mod:`story_linter`
-placeholder/name lint, run in detection mode) into a single machine-readable
-scorecard per draft, per ``bench/eval-spec.md``.
+Tier-2 / Tier-3 judges into a single machine-readable scorecard per draft, per
+``bench/eval-spec.md``:
 
-Tier-1 runs with no model. Tier-2 needs a configured DSPy LM: pass
-``run_llm=True`` (the ``scripts/evaluate.py --with-llm`` path) or inject
+- Tier-2: POV consistency (:mod:`pov_check`), prose lint (:mod:`story_linter`,
+  detection mode), continuity / contradictions and premise fidelity
+  (:mod:`bench.judge`).
+- Tier-3: the six-axis qualitative rubric (:mod:`bench.judge`).
+
+Tier-1 runs with no model. The LLM gates need a configured DSPy LM: set
+``JudgeInputs.run_llm`` (the ``scripts/evaluate.py --with-llm`` path) or inject
 precomputed results (used by tests). A draft only reports ``ship=True`` when
 every evaluated gate is clean *and* every required gate actually ran
 (``complete=True``) — a deterministic-only pass reports ``tier1_clean=True``
-but ``ship=False`` because POV could not be checked.
+but ``ship=False`` because the judges could not run.
 
-Tier-3 (the qualitative rubric) is not implemented yet; the "real ending"
-Definition-of-Done item is reported as a ``manual`` check until it lands.
+When the rubric runs, the "real ending" Definition-of-Done item is judged by
+it; otherwise that item is reported as a ``manual`` check.
 """
 from __future__ import annotations
 
@@ -42,9 +46,25 @@ TIER1_GATES = (
     "cross_chapter_phrase_reuse",
 )
 
-_REAL_ENDING_MANUAL = (
-    "Real ending dramatizes the spine's final beats (Tier-3 judge / human read)"
-)
+
+@dataclass
+class JudgeInputs:
+    """Configuration + injection seams for the LLM-backed gates.
+
+    ``run_llm`` turns the Tier-2/3 judges on; ``idea`` is required for the
+    premise-fidelity gate. The ``*_classifications`` / ``*_replacements`` /
+    ``contradictions`` / ``premise_verdict`` / ``rubric_scores`` fields inject
+    precomputed results so tests (and cached runs) can skip the model.
+    """
+
+    idea: str | None = None
+    run_llm: bool = False
+    rubric_samples: int = 1
+    pov_classifications: list | None = None
+    linter_replacements: list | None = None
+    contradictions: list | None = None
+    premise_verdict: object | None = None
+    rubric_scores: list | None = None
 
 
 @dataclass
@@ -160,6 +180,53 @@ def _linter_gate(
     return Gate("prose_linter", 2, WARN, messages)
 
 
+def _continuity_gate(
+    chapters: dict[str, str],
+    cast: str,
+    contradictions: list | None,
+    run_llm: bool,
+) -> Gate:
+    """Tier-2 continuity / contradiction judge."""
+    if contradictions is None and not run_llm:
+        return Gate("continuity", 2, SKIPPED, ["needs a model (run with --with-llm)"])
+    import bench.judge as judge
+
+    findings = judge.check_continuity(chapters, cast, contradictions)
+    return _gate_from_findings("continuity", 2, findings)
+
+
+def _premise_gate(
+    idea: str | None,
+    chapters: dict[str, str],
+    verdict: object | None,
+    run_llm: bool,
+) -> Gate:
+    """Tier-2 premise-fidelity judge (needs the original idea)."""
+    if verdict is None and not run_llm:
+        return Gate("premise_fidelity", 2, SKIPPED, ["needs a model (run with --with-llm)"])
+    if verdict is None and not idea:
+        return Gate("premise_fidelity", 2, SKIPPED, ["needs the original idea (pass --idea)"])
+    import bench.judge as judge
+
+    findings = judge.check_premise_fidelity(idea or "", chapters, verdict)
+    return _gate_from_findings("premise_fidelity", 2, findings)
+
+
+def _rubric_gate(
+    chapters: dict[str, str],
+    scores: list | None,
+    samples: int,
+    run_llm: bool,
+) -> Gate:
+    """Tier-3 six-axis qualitative rubric judge."""
+    if scores is None and not run_llm:
+        return Gate("rubric", 3, SKIPPED, ["needs a model (run with --with-llm)"])
+    import bench.judge as judge
+
+    findings = judge.check_rubric(chapters, scores, samples=samples)
+    return _gate_from_findings("rubric", 3, findings)
+
+
 def _definition_of_done(by_name: dict[str, Gate], tier1_clean: bool) -> list[dict]:
     """Map docs/07 Definition-of-Done items onto the gates that enforce them."""
 
@@ -167,34 +234,38 @@ def _definition_of_done(by_name: dict[str, Gate], tier1_clean: bool) -> list[dic
         gate = by_name.get(name)
         return gate.status if gate is not None else SKIPPED
 
+    # "Real ending" is judged by the Tier-3 rubric when it ran; otherwise manual.
+    rubric = by_name.get("rubric")
+    ending = rubric.status if rubric is not None and rubric.status != SKIPPED else MANUAL
+
     return [
         {"item": "All required sections present", "status": status("structure"), "gate": "structure"},
         {"item": "N non-empty chapters (>= hard floor)", "status": status("chapter_length"), "gate": "chapter_length"},
         {"item": "Protagonist named in prose (no placeholders)", "status": status("placeholder_protagonist"), "gate": "placeholder_protagonist"},
-        {"item": "Real ending dramatizes the spine's final beats", "status": MANUAL, "gate": None},
+        {"item": "Real ending dramatizes the spine's final beats", "status": ending, "gate": "rubric"},
         {"item": "No real QA fails", "status": PASS if tier1_clean else FAIL, "gate": "tier1"},
         {"item": "POV consistent across chapters", "status": status("pov_consistency"), "gate": "pov_consistency"},
+        {"item": "Story dramatizes the premise", "status": status("premise_fidelity"), "gate": "premise_fidelity"},
     ]
 
 
-def evaluate(
-    text: str,
-    *,
-    pov_classifications: list | None = None,
-    linter_replacements: list | None = None,
-    run_llm: bool = False,
-) -> FullScorecard:
+def evaluate(text: str, judge: JudgeInputs | None = None) -> FullScorecard:
     """Score one story markdown string against the full Definition of Done.
 
-    ``pov_classifications`` / ``linter_replacements`` inject precomputed Tier-2
-    results (tests pass these to avoid an LM). When both are ``None`` and
-    ``run_llm`` is ``False``, the Tier-2 gates report ``skipped``.
+    ``judge`` carries the LLM-gate config + injection seams (see
+    :class:`JudgeInputs`). With its defaults (no model, nothing injected) the
+    Tier-2/3 gates report ``skipped`` and only Tier-1 is decided.
     """
+    judge = judge or JudgeInputs()
     chapters = qa.split_chapters(text)
+    cast = qa._section(text, 3, "Characters")
     findings = _tier1_findings(text)
     gates = [_gate_from_findings(name, 1, findings) for name in TIER1_GATES]
-    gates.append(_pov_gate(chapters, pov_classifications, run_llm))
-    gates.append(_linter_gate(text, linter_replacements, run_llm))
+    gates.append(_pov_gate(chapters, judge.pov_classifications, judge.run_llm))
+    gates.append(_linter_gate(text, judge.linter_replacements, judge.run_llm))
+    gates.append(_continuity_gate(chapters, cast, judge.contradictions, judge.run_llm))
+    gates.append(_premise_gate(judge.idea, chapters, judge.premise_verdict, judge.run_llm))
+    gates.append(_rubric_gate(chapters, judge.rubric_scores, judge.rubric_samples, judge.run_llm))
     return _summarize(gates, _budgets(findings))
 
 
@@ -206,14 +277,15 @@ def _summarize(gates: list[Gate], budgets: dict[str, dict]) -> FullScorecard:
     not_evaluated = [g.gate for g in gates if g.status == SKIPPED]
     tier1_clean = not any(g.status == FAIL for g in gates if g.tier == 1) and not over_budget
     complete = not not_evaluated
+    dod = _definition_of_done({g.gate: g for g in gates}, tier1_clean)
     return FullScorecard(
         ship=not fails and not over_budget and complete,
         complete=complete,
         tier1_clean=tier1_clean,
         gates=gates,
         budgets=budgets,
-        definition_of_done=_definition_of_done({g.gate: g for g in gates}, tier1_clean),
-        manual_checks=[_REAL_ENDING_MANUAL],
+        definition_of_done=dod,
+        manual_checks=[d["item"] for d in dod if d["status"] == MANUAL],
         not_evaluated=not_evaluated,
         fails=fails,
         warns=warns,
@@ -224,9 +296,9 @@ def _row(gate: Gate) -> dict:
     return {"gate": gate.gate, "tier": gate.tier, "messages": gate.messages}
 
 
-def evaluate_path(path: Path, **kwargs) -> FullScorecard:
+def evaluate_path(path: Path, judge: JudgeInputs | None = None) -> FullScorecard:
     """Read a story markdown file and evaluate it. See :func:`evaluate`."""
-    return evaluate(Path(path).read_text(encoding="utf-8"), **kwargs)
+    return evaluate(Path(path).read_text(encoding="utf-8"), judge)
 
 
 def main(argv: list[str] | None = None) -> int:

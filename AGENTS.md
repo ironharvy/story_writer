@@ -314,7 +314,8 @@ def test_specific_function():
 **Goal function & benchmark:**
 - `bench/eval-spec.md` — Tier-1/2/3 evaluation spec (the objective function).
 - `bench/criteria.py` — Tier-1 deterministic runner; wraps `qa.run_all` + the structure/placeholder/word-band checks with the spec's soft budgets (length thresholds live in `qa.py`).
-- `bench/evaluate.py` — the **unified scorecard** (executable Definition of Done): Tier-1 + the LLM-backed Tier-2 POV / prose-lint gates → one JSON `FullScorecard` with `ship` / `complete`.
+- `bench/judge.py` — LLM Tier-2/3 judges: continuity/contradictions (T2.3), premise fidelity (T2.4), and the six-axis rubric. `check_*` functions accept injected verdicts (testable without a model).
+- `bench/evaluate.py` — the **unified scorecard** (executable Definition of Done): Tier-1 + the LLM-backed Tier-2/3 judges → one JSON `FullScorecard` with `ship` / `complete`. Judge config/injection via `JudgeInputs`.
 - `bench/rubric.md` — Tier-3 qualitative rubric.
 
 **Post-generation analysis:**

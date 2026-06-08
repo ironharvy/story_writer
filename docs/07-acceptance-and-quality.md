@@ -12,8 +12,8 @@ A run on the recommended config is acceptable when:
 3. The **protagonist is named** in chapter 1 (no "the protagonist"/"the child"
    placeholders left in prose).
 4. The story has a **real ending** (the spine's final beats are dramatized, not
-   gestured at). *Not automatable yet — a `manual` check pending the Tier-3
-   judge.*
+   gestured at). Judged by the Tier-3 `rubric` (`ending` axis) when it runs;
+   reported as a `manual` check otherwise.
 5. The **QA suite reports no real fails** (parser-artifact fails don't count).
 6. **Narration POV is consistent** across chapters (no unexplained drift).
 
@@ -49,7 +49,10 @@ Each Definition-of-Done item maps to a gate:
 | Low cross-chapter phrase reuse | `cross_chapter_phrase_reuse` | 1 | warn (budget ≤ 5) |
 | POV consistent across chapters | `pov_consistency` | 2 | fail |
 | Placeholders / canonical-name lint | `prose_linter` | 2 | warn (advisory) |
-| **Real ending dramatizes the spine** | — | 3 | **manual** |
+| No factual contradictions | `continuity` | 2 | fail (hard) / warn (minor) |
+| Story dramatizes the premise | `premise_fidelity` | 2 | fail (needs `--idea`) |
+| **Real ending dramatizes the spine** | `rubric` | 3 | fail (rubric-judged; `manual` if not run) |
+| Six-axis quality bar (avg ≥ 4, no axis < 3) | `rubric` | 3 | fail |
 
 Length thresholds live in `qa.py` (`CHAPTER_MIN_WORDS` = 80 hard floor;
 `CHAPTER_TARGET_BAND` = 300–2500) — the single source of truth shared by
@@ -66,11 +69,15 @@ python scripts/word_count.py path/to/story.md   # top repeated content words
 
 Severity meaning: `fail` = must fix, `warn` = inspect, `info` = context.
 
-## Read-through rubric (human, 1–5 each)
+## Read-through rubric (1–5 each)
 
-From the bake-off methodology — score every run on:
-**continuity · coherence · structure · prose · plot-thread tracking.**
-Used to compare models/variants beyond what automated QA can see (see
+The six-axis rubric (arc · ending · agency · scene-vs-summary · prose ·
+cohesion, defined in [bench/rubric.md](../bench/rubric.md)) is now scored by
+the Tier-3 LLM judge (`bench/judge.py`, via `scripts/evaluate.py --with-llm`),
+not only by hand. For variance control, pass `--rubric-samples N` to score the
+rubric N times and take the per-axis median; prefer an independent judge model
+(different from the generator). A human read-through over the same axes is still
+the gold standard for comparing models/variants (see
 [model-implementation-comparison-2026-05-10.md](model-implementation-comparison-2026-05-10.md)).
 
 ## Test strategy (code)
@@ -79,8 +86,10 @@ Used to compare models/variants beyond what automated QA can see (see
 - **LLM isolation:** unit tests configure a `MockLM` and assert on parsed
   outputs / Pydantic validation rather than calling a real model.
 - **Coverage today:** `test_qa.py`, `test_pov_check.py`, `test_story_linter.py`,
-  `test_story_module.py`, `test_world_state.py`. New checks/algorithms should
-  ship with tests mirroring this pattern.
+  `test_story_module.py`, `test_world_state.py`, `tests/test_evaluate.py`
+  (scorecard wiring), `tests/test_judge.py` (judge logic), `tests/test_bench.py`.
+  The judge tests inject precomputed verdicts so the gate logic is covered
+  without a model. New checks/algorithms should ship with tests mirroring this.
 - **Static quality:** `ruff` (lint + format), and optionally `pylint` / `radon`
   / `vulture` per `AGENTS.md`.
 

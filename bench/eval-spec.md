@@ -12,7 +12,8 @@ and signature phrases repeated in every chapter. Each one exists because a
 model actually shipped that defect.
 
 This file is the source of truth that `bench/criteria.py` (deterministic
-Tier-1 checks) and the (still-stubbed) LLM judge for Tier-2/3 implement.
+Tier-1 checks) and `bench/judge.py` (the Tier-2/3 LLM judges) implement, wired
+together by `bench/evaluate.py`.
 
 ---
 
@@ -92,11 +93,12 @@ unstable/garbled verdicts. Always feed the judge the *narration only*
 instruction so quoted dialogue doesn't confound it.
 
 > **Status.** `bench/evaluate.py` (CLI: `scripts/evaluate.py --with-llm`)
-> wires **T2.1 POV consistency** (via `pov_check.py`) and the advisory prose
-> linter (via `story_linter.py`). The *literal* half of **T2.2** (the bare
-> word "protagonist" in prose) is caught deterministically in Tier-1
-> (`qa.check_placeholder_protagonist`); the subtler naming cases plus **T2.3
-> continuity** and **T2.4 premise fidelity** are not implemented yet.
+> wires **T2.1 POV consistency** (via `pov_check.py`), **T2.3 continuity** and
+> **T2.4 premise fidelity** (via `bench/judge.py`), and the advisory prose
+> linter (via `story_linter.py`). The *literal* half of **T2.2** (the bare word
+> "protagonist" in prose) is caught deterministically in Tier-1
+> (`qa.check_placeholder_protagonist`); the subtler T2.2 naming cases are
+> handled by the linter. Premise fidelity needs the original idea (`--idea`).
 
 ### T2.1 POV / narrator consistency — `FAIL` on within-chapter shift
 Ask the judge to classify each chapter's **dominant narration POV** —
@@ -153,13 +155,14 @@ A draft is shippable iff **all** hold:
 Emit one machine-readable scorecard per draft (JSON: each check → severity
 + message, plus rubric scores and a final `ship: true|false`).
 
-> **Implemented today** (`bench/evaluate.py`): the Tier-1 gates + budgets,
-> Tier-2 POV (T2.1), and the advisory linter. The scorecard reports `ship`
-> over the *automated* gates plus a `complete` flag (false until every
-> required gate runs) — so a deterministic-only pass reports
-> `tier1_clean=true, complete=false, ship=false`. T2.3/T2.4 and the full
-> Tier-3 rubric are pending; "real ending" is surfaced as a `manual` check
-> until the Tier-3 judge lands.
+> **Implemented today** (`bench/evaluate.py`): the Tier-1 gates + budgets, the
+> Tier-2 judges (POV, continuity, premise fidelity) + the advisory linter, and
+> the Tier-3 six-axis rubric. The scorecard reports `ship` over the evaluated
+> gates plus a `complete` flag (false until every required gate runs) — so a
+> deterministic-only pass reports `tier1_clean=true, complete=false,
+> ship=false`. "Real ending" is judged by the rubric when it runs (a `manual`
+> check otherwise). Remaining: per-axis rubric decomposition and judge
+> calibration against human scores.
 
 ---
 
