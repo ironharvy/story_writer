@@ -12,9 +12,19 @@ from pathlib import Path
 import pytest
 
 import generators  # noqa: F401 — populates REGISTRY for select_generators()
-from bench.criteria import Scorecard
+from bench.criteria import Scorecard, score
 from bench.run import Fixture, load_fixtures, select_generators
 from bench.score import render_fixture_table, walk_run_root
+
+
+def _write_story(tmp_path: Path, chapters: dict[str, str]) -> Path:
+    parts = ["# Story", "", "## World bible", "", "### Characters", "",
+             "", "## Final Story", ""]
+    for title, body in chapters.items():
+        parts += [f"### {title}", "", body, ""]
+    path = tmp_path / "story.md"
+    path.write_text("\n".join(parts), encoding="utf-8")
+    return path
 
 
 def test_load_fixtures_returns_all_three():
@@ -101,3 +111,25 @@ def test_scorecard_to_json_roundtrips():
     assert parsed["ship"] is False
     assert parsed["fails"][0]["check"] == "x"
     assert parsed["budgets"]["a"]["count"] == 1
+
+
+# --- reconciled chapter floor (80 hard fail; 300-2500 warn band) ------------
+
+def test_criteria_thin_chapter_warns_but_ships(tmp_path: Path):
+    # A 250-word chapter is "thin", not "broken": it must WARN, not FAIL, and
+    # the draft still ships (this is the supported fast-model output band).
+    path = _write_story(tmp_path, {"Chapter 1: A": " ".join(["alpha"] * 250) + "."})
+    sc = score(path)
+    assert sc.fails == []
+    assert sc.ship is True
+    assert any("thin" in w["message"] for w in sc.warns)
+
+
+def test_criteria_empty_chapter_fails(tmp_path: Path):
+    path = _write_story(tmp_path, {
+        "Chapter 1: A": " ".join(["alpha"] * 400) + ".",
+        "Chapter 2: B": "",
+    })
+    sc = score(path)
+    assert sc.ship is False
+    assert any(f["check"] == "chapter_length" for f in sc.fails)

@@ -12,7 +12,8 @@ and signature phrases repeated in every chapter. Each one exists because a
 model actually shipped that defect.
 
 This file is the source of truth that `bench/criteria.py` (deterministic
-Tier-1 checks) and the (still-stubbed) LLM judge for Tier-2/3 implement.
+Tier-1 checks) and `bench/judge.py` (the Tier-2/3 LLM judges) implement, wired
+together by `bench/evaluate.py`.
 
 ---
 
@@ -44,13 +45,16 @@ surrounding `*`/`_` emphasis stripped (`**Cinder**, a runaway` → `Cinder`).
 
 Fast, free, reproducible. These are gates: a `FAIL` here blocks shipping.
 
-### T1.1 Chapter length — `FAIL`
-Every chapter's prose must be at least a hard floor and should fall in a
-target band.
-- **Hard floor (gate): 300 words.** Below this the chapter is empty/truncated.
-- **Target band (warn outside): 800–2500 words.** Thin ~250-word chapters
-  are the classic fast-model failure; bloated >3000-word chapters usually
-  mean the outline collapsed into one chapter.
+### T1.1 Chapter length — `FAIL` (floor) / `WARN` (band)
+Every chapter's prose must clear a hard floor and should fall in a target band.
+- **Hard floor (gate, `FAIL`): 80 words.** Below this the chapter is
+  empty/truncated/broken. (Source of truth: `qa.CHAPTER_MIN_WORDS`.)
+- **Target band (`WARN` outside): 300–2500 words.** (`qa.CHAPTER_TARGET_BAND`.)
+  Thin `<300`-word chapters are the classic fast-model output; bloated
+  `>2500` chapters usually mean the outline collapsed into one chapter. These
+  warn but do **not** block shipping — `qwen3:latest` writes ~250-word
+  chapters and is a supported smoke model, so "thin" is a quality signal, not
+  "broken". Tighten the band per project if you want a stricter quality bar.
 
 ### T1.2 Character presence — `FAIL`
 Every canonical character must appear in the manuscript prose at least once.
@@ -87,6 +91,14 @@ Heuristics can't read. Use the local Ollama model as the judge first;
 only escalate to the hosted fallback if the local judge gives
 unstable/garbled verdicts. Always feed the judge the *narration only*
 instruction so quoted dialogue doesn't confound it.
+
+> **Status.** `bench/evaluate.py` (CLI: `scripts/evaluate.py --with-llm`)
+> wires **T2.1 POV consistency** (via `pov_check.py`), **T2.3 continuity** and
+> **T2.4 premise fidelity** (via `bench/judge.py`), and the advisory prose
+> linter (via `story_linter.py`). The *literal* half of **T2.2** (the bare word
+> "protagonist" in prose) is caught deterministically in Tier-1
+> (`qa.check_placeholder_protagonist`); the subtler T2.2 naming cases are
+> handled by the linter. Premise fidelity needs the original idea (`--idea`).
 
 ### T2.1 POV / narrator consistency — `FAIL` on within-chapter shift
 Ask the judge to classify each chapter's **dominant narration POV** —
@@ -142,6 +154,15 @@ A draft is shippable iff **all** hold:
 
 Emit one machine-readable scorecard per draft (JSON: each check → severity
 + message, plus rubric scores and a final `ship: true|false`).
+
+> **Implemented today** (`bench/evaluate.py`): the Tier-1 gates + budgets, the
+> Tier-2 judges (POV, continuity, premise fidelity) + the advisory linter, and
+> the Tier-3 six-axis rubric. The scorecard reports `ship` over the evaluated
+> gates plus a `complete` flag (false until every required gate runs) — so a
+> deterministic-only pass reports `tier1_clean=true, complete=false,
+> ship=false`. "Real ending" is judged by the rubric when it runs (a `manual`
+> check otherwise). Remaining: per-axis rubric decomposition and judge
+> calibration against human scores.
 
 ---
 
