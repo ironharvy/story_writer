@@ -20,6 +20,7 @@ story-specific. See ``docs/canon-schema.md`` for the schema contract.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -135,6 +136,19 @@ def load_canon(path: str | Path | None = None) -> Canon:
     else:
         data = yaml.safe_load(text)
     return from_dict(data or {})
+
+
+def apply_accepted_aliases(text: str, canon: Canon) -> str:
+    """Rewrite each accepted spoken/spelled-out alias to its canonical form.
+
+    Used before name-drift detection so a sanctioned form ("Vessel Eighty-Four")
+    is not mistaken for drift from its canonical ("Vessel 84"). Longer aliases are
+    applied first so a contained alias ("Eighty-Four") doesn't pre-empt the longer
+    match."""
+    for spoken in sorted(canon.accepted_aliases, key=len, reverse=True):
+        canonical = canon.accepted_aliases[spoken]
+        text = re.sub(re.escape(spoken), canonical, text, flags=re.IGNORECASE)
+    return text
 
 
 # --- generation-time rendering ----------------------------------------------
