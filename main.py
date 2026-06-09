@@ -21,6 +21,7 @@ import os
 
 from dotenv import load_dotenv
 
+import canon as canon_mod
 import generators  # auto-discovers and registers every variant in generators/
 from core.artifact import initialize_artifact, update_artifact
 from core.foundation import (
@@ -83,6 +84,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--title", type=str)
     parser.add_argument("--number-of-chapters", type=int, default=7)
     parser.add_argument("--output-file", default=".tmp/story.md")
+    parser.add_argument(
+        "--canon",
+        default=None,
+        help="Path to a canon/continuity config (YAML/JSON). Defaults to the "
+        "project canon if present; omit with --no-canon.",
+    )
+    parser.add_argument(
+        "--no-canon",
+        action="store_true",
+        help="Disable canon injection/guards even if a default canon exists.",
+    )
     return parser
 
 
@@ -165,6 +177,8 @@ def run_pipeline(args: argparse.Namespace) -> None:
             args.strategy,
         )
 
+    canon = None if args.no_canon else canon_mod.load_canon(args.canon)
+
     output = entry.cls().draft(
         DraftingInput(
             idea=updated_idea,
@@ -174,6 +188,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
             chapters_plan=chapters_plan,
             output_file=args.output_file,
             number_of_chapters=args.number_of_chapters,
+            canon=canon,
         )
     )
     logger.info(

@@ -83,6 +83,10 @@ class DraftingInput:
     chapters_plan: list[PlanEntry]
     output_file: str
     number_of_chapters: int
+    # The shared canon/continuity config (canon.Canon). Optional and typed as
+    # `object` to keep core dependency-free; generators that use it import the
+    # concrete type. `None` -> generators run canon-free.
+    canon: object | None = None
 
 
 @dataclass
