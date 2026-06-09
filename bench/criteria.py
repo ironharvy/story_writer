@@ -6,8 +6,12 @@ name drift, cross-chapter phrase reuse, POV classification). This module
 applies the spec's thresholds (hard floor 300 words vs qa.py's runtime
 default 80, 5-gram budget of 5, etc.) and emits a scorecard.
 
-Tier-2/Tier-3 LLM-judge checks are out of scope here — they'll plug in
-later via a `bench/judge.py` once the prompt + judge model are chosen.
+The deterministic canon/continuity metrics in `canon_metrics.py` (scaffolding
+leak, name-arc ordering, locked-appearance contradiction, required-artifact
+placement, timeline/age) are also folded in here as Tier-1 gates: a project's
+`canon` config (loaded by default from `canon/<project>.yaml`) drives them, and
+any canon FAIL blocks shipping. Tier-2/Tier-3 LLM-judge checks plug in via
+`bench/judge.py`.
 """
 from __future__ import annotations
 
@@ -15,6 +19,8 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+import canon as canon_mod
+import canon_metrics
 import qa
 
 # Thresholds from bench/eval-spec.md
@@ -36,16 +42,23 @@ class Scorecard:
         return json.dumps(asdict(self), indent=2)
 
 
-def score(story_md_path: Path) -> Scorecard:
+def score(story_md_path: Path, canon=None) -> Scorecard:
     """Run all deterministic checks against a story markdown artifact.
 
     Returns a Scorecard with separated FAILs and WARNs plus per-budget
     counts. `ship=True` only if zero Tier-1 FAILs and every budget respected.
+
+    `canon` is a :class:`canon.Canon`; when ``None`` the project default is
+    loaded (an empty canon if none is authored, making the canon metrics no-ops).
     """
+    if canon is None:
+        canon = canon_mod.load_canon()
     findings = qa.run_all(story_md_path)
     # T1.1 in qa.py uses default min_words=80; re-run with spec floor of 300
     text = Path(story_md_path).read_text(encoding="utf-8")
     findings.extend(qa.check_chapter_length(text, min_words=HARD_CHAPTER_FLOOR))
+    # Deterministic canon/continuity gates (no-ops under an empty canon).
+    findings.extend(canon_metrics.run_all(text, canon))
 
     fails: list[dict] = []
     warns: list[dict] = []
