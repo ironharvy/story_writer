@@ -18,10 +18,17 @@ import dspy
 
 import ui
 from _compat import observe
+from canon import Canon
+from canon_guard import draft_with_canon_guard
 from core.foundation import act_hint_for_chapter
 from core.types import WorldBible, WorldState, render_world_state
 
 logger = logging.getLogger(__name__)
+
+
+def _empty_canon() -> Canon:
+    """An empty canon — guards/injection become no-ops."""
+    return Canon()
 
 
 @observe()
@@ -133,6 +140,9 @@ def run_draft_chapter_with_state(
     world_state: WorldState,
     chapter_index: int = 1,
     total_chapters: int = 1,
+    canon=None,
+    canon_directives: str = "",
+    chapter_title: str = "",
 ) -> str:
     """Draft chapter prose from the static world bible plus the current state."""
 
@@ -153,6 +163,11 @@ def run_draft_chapter_with_state(
         Write this chapter in a tone appropriate to {act_hint}; do not foreshadow
         events from later acts. The story_spine you receive only covers beats up to
         and including the current act — treat anything beyond it as not yet decided.
+
+        Obey canon_directives exactly: ground the point-of-view character physically
+        in the locked appearance, keep a single consistent narrative POV, do not use
+        a name that is not yet allowed this chapter, include any element required this
+        chapter, and never leak planning/production vocabulary into the prose.
         """
 
         story_idea: str = dspy.InputField()
@@ -167,23 +182,33 @@ def run_draft_chapter_with_state(
         )
         chapter: str = dspy.InputField()
         feedback: str = dspy.InputField(desc="Feedback from the user for the chapter")
+        canon_directives: str = dspy.InputField(
+            default="", desc="Canon/continuity rules in force for this chapter",
+        )
         prose: str = dspy.OutputField(desc="Chapter prose")
 
     hint = act_hint_for_chapter(chapter_index, total_chapters, story_spine)
+    canon = canon if canon is not None else _empty_canon()
 
     feedback = ""
     draft_func = dspy.ChainOfThought(DraftChapterWithState)
     while True:
-        result = draft_func(
-            story_idea=story_idea,
-            story_title=story_title,
-            story_spine=hint["spine_through_act"],
-            act_hint=hint["label"],
-            world_bible=world_bible,
-            world_state=world_state,
-            chapter=chapter,
-            feedback=feedback,
+        def _draft(_feedback=feedback) -> str:
+            return draft_func(
+                story_idea=story_idea,
+                story_title=story_title,
+                story_spine=hint["spine_through_act"],
+                act_hint=hint["label"],
+                world_bible=world_bible,
+                world_state=world_state,
+                chapter=chapter,
+                feedback=_feedback,
+                canon_directives=canon_directives,
+            ).prose
+
+        prose = draft_with_canon_guard(
+            _draft, canon, chapter_index, chapter_title or chapter, canon_directives,
         )
-        feedback, is_correct = ui.review_answer("Drafted Chapter:", result.prose)
+        feedback, is_correct = ui.review_answer("Drafted Chapter:", prose)
         if is_correct:
-            return result.prose
+            return prose

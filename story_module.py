@@ -62,6 +62,11 @@ class DraftChapter(dspy.Signature):
     Write in a tone appropriate to act_hint and do not foreshadow events from
     later acts — the story_spine you receive only covers beats up to and
     including the current act, so treat anything beyond it as not yet decided.
+
+    Obey canon_directives exactly: ground the point-of-view character physically
+    in the locked appearance, keep a single consistent narrative POV, do not use
+    a name that is not yet allowed this chapter, include any element required
+    this chapter, and never leak planning/production vocabulary into the prose.
     """
 
     story_idea: str = dspy.InputField()
@@ -74,6 +79,9 @@ class DraftChapter(dspy.Signature):
     )
     world_bible: WorldBible = dspy.InputField(desc="Reference canon, not to be quoted")
     chapter: str = dspy.InputField(desc="This chapter's title and beats")
+    canon_directives: str = dspy.InputField(
+        default="", desc="Canon/continuity rules in force for this chapter",
+    )
     prose: str = dspy.OutputField(desc="Chapter prose")
 
 

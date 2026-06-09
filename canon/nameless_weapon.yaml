@@ -1,0 +1,131 @@
+# Canon / continuity config — "The Nameless Weapon" instance.
+#
+# This file is DATA, not code. It encodes the "rules that span files" found in a
+# manual chapter-by-chapter continuity review, and is consumed two ways:
+#   (a) rendered into generation context/instructions (see canon.render_chapter_slice)
+#       to PREVENT the failures, and
+#   (b) read by the deterministic metrics in canon_metrics.py and the LM judges in
+#       bench/judge.py to SCORE and GATE them.
+#
+# The schema is generic/per-project (the pipeline writes other stories from other
+# ideas); only the values below are specific to this manuscript. See
+# docs/canon-schema.md for the schema contract.
+
+project: nameless_weapon
+title: The Nameless Weapon
+
+# How the narrative POV must behave (read by the slice renderer; the POV metric
+# itself lives in pov_check.py / bench.judge).
+narration:
+  pov_rule: >-
+    Maintain a single, consistent narrative point of view. Do not shift point of
+    view within a chapter, and do not change the dominant point of view from one
+    chapter to the next.
+
+# year <-> age map + year-codes + key spans.
+# Year 0 = age 16 ... Year 5 = age 21. The whole story spans 5 years.
+timeline:
+  max_total_span_years: 5
+  year_to_age:
+    0: 16
+    1: 17
+    2: 18
+    3: 19
+    4: 20
+    5: 21
+  year_codes:
+    7N-702: { year: 0, note: flight }
+    7N-707: { year: 5, note: death }
+  key_spans:
+    - from_code: 7N-702
+      to_code: 7N-707
+      years: 5
+      note: flight (7N-702) to death (7N-707)
+
+# Earliest chapter each name may appear in narration; when it was learned; and
+# per-speaker reveal rules.
+name_arc:
+  # name -> earliest chapter the name may appear in narration at all.
+  earliest_narration:
+    Elias: 7
+    Severin: 11
+  # name -> chapter in which the protagonist/narrator learns it (context only).
+  learned:
+    Elias: 6
+  # A specific speaker may only utter a name from a given chapter onward.
+  reveal_rules:
+    - speaker: Marta
+      name: Elias
+      from_chapter: 17
+  # Ordering constraints for a specific chapter: the names must first appear in
+  # this relative order within the chapter.
+  call_order:
+    17: [Severin, Vessel 84, Elias]
+
+# The protagonist's locked physical anchor. Damage accumulates; there is NO
+# transformation. `contradictions` lists adjectives that would contradict the
+# locked trait and must therefore be flagged by the canon-fact metric.
+locked_appearance:
+  protagonist:
+    eyes: grey
+    hair: brown
+    hair_style: nape-braid
+    build: average/lean
+    permanent_marks:
+      - right-cheek scar
+    principle: "damage accumulates, NO transformation"
+    contradictions:
+      eyes: [blue, green, hazel, amber, golden, gold, violet, red, black, brown]
+      hair: [blond, blonde, red, ginger, black, white, grey, gray, auburn, silver]
+
+# chapter -> artifact that must appear in that chapter's prose. `patterns` are
+# lowercased substrings; at least one must be present.
+required_artifacts:
+  4: { name: hymn, patterns: [hymn] }
+  12: { name: bard song, patterns: [bard, song] }
+
+# Semantic invariants for the LM judges. `after_chapter` (optional) scopes the
+# rule to chapters strictly after the given number.
+canon_invariants:
+  - id: azazel_maw
+    rule: "Azazel stays in the Maw after Ch.11; he does not appear on the surface again."
+    after_chapter: 11
+  - id: leash_fray
+    rule: >-
+      The Command-of-the-Void leash frays progressively through Acts IV-V and is
+      gone by the time of the Capitol.
+  - id: kira_not_strawman
+    rule: "Kira is a convinced person with a coherent position, not a strawman."
+
+# Spoken / spelled-out forms that are NOT name drift. The deterministic metrics
+# treat these as equivalent to their canonical form so they don't false-positive.
+accepted_aliases:
+  Vessel Eighty-Four: Vessel 84
+  Eighty-Four: Vessel 84
+  One-Twelve: Vessel 112
+
+# Sanctioned refrains — intentional repetition that the phrase-reuse checks
+# should not penalize.
+motif_allowlist:
+  - "he did not look back"
+  - "the body the eye slid past"
+  - "the small wooden soldier"
+
+# Planning / production vocabulary forbidden in finished prose. Each entry is a
+# regular expression matched case-insensitively against chapter prose.
+scaffolding_blocklist:
+  - 'Ch\.?\s*\d+'
+  - 'chapter plan'
+  - 'Beat\s+\d+'
+  - 'enhancers? guide'
+  - 'world bible'
+  - 'setup/payoff'
+  - 'easter egg'
+  - 'in another book'
+  - '\bPOV\b'
+  - '\bthe reader\b'
+
+# Intentional exceptions to the scaffolding blocklist: sanctioned meta-narrative
+# devices. A blocklist hit inside one of these phrases is not a leak.
+device_allowlist:
+  - "The reader sees her stand"

@@ -19,7 +19,9 @@ import logging
 
 import dspy
 
+import canon as canon_mod
 from _compat import observe
+from canon_guard import draft_with_canon_guard
 from core.artifact import update_artifact
 from core.foundation import act_hint_for_chapter
 from core.types import DraftedChapter, DraftingInput, DraftingOutput
@@ -47,22 +49,31 @@ class DspyModuleGenerator:
         update_artifact(inp.output_file, "Final Story", "", level=2)
         chapters: list[DraftedChapter] = []
         total = len(inp.chapters_plan)
+        canon = inp.canon if inp.canon is not None else canon_mod.Canon()
         for i, ch in enumerate(inp.chapters_plan, 1):
             hint = act_hint_for_chapter(i, total, inp.spine)
+            directives = canon_mod.render_chapter_slice(canon, i)
             logger.info("draft_chapter[%d/%d] | %s", i, total, ch.chapter_title)
-            result = self._draft(
-                story_idea=inp.idea,
-                story_title=inp.title,
-                story_spine=hint["spine_through_act"],
-                act_hint=hint["label"],
-                world_bible=inp.world_bible,
-                chapter=f"{ch.chapter_title}\n{ch.chapter_beats}",
+
+            def _draft(_i=i, _ch=ch, _hint=hint, _directives=directives) -> str:
+                return self._draft(
+                    story_idea=inp.idea,
+                    story_title=inp.title,
+                    story_spine=_hint["spine_through_act"],
+                    act_hint=_hint["label"],
+                    world_bible=inp.world_bible,
+                    chapter=f"{_ch.chapter_title}\n{_ch.chapter_beats}",
+                    canon_directives=_directives,
+                ).prose
+
+            prose = draft_with_canon_guard(
+                _draft, canon, i, ch.chapter_title, directives,
             )
             update_artifact(
-                inp.output_file, f"Chapter {i}: {ch.chapter_title}", result.prose, level=3,
+                inp.output_file, f"Chapter {i}: {ch.chapter_title}", prose, level=3,
             )
             chapters.append(
-                DraftedChapter(chapter_title=ch.chapter_title, prose=result.prose),
+                DraftedChapter(chapter_title=ch.chapter_title, prose=prose),
             )
 
         return DraftingOutput(chapters=chapters, continuity_artifact=None)

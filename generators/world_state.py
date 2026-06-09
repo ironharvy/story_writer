@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 
+import canon as canon_mod
 from core.artifact import update_artifact
 from core.types import DraftedChapter, DraftingInput, DraftingOutput, render_world_state
 from generators import register
@@ -41,6 +42,7 @@ class WorldStateGenerator:
         chapters: list[DraftedChapter] = []
         per_chapter_states = []
         total = len(inp.chapters_plan)
+        canon = inp.canon if inp.canon is not None else canon_mod.Canon()
         for i, ch in enumerate(inp.chapters_plan, 1):
             chapter_plan_str = f"{ch.chapter_title}\n{ch.chapter_beats}"
             prose = run_draft_chapter_with_state(
@@ -52,6 +54,9 @@ class WorldStateGenerator:
                 world_state,
                 chapter_index=i,
                 total_chapters=total,
+                canon=canon,
+                canon_directives=canon_mod.render_chapter_slice(canon, i),
+                chapter_title=ch.chapter_title,
             )
             update_artifact(
                 inp.output_file, f"Chapter {i}: {ch.chapter_title}", prose, level=3,
