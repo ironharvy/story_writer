@@ -66,7 +66,13 @@ and including the current act — treat anything beyond it as not yet decided.
         feedback: str = dspy.InputField(
             desc="Feedback from the user for the chapter",
         )
-        story_so_far: str = dspy.InputField(desc="Story so far")
+        story_so_far: str = dspy.InputField(
+            desc="Continuity context only — what has happened so far, so this "
+            "chapter stays consistent with prior events. Reference material, not "
+            "source material: do not mirror its summarized, event-log voice or "
+            "reuse its phrasing. Write fresh scene prose regardless of how terse "
+            "this recap reads.",
+        )
         prose: str = dspy.OutputField(desc="Chapter prose")
 
     class GenerateRandomDetail(dspy.Signature):
