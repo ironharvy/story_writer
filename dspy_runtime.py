@@ -30,6 +30,7 @@ class DSPyConfig:
     cache: bool = True
     memory_cache: bool = True
     cache_dir: str | None = None
+    think: bool = False  # qwen3.6 and other reasoners think by default; off for drafting speed
 
 
 def dspy_config_from_namespace(args: Namespace) -> DSPyConfig:
@@ -100,6 +101,35 @@ def _redact_secrets(kwargs: dict) -> dict:
     }
 
 
+_ACTIVE_CONFIG: DSPyConfig | None = None
+
+
+def thinking_lm(max_tokens: int | None = None) -> "dspy.LM":
+    """Return an LM clone of the active runtime config with reasoning enabled.
+
+    Eval gates (continuity, bible consistency, comprehension grading) benefit
+    from the model's chain-of-thought even though drafting runs with it off.
+    Use via ``with dspy.context(lm=thinking_lm()): ...``. Falls back to the
+    currently configured LM if no config was captured (e.g. tests)."""
+    if _ACTIVE_CONFIG is None:
+        return dspy.settings.lm
+    cfg = _ACTIVE_CONFIG
+    kwargs: dict = {}
+    if cfg.api_base:
+        kwargs["api_base"] = cfg.api_base
+    if cfg.api_key is not None:
+        kwargs["api_key"] = cfg.api_key
+    if cfg.num_ctx is not None:
+        kwargs["num_ctx"] = cfg.num_ctx
+    kwargs["think"] = True
+    return dspy.LM(
+        cfg.model_name,
+        max_tokens=max_tokens or cfg.max_tokens,
+        cache=cfg.cache,
+        **kwargs,
+    )
+
+
 def configure_dspy(config: DSPyConfig) -> None:
     """Configure DSPy LM and optional instrumentation."""
     kwargs: dict[str, str] = {}
@@ -125,6 +155,12 @@ def configure_dspy(config: DSPyConfig) -> None:
 
     if config.num_ctx is not None:
         kwargs["num_ctx"] = config.num_ctx
+
+    # Reasoning models (qwen3.6, etc.) emit hidden chain-of-thought by default,
+    # which silently consumes the token budget before any prose is produced and
+    # multiplies latency. Drafting runs with think disabled; eval gates that
+    # want deliberate reasoning opt back in via ``thinking_lm()``.
+    kwargs["think"] = config.think
 
     logger.info(
         "Configuring DSPy model=%r max_tokens=%s num_ctx=%s cache=%s memory_cache=%s cache_dir=%r",
@@ -152,3 +188,6 @@ def configure_dspy(config: DSPyConfig) -> None:
 
     callbacks = [TokenUsageCallback()] if TokenUsageCallback is not None else []
     dspy.configure(lm=lm, callbacks=callbacks)
+
+    global _ACTIVE_CONFIG
+    _ACTIVE_CONFIG = config
