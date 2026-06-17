@@ -58,7 +58,7 @@ def test_worst_severity_and_report_helpers():
 # --- bible_consistency -------------------------------------------------------
 
 def test_bible_consistency_severity_mapping(monkeypatch, bible):
-    monkeypatch.setattr(bible_consistency, "_judge", lambda *a, **k: [
+    monkeypatch.setattr(bible_consistency, "_judge", lambda *_a, **k: [
         BibleIssue(entity="The Bleeding Field", kind="location", severity="contradiction",
                    explanation="Described as a clean meadow", fix="Restore the bloodied mud"),
         BibleIssue(entity="Sera", kind="character", severity="drift",
@@ -74,14 +74,14 @@ def test_bible_consistency_severity_mapping(monkeypatch, bible):
 
 
 def test_bible_consistency_clean(monkeypatch, bible):
-    monkeypatch.setattr(bible_consistency, "_judge", lambda *a, **k: [])
+    monkeypatch.setattr(bible_consistency, "_judge", lambda *_a, **k: [])
     report = bible_consistency.check(bible, "Chapter 1", "prose")
     assert report.passed()
     assert report.findings == []
 
 
 def test_bible_consistency_judge_error_is_swallowed(monkeypatch, bible):
-    def boom(*a, **k):
+    def boom(*_a, **k):
         raise RuntimeError("ollama down")
     monkeypatch.setattr(bible_consistency, "_judge", boom)
     report = bible_consistency.check(bible, "Chapter 1", "prose")
@@ -129,12 +129,12 @@ def test_bible_internal_error_is_swallowed(monkeypatch, bible):
 # --- comprehension -----------------------------------------------------------
 
 def test_comprehension_essential_missing_is_blocking(monkeypatch, bible):
-    monkeypatch.setattr(comprehension, "generate_questions", lambda *a, **k: [
+    monkeypatch.setattr(comprehension, "generate_questions", lambda *_a, **k: [
         ComprehensionQuestion(question="Is Sera named?", importance="essential", why="intro"),
         ComprehensionQuestion(question="What does casting cost?", importance="essential", why="rule"),
         ComprehensionQuestion(question="What is the weather?", importance="supporting", why="mood"),
     ])
-    monkeypatch.setattr(comprehension, "answer_and_grade", lambda prose, qs: [
+    monkeypatch.setattr(comprehension, "answer_and_grade", lambda prose, _qs: [
         QuestionVerdict(question="Is Sera named?", answer="Yes, Sera", verdict="answered", note=""),
         QuestionVerdict(question="What does casting cost?", answer="NOT IN TEXT", verdict="missing",
                         note="Show the blood/aging cost"),
@@ -149,10 +149,10 @@ def test_comprehension_essential_missing_is_blocking(monkeypatch, bible):
 
 
 def test_comprehension_supporting_missing_is_warn(monkeypatch, bible):
-    monkeypatch.setattr(comprehension, "generate_questions", lambda *a, **k: [
+    monkeypatch.setattr(comprehension, "generate_questions", lambda *_a, **k: [
         ComprehensionQuestion(question="Minor detail?", importance="supporting", why="x"),
     ])
-    monkeypatch.setattr(comprehension, "answer_and_grade", lambda prose, qs: [
+    monkeypatch.setattr(comprehension, "answer_and_grade", lambda prose, _qs: [
         QuestionVerdict(question="Minor detail?", answer="NOT IN TEXT", verdict="missing", note="add"),
     ])
     report = comprehension.check("Chapter 1", "beats", bible, "prose", "")
@@ -161,10 +161,10 @@ def test_comprehension_supporting_missing_is_warn(monkeypatch, bible):
 
 
 def test_comprehension_all_answered_is_clean(monkeypatch, bible):
-    monkeypatch.setattr(comprehension, "generate_questions", lambda *a, **k: [
+    monkeypatch.setattr(comprehension, "generate_questions", lambda *_a, **k: [
         ComprehensionQuestion(question="Q?", importance="essential", why="x"),
     ])
-    monkeypatch.setattr(comprehension, "answer_and_grade", lambda prose, qs: [
+    monkeypatch.setattr(comprehension, "answer_and_grade", lambda prose, _qs: [
         QuestionVerdict(question="Q?", answer="A", verdict="answered", note=""),
     ])
     report = comprehension.check("Chapter 1", "beats", bible, "prose", "")
@@ -270,7 +270,7 @@ def test_premise_fidelity_score_and_gaps(monkeypatch):
             PremiseGap(element="old start wars", severity="weak",
                        explanation="Implied only", fix="Add a council scene"),
         ]
-    monkeypatch.setattr(premise_fidelity, "_judge", lambda *a, **k: _Res())
+    monkeypatch.setattr(premise_fidelity, "_judge", lambda *_a, **k: _Res())
     report = premise_fidelity.check("idea", "premise", "spine", "summary")
     # first finding is the info score line
     assert report.findings[0].severity == "info"

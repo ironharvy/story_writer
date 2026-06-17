@@ -35,7 +35,7 @@ from evals import (  # noqa: E402
     premise_fidelity,
 )
 from evals.loader import load_story  # noqa: E402
-from evals.types import EvalFinding, GateReport  # noqa: E402
+from evals.types import GateReport  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ class _nullcontext:
     def __enter__(self):
         return None
 
-    def __exit__(self, *a):
+    def __exit__(self, *_a):
         return False
 
 
