@@ -83,6 +83,8 @@ class DraftingInput:
     chapters_plan: list[PlanEntry]
     output_file: str
     number_of_chapters: int
+    target_words_per_chapter: int = 0  # 0 = no target; reviewed generator honours it
+    max_revisions: int = 2  # revision passes per chapter in self-review generators
 
 
 @dataclass

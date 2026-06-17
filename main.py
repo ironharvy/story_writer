@@ -60,6 +60,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Ollama context window size (num_ctx).",
     )
     parser.add_argument(
+        "--think",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable model chain-of-thought (reasoning models). Off by default "
+        "for drafting speed; eval gates opt in separately.",
+    )
+    parser.add_argument(
+        "--target-words-per-chapter",
+        type=int,
+        default=0,
+        help="Per-chapter word-count target for the reviewed generator (0 = off).",
+    )
+    parser.add_argument(
+        "--max-revisions",
+        type=int,
+        default=2,
+        help="Max revision passes per chapter in the reviewed generator.",
+    )
+    parser.add_argument(
         "--cache",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -121,6 +140,7 @@ def configure_runtime(args: argparse.Namespace) -> None:
             cache=args.cache,
             memory_cache=args.memory_cache,
             cache_dir=args.cache_dir,
+            think=args.think,
         )
     )
 
@@ -174,6 +194,8 @@ def run_pipeline(args: argparse.Namespace) -> None:
             chapters_plan=chapters_plan,
             output_file=args.output_file,
             number_of_chapters=args.number_of_chapters,
+            target_words_per_chapter=args.target_words_per_chapter,
+            max_revisions=args.max_revisions,
         )
     )
     logger.info(

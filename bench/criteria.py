@@ -36,11 +36,16 @@ class Scorecard:
         return json.dumps(asdict(self), indent=2)
 
 
-def score(story_md_path: Path) -> Scorecard:
+def score(story_md_path: Path, *, judge_tier2: bool = False,
+          per_chapter: bool = False, idea: str = "") -> Scorecard:
     """Run all deterministic checks against a story markdown artifact.
 
     Returns a Scorecard with separated FAILs and WARNs plus per-budget
     counts. `ship=True` only if zero Tier-1 FAILs and every budget respected.
+
+    When ``judge_tier2`` is set, the LLM-judge gates in ``bench.judge`` are also
+    run and folded in (the caller must have configured a DSPy LM first). This is
+    off by default so the deterministic bench path never touches the model.
     """
     findings = qa.run_all(story_md_path)
     # T1.1 in qa.py uses default min_words=80; re-run with spec floor of 300
@@ -62,6 +67,14 @@ def score(story_md_path: Path) -> Scorecard:
             fails.append(record)
         elif f.severity == "warn":
             warns.append(record)
+
+    if judge_tier2:
+        from bench import judge as _judge  # local import keeps dspy out of the default path
+        for record in _judge.judge(Path(story_md_path), per_chapter=per_chapter, idea=idea):
+            if record["severity"] == "fail":
+                fails.append(record)
+            elif record["severity"] == "warn":
+                warns.append(record)
 
     budgets = {
         "name_drift": {"count": drift_count, "budget": NAME_DRIFT_BUDGET,

@@ -4,6 +4,7 @@ All console.print / Prompt.ask / Confirm.ask calls live here.
 Pipeline logic must not import Rich directly.
 """
 
+import os
 from collections.abc import Sequence
 from typing import Any
 
@@ -11,6 +12,13 @@ from rich.console import Console
 from rich.prompt import Confirm, Prompt
 
 console = Console()
+
+
+def auto_accept_enabled() -> bool:
+    """True when the pipeline should run headless, accepting every proposed
+    artifact without prompting. Gated on ``STORY_AUTO_ACCEPT`` so the default
+    interactive behaviour is unchanged for human-driven runs."""
+    return os.environ.get("STORY_AUTO_ACCEPT", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def print_welcome() -> None:
@@ -47,6 +55,8 @@ def review_answer(question: str, proposed_answer: str) -> tuple[str, bool]:
     Returns:
         A tuple of (answer_text, is_accepted).
     """
+    if auto_accept_enabled():
+        return proposed_answer, True
     print_review_prompt(question, proposed_answer)
     if not ask_is_correct(default=True):
         answer = ask_user_input("Enter your answer")
