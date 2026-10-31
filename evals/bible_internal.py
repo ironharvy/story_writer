@@ -85,6 +85,7 @@ def check(world_bible: WorldBible) -> tuple[GateReport, list[str]]:
         issues = _judge(world_bible)
     except Exception as exc:
         logger.warning("bible_internal judge failed: %s", exc)
+        report.add_error(exc)
         return report, clarifications
     for issue in issues:
         severity = _SEVERITY.get(issue.severity.strip().lower(), "warn")

@@ -85,7 +85,9 @@ def test_bible_consistency_judge_error_is_swallowed(monkeypatch, bible):
         raise RuntimeError("ollama down")
     monkeypatch.setattr(bible_consistency, "_judge", boom)
     report = bible_consistency.check(bible, "Chapter 1", "prose")
-    assert report.passed()  # failure degrades to "no findings", never crashes
+    assert not report.passed()
+    assert report.findings[0].check == "bible_consistency_error"
+    assert report.findings[0].locus == "Chapter 1"
 
 
 # --- bible_internal ----------------------------------------------------------
@@ -123,7 +125,57 @@ def test_bible_internal_dedups_clarifications(monkeypatch, bible):
 def test_bible_internal_error_is_swallowed(monkeypatch, bible):
     monkeypatch.setattr(bible_internal, "_judge", lambda wb: (_ for _ in ()).throw(RuntimeError("x")))
     report, clarifications = bible_internal.check(bible)
-    assert report.passed() and clarifications == []
+    assert not report.passed() and clarifications == []
+    assert report.findings[0].severity == "error"
+
+
+def test_other_judge_failures_are_visible(monkeypatch, bible):
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("judge unavailable")
+
+    monkeypatch.setattr(comprehension, "generate_questions", boom)
+    monkeypatch.setattr(premise_fidelity, "_judge", boom)
+    for report in (comprehension.check("Ch1", "beats", bible, "prose"),
+                   premise_fidelity.check("idea", "premise", "spine", "summary")):
+        assert not report.passed()
+        assert report.findings[0].severity == "error"
+        assert not report.blocking
+        assert report.revision_brief() == ""
+
+
+def test_continuity_reports_failed_digest_and_judge(monkeypatch):
+    def digest(title, _prose):
+        if title == "Ch1":
+            raise RuntimeError("digest unavailable")
+        return ChapterDigest()
+
+    def fail_find(_digests):
+        raise RuntimeError("judge unavailable")
+
+    monkeypatch.setattr(continuity, "_digest_chapter", digest)
+    monkeypatch.setattr(continuity, "_find", fail_find)
+    report = continuity.check({"Ch1": "a", "Ch2": "b", "Ch3": "c"})
+    assert not report.passed()
+    assert [f.locus for f in report.findings] == ["Ch1", ""]
+    assert all(f.severity == "error" for f in report.findings)
+
+
+def test_review_report_does_not_truncate_judge_errors(monkeypatch):
+    from types import SimpleNamespace
+
+    from generators import reviewed
+
+    monkeypatch.setattr(reviewed.continuity, "check", lambda _chapters: GateReport("continuity"))
+    monkeypatch.setattr(reviewed.premise_fidelity, "check", lambda *_args: GateReport("premise"))
+    written = []
+    monkeypatch.setattr(reviewed, "update_artifact", lambda _path, _title, body, **_kw: written.append(body))
+    findings = [EvalFinding("other", "warn", f"warning {i}") for i in range(45)]
+    findings.append(EvalFinding("comprehension_error", "error", "judge unavailable", locus="Ch1"))
+    inp = SimpleNamespace(idea="idea", title="title", spine="spine", output_file="story.md")
+    reviewed.Reviewed()._write_review_report(inp, [], "", findings)
+    assert "comprehension_error" in written[0]
+    assert "warning 39" in written[0]
+    assert "warning 40" not in written[0]
 
 
 # --- comprehension -----------------------------------------------------------

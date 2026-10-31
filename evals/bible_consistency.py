@@ -84,6 +84,7 @@ def check(world_bible: WorldBible, chapter_title: str, prose: str) -> GateReport
         issues = _judge(world_bible, chapter_title, prose)
     except Exception as exc:  # judge failure must not crash drafting
         logger.warning("bible_consistency judge failed for %r: %s", chapter_title, exc)
+        report.add_error(exc, locus=chapter_title)
         return report
     for issue in issues:
         severity = _SEVERITY.get(issue.severity.strip().lower(), "warn")

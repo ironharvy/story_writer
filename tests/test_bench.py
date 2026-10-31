@@ -101,3 +101,35 @@ def test_scorecard_to_json_roundtrips():
     assert parsed["ship"] is False
     assert parsed["fails"][0]["check"] == "x"
     assert parsed["budgets"]["a"]["count"] == 1
+
+
+def test_judge_error_makes_scorecard_incomplete(monkeypatch, tmp_path):
+    from bench import criteria, judge
+
+    story = tmp_path / "story.md"
+    story.write_text("", encoding="utf-8")
+    monkeypatch.setattr(criteria.qa, "run_all", lambda _path: [])
+    monkeypatch.setattr(criteria.qa, "check_chapter_length", lambda *_a, **_k: [])
+    error = {"check": "continuity_error", "severity": "error", "message": "unavailable"}
+    monkeypatch.setattr(judge, "judge", lambda *_a, **_k: [error])
+    result = criteria.score(story, judge_tier2=True)
+    assert not result.ship
+    assert not result.complete
+    assert result.judge_errors == [error]
+    assert json.loads(result.to_json())["judge_errors"] == [error]
+
+
+def test_judge_exposes_failed_gate(monkeypatch, tmp_path):
+    from bench import judge
+
+    story = tmp_path / "story.md"
+    story.write_text("# Story\n", encoding="utf-8")
+    monkeypatch.setattr(judge.bible_internal, "_judge", lambda *_a: (_ for _ in ()).throw(
+        RuntimeError("offline")
+    ))
+    monkeypatch.setattr(judge.premise_fidelity, "_judge", lambda *_a: (_ for _ in ()).throw(
+        RuntimeError("offline")
+    ))
+    findings = judge.judge(story)
+    assert {f["check"] for f in findings} == {"bible_internal_error", "premise_fidelity_error"}
+    assert all(f["severity"] == "error" for f in findings)

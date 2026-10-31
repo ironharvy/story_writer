@@ -12,7 +12,7 @@ later via a `bench/judge.py` once the prompt + judge model are chosen.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import qa
@@ -31,6 +31,8 @@ class Scorecard:
     fails: list[dict]
     warns: list[dict]
     budgets: dict[str, dict]
+    judge_errors: list[dict] = field(default_factory=list)
+    complete: bool = True
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -68,6 +70,7 @@ def score(story_md_path: Path, *, judge_tier2: bool = False,
         elif f.severity == "warn":
             warns.append(record)
 
+    judge_errors: list[dict] = []
     if judge_tier2:
         from bench import judge as _judge  # local import keeps dspy out of the default path
         for record in _judge.judge(Path(story_md_path), per_chapter=per_chapter, idea=idea):
@@ -75,6 +78,8 @@ def score(story_md_path: Path, *, judge_tier2: bool = False,
                 fails.append(record)
             elif record["severity"] == "warn":
                 warns.append(record)
+            elif record["severity"] == "error":
+                judge_errors.append(record)
 
     budgets = {
         "name_drift": {"count": drift_count, "budget": NAME_DRIFT_BUDGET,
@@ -83,8 +88,9 @@ def score(story_md_path: Path, *, judge_tier2: bool = False,
                          "over": reuse_count > PHRASE_REUSE_BUDGET},
     }
 
-    ship = not fails and not any(b["over"] for b in budgets.values())
-    return Scorecard(ship=ship, fails=fails, warns=warns, budgets=budgets)
+    ship = not fails and not judge_errors and not any(b["over"] for b in budgets.values())
+    return Scorecard(ship=ship, fails=fails, warns=warns, budgets=budgets,
+                     judge_errors=judge_errors, complete=not judge_errors)
 
 
 if __name__ == "__main__":

@@ -64,6 +64,7 @@ def check(idea: str, premise: str, spine: str, summary: str) -> GateReport:
         result = _judge(idea, premise, spine, summary)
     except Exception as exc:
         logger.warning("premise_fidelity judge failed: %s", exc)
+        report.add_error(exc)
         return report
     score = getattr(result, "fidelity_score", None)
     for g in (result.gaps or []):

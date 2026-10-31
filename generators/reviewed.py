@@ -254,7 +254,7 @@ class Reviewed:
                 if not blocking:
                     # accept; stash any non-blocking warnings for the report
                     for r in reports:
-                        all_warnings.extend(r.warnings)
+                        all_warnings.extend(f for f in r.findings if f.severity in ("warn", "error"))
                     break
                 if attempt == max_rev:
                     logger.warning(
@@ -323,7 +323,9 @@ class Reviewed:
         if per_chapter_warnings:
             lines.append("")
             lines.append("### Per-chapter warnings carried forward")
-            lines.append(self._render_findings(per_chapter_warnings[:40]))
+            errors = [f for f in per_chapter_warnings if f.severity == "error"]
+            warnings = [f for f in per_chapter_warnings if f.severity != "error"]
+            lines.append(self._render_findings(errors + warnings[:40]))
 
         update_artifact(inp.output_file, "Review Report", "\n".join(lines), level=2)
         logger.info(
