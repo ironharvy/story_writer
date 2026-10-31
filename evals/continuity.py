@@ -138,12 +138,14 @@ def check(chapters: dict[str, str]) -> GateReport:
             rendered.append(_render_digest(title, digest))
         except Exception as exc:
             logger.warning("continuity digest failed for %r: %s", title, exc)
+            report.add_error(exc, locus=title)
     if len(rendered) < 2:
         return report
     try:
         contradictions = _find(rendered)
     except Exception as exc:
         logger.warning("continuity judge failed: %s", exc)
+        report.add_error(exc)
         return report
     for c in contradictions:
         severity = _SEVERITY.get(c.severity.strip().lower(), "warn")

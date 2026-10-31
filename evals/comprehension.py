@@ -136,6 +136,7 @@ def check(
         verdicts = answer_and_grade(prose, [q.question for q in questions])
     except Exception as exc:
         logger.warning("comprehension gate failed for %r: %s", chapter_title, exc)
+        report.add_error(exc, locus=chapter_title)
         return report
 
     for v in verdicts:
